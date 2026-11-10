@@ -1,6 +1,5 @@
-import { CO_DIR, CO_OUT_DIR, Commands } from './constants';
+import { CO_OUT_DIR, Commands } from './constants';
 import * as path from 'path';
-import * as fs from 'fs';
 import { randomUUID } from 'crypto';
 import * as vscode from 'vscode';
 import {
@@ -19,9 +18,9 @@ import { checkToolchain } from './toolchain';
 import { AppServices } from './types';
 import { asmCaseIndexDirectory } from './asmCaseStore';
 import {
-  discardContinuousGeneratedAsmCase,
-  discardContinuousPassingAsmCase
+  discardContinuousGeneratedAsmCase
 } from './courseTesting/continuousCaseRetention';
+import { WorkspaceCaseRetention } from './courseTesting/workspaceCaseRetention';
 import {
   ContinuousTraceIteration,
   ContinuousTraceReport,
@@ -56,7 +55,7 @@ interface ContinuousTraceSession {
   panel: vscode.WebviewPanel;
   lastMonitorFlushMs: number;
   monitorWrites: Promise<void>;
-  retainedPassingArtifacts: ContinuousRetainedArtifacts[];
+  caseRetention?: WorkspaceCaseRetention;
   retention: ContinuousTraceRetention;
 }
 
@@ -94,15 +93,6 @@ interface ContinuousTraceRetention {
   reportRetainedIterations: number;
 }
 
-interface ContinuousRetainedArtifacts {
-  iterationIndex: number;
-  resultIndex: number;
-  result: CourseTraceCaseResult;
-  caseDir?: string;
-  files: string[];
-  pruneFailures: number;
-}
-
 export interface ContinuousGeneratedTraceDependencies<
   TSetup,
   TCase extends ContinuousTraceCaseLike,
@@ -136,7 +126,6 @@ let activeContinuousTraceSession: ContinuousTraceSession | undefined;
 let continuousTraceStartReserved = false;
 let continuousTraceStartupStopRequested = false;
 const continuousMonitorFlushIntervalMs = 1000;
-const maximumContinuousPruneFailures = 3;
 
 export async function startContinuousGeneratedTraceTests<
   TSetup,
@@ -210,7 +199,7 @@ export async function startContinuousGeneratedTraceTests<
       panel,
       lastMonitorFlushMs: 0,
       monitorWrites: Promise.resolve(),
-      retainedPassingArtifacts: [],
+      caseRetention: new WorkspaceCaseRetention(asmCaseIndexDirectory(resource), retention.retainedPassingCases),
       retention,
       report: {
         schemaVersion: 2,
@@ -259,6 +248,13 @@ export async function startContinuousGeneratedTraceTests<
     services.output.appendLine('');
     services.output.appendLine(`正在启动持续测试（并发量 ${concurrency}）`);
 
+    try {
+      await session.caseRetention!.initialize();
+      await applyContinuousRetention(session, services);
+    } catch {
+      session.caseRetention = undefined;
+      services.output.appendLine('历史测试点读取失败，已保留原始用例并跳过本次留存清理');
+    }
     await updateContinuousTraceMonitor(session, { force: true });
     let index = 0;
     while (!session.stopRequested && (maxIterations === 0 || index < maxIterations)) {
@@ -338,7 +334,7 @@ export async function startContinuousGeneratedTraceTests<
         iteration.status = continuousStatusFromCounts(iteration.summary, false, session.stopRequested);
       }
       await discardContinuousUnfinishedCases(ownedCases, session.id, services);
-      await applyContinuousRetention(session, iteration);
+      await applyContinuousRetention(session, services, iteration);
       await updateContinuousTraceMonitor(session);
 
       const reachedMaxIterations = maxIterations > 0 && index >= maxIterations;
@@ -474,34 +470,22 @@ async function flushContinuousTraceMonitor(session: ContinuousTraceSession, opti
 
 async function applyContinuousRetention(
   session: ContinuousTraceSession,
-  iteration: ContinuousTraceIteration
+  services: AppServices,
+  iteration?: ContinuousTraceIteration
 ): Promise<void> {
-  for (let resultIndex = 0; resultIndex < iteration.results.length; resultIndex++) {
-    const result = iteration.results[resultIndex];
-    if (result.status !== 'passed') {
-      continue;
-    }
-    const artifacts = continuousRetainedArtifacts(iteration.index, resultIndex, result);
-    if (artifacts) {
-      session.retainedPassingArtifacts.push(artifacts);
-    }
-  }
-
-  const pruneCandidates = session.retainedPassingArtifacts.length;
-  let pruneAttempts = 0;
-  while (session.retainedPassingArtifacts.length > session.retention.retainedPassingCases
-    && pruneAttempts < pruneCandidates) {
-    const victim = session.retainedPassingArtifacts.shift();
-    pruneAttempts++;
-    if (victim && !await pruneContinuousPassingArtifacts(victim, session)) {
-      victim.pruneFailures++;
-      if (victim.pruneFailures < maximumContinuousPruneFailures) {
-        // Bounded rotation prevents one fail-closed case from starving later victims.
-        session.retainedPassingArtifacts.push(victim);
+  if (session.caseRetention) {
+    await session.caseRetention.observe(iteration?.results.flatMap(result => result.caseManifest ? [result.caseManifest] : []) ?? []);
+    const { removed, refused } = await session.caseRetention.prune();
+    const removedPaths = new Set(removed.map(normalizePathKey));
+    for (const item of session.report.iterations) {
+      for (const result of item.results) {
+        if (result.status === 'passed' && result.caseManifest && removedPaths.has(normalizePathKey(result.caseManifest))) {
+          markContinuousArtifactsPruned(result);
+        }
       }
     }
+    if (refused) services.output.appendLine('部分历史通过测试点未能安全清理，已保留原始用例');
   }
-
   session.report.iterations = pruneContinuousIterations(
     session.report.iterations,
     session.retention.reportRetainedIterations
@@ -529,122 +513,6 @@ async function discardContinuousUnfinishedCases(
   }
 }
 
-function continuousRetainedArtifacts(
-  iterationIndex: number,
-  resultIndex: number,
-  result: CourseTraceCaseResult
-): ContinuousRetainedArtifacts | undefined {
-  const caseDir = continuousCaseDirFromManifest(result.caseManifest);
-  const files = continuousResultFiles(result)
-    .filter((file) => !caseDir || !isPathInside(file, caseDir));
-  if (!caseDir && !files.length) {
-    return undefined;
-  }
-  return {
-    iterationIndex,
-    resultIndex,
-    result,
-    caseDir,
-    files,
-    pruneFailures: 0
-  };
-}
-
-async function pruneContinuousPassingArtifacts(
-  victim: ContinuousRetainedArtifacts,
-  session: ContinuousTraceSession
-): Promise<boolean> {
-  const protectedPaths = protectedContinuousArtifactPaths(session);
-  const protectedDirs = protectedContinuousCaseDirs(session);
-  const victimDirKey = victim.caseDir ? normalizePathKey(victim.caseDir) : undefined;
-
-  // Remove retryable standalone outputs first. Once a case directory is atomically
-  // moved out of the live index its original manifest path cannot be retried.
-  for (const file of victim.files) {
-    const key = normalizePathKey(file);
-    if (protectedPaths.has(key) || !isSafeContinuousOutFile(file)) {
-      return false;
-    }
-    try {
-      await fs.promises.rm(file, { force: true });
-    } catch {
-      return false;
-    }
-  }
-
-  if (victim.caseDir) {
-    if (protectedDirs.has(victimDirKey!)) {
-      return false;
-    }
-    try {
-      if (!await discardContinuousPassingAsmCase(victim.result.caseManifest, session.id)) {
-        return false;
-      }
-    } catch {
-      return false;
-    }
-  }
-
-  markContinuousArtifactsPruned(victim.result);
-  return true;
-}
-
-function protectedContinuousArtifactPaths(session: ContinuousTraceSession): Set<string> {
-  const protectedPaths = new Set<string>();
-  for (const item of session.retainedPassingArtifacts) {
-    for (const file of item.files) {
-      protectedPaths.add(normalizePathKey(file));
-    }
-  }
-  for (const iteration of session.report.iterations) {
-    for (const result of iteration.results) {
-      if (result.status === 'passed') {
-        continue;
-      }
-      for (const file of continuousResultFiles(result)) {
-        protectedPaths.add(normalizePathKey(file));
-      }
-    }
-  }
-  return protectedPaths;
-}
-
-function protectedContinuousCaseDirs(session: ContinuousTraceSession): Set<string> {
-  const protectedDirs = new Set<string>();
-  for (const item of session.retainedPassingArtifacts) {
-    if (item.caseDir) {
-      protectedDirs.add(normalizePathKey(item.caseDir));
-    }
-  }
-  for (const iteration of session.report.iterations) {
-    for (const result of iteration.results) {
-      if (result.status === 'passed') {
-        continue;
-      }
-      const dir = continuousCaseDirFromManifest(result.caseManifest);
-      if (dir) {
-        protectedDirs.add(normalizePathKey(dir));
-      }
-    }
-  }
-  return protectedDirs;
-}
-
-function continuousResultFiles(result: CourseTraceCaseResult): string[] {
-  return [
-    result.asmSnapshot,
-    result.caseManifest,
-    result.machineCode,
-    result.oracleOut,
-    result.dutOut,
-    result.dutRawOut,
-    result.marsOut,
-    result.simOut,
-    result.logisimOut,
-    result.logisimCircuit
-  ].filter((file): file is string => Boolean(file));
-}
-
 function markContinuousArtifactsPruned(result: CourseTraceCaseResult): void {
   result.artifactsPruned = true;
   delete result.caseManifest;
@@ -657,32 +525,6 @@ function markContinuousArtifactsPruned(result: CourseTraceCaseResult): void {
   delete result.simOut;
   delete result.logisimOut;
   delete result.logisimCircuit;
-}
-
-function continuousCaseDirFromManifest(manifest: string | undefined): string | undefined {
-  if (!manifest || path.basename(manifest).toLowerCase() !== 'case.json') {
-    return undefined;
-  }
-  const dir = path.dirname(manifest);
-  return isSafeContinuousCaseDir(dir) ? dir : undefined;
-}
-
-function isSafeContinuousCaseDir(dir: string): boolean {
-  const resolved = path.resolve(dir);
-  return path.basename(path.dirname(resolved)).toLowerCase() === 'cases'
-    && path.basename(path.dirname(path.dirname(resolved))).toLowerCase() === CO_DIR
-    && path.basename(resolved).length > 0;
-}
-
-function isSafeContinuousOutFile(file: string): boolean {
-  const resolved = path.resolve(file);
-  return path.basename(path.dirname(resolved)).toLowerCase() === 'out'
-    && path.basename(path.dirname(path.dirname(resolved))).toLowerCase() === CO_DIR;
-}
-
-function isPathInside(file: string, directory: string): boolean {
-  const relative = path.relative(path.resolve(directory), path.resolve(file));
-  return relative === '' || Boolean(relative) && !relative.startsWith('..') && !path.isAbsolute(relative);
 }
 
 async function waitForNextContinuousIteration(session: ContinuousTraceSession, ms: number): Promise<void> {

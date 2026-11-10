@@ -194,7 +194,7 @@ assign y = sel ? a : b;
 | 位置 | 内容 |
 |---|---|
 | `.co/tb/` | 你的 testbench：插件只在缺失时生成一次激励模板，之后由你编辑，插件不会覆盖 |
-| `.co/cases/<caseId>/` | 测试程序、机器码、报告、trace 和复现元数据；失败与错误用例会保留 |
+| `.co/cases/<caseId>/` | 测试程序、机器码、报告、trace 和复现元数据；整个工作区的历史通过用例合计保留最新 10 个，失败与错误用例全部保留 |
 | `.co/out/` | 手动运行或批量运行的输出与摘要 |
 | `.co/wave/` | “仿真并查看波形”生成的 `<testbench>.vcd` 与配对的 `<testbench>.sim.out` |
 | `.co/iverilog/`、`.co/logisim/`、`.co/hazard/` | 仿真、电路与冲突分析的工作文件 |

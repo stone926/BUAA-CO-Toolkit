@@ -24,8 +24,10 @@ import {
 import {
   discardContinuousGeneratedAsmCase,
   discardContinuousPassingAsmCase,
+  discardPassingAsmCase,
   markContinuousAsmCaseCancelled
 } from '../courseTesting/continuousCaseRetention';
+import { WorkspaceCaseRetention } from '../courseTesting/workspaceCaseRetention';
 import type { AsmCaseManifestV2 } from '../courseTesting/manifestCodec';
 import type { ExecuteResult } from '../mips/providers/contracts';
 import {
@@ -332,6 +334,76 @@ describe('ASM case manifest v2 artifact storage', () => {
     await expect(discardContinuousPassingAsmCase(manual.manifestUri.fsPath, sessionId))
       .resolves.toBe(false);
     expect(fs.existsSync(manual.dir.fsPath)).toBe(true);
+  });
+
+  it('retains ten historical passes across sessions and restarts, including selected and rerun cases', async () => {
+    const { root, casesDir, add } = historicalCaseFixture();
+    const passes = Array.from({ length: 12 }, (_, index) => add(index, 'passed'));
+    const problems = [add(20, 'failed'), add(21, 'error'), add(22), add(23, 'passed', 'failed')];
+    const originalProblems = problems.map(file => fs.readFileSync(file));
+    const retention = new WorkspaceCaseRetention(casesDir, 10);
+    await retention.initialize();
+    expect((await retention.prune()).removed.sort()).toEqual(passes.slice(0, 2).sort());
+    expect(passes.slice(2).every(file => fs.existsSync(file))).toBe(true);
+    for (let index = 0; index < problems.length; index++) {
+      expect(fs.readFileSync(problems[index])).toEqual(originalProblems[index]);
+    }
+
+    const next = add(30, 'passed');
+    // Updating a batch reads only its manifests; it never enumerates history again.
+    const opendir = vi.spyOn(fs.promises, 'opendir');
+    await retention.observe([next]);
+    expect((await retention.prune()).removed).toEqual([passes[2]]);
+    expect(opendir).not.toHaveBeenCalled();
+    opendir.mockRestore();
+
+    const restarted = new WorkspaceCaseRetention(casesDir, 10);
+    await restarted.initialize();
+    expect((await restarted.prune()).removed).toEqual([]);
+    expect(fs.readdirSync(casesDir)).toHaveLength(10 + problems.length);
+    expect(root).toContain('中文 空格');
+  });
+
+  it('rechecks changed terminal evidence before pruning and never deletes a recent pass to compensate', async () => {
+    const { casesDir, add } = historicalCaseFixture();
+    const passes = Array.from({ length: 13 }, (_, index) => add(index, 'passed'));
+    const retention = new WorkspaceCaseRetention(casesDir, 10);
+    await retention.initialize();
+    const changed = JSON.parse(fs.readFileSync(passes[0], 'utf8')) as AsmCaseManifestV2;
+    changed.metadata!['test.status'] = 'failed';
+    fs.writeFileSync(passes[0], JSON.stringify(changed));
+    const rename = fs.promises.rename.bind(fs.promises);
+    vi.spyOn(fs.promises, 'rename').mockImplementation(async (from, to) => {
+      if (String(from) === path.dirname(passes[1])) throw new Error('locked');
+      return await rename(from, to);
+    });
+
+    expect(await retention.prune()).toEqual({ removed: [passes[2]], refused: 2 });
+    expect(passes.slice(3).every(file => fs.existsSync(file))).toBe(true);
+    expect(fs.readFileSync(passes[0], 'utf8')).toBe(JSON.stringify(changed));
+    expect(fs.existsSync(passes[1])).toBe(true);
+  });
+
+  it('refuses cross-workspace, malformed, linked, and conflicting passing-history cleanup', async () => {
+    const { root, casesDir, add } = historicalCaseFixture();
+    const malformed = add(0, 'passed');
+    fs.writeFileSync(malformed, '{');
+    const conflict = add(1, 'passed', 'error');
+    const external = path.join(root, 'external');
+    fs.mkdirSync(external);
+    const link = path.join(casesDir, 'linked');
+    fs.symlinkSync(external, link, process.platform === 'win32' ? 'junction' : 'dir');
+    await expect(discardPassingAsmCase(malformed)).resolves.toBe(false);
+    await expect(discardPassingAsmCase(conflict)).resolves.toBe(false);
+    await expect(discardPassingAsmCase(path.join(link, 'case.json'))).resolves.toBe(false);
+    const other = historicalCaseFixture();
+    const otherPass = other.add(2, 'passed');
+    const retention = new WorkspaceCaseRetention(casesDir, 0);
+    await retention.initialize();
+    await retention.observe([otherPass]);
+    await retention.prune();
+    expect(fs.existsSync(otherPass)).toBe(true);
+    expect(fs.existsSync(external)).toBe(true);
   });
 
   it('refuses cleanup when the controlled trash directory is a link', async () => {
@@ -684,6 +756,42 @@ describe('ASM case manifest v2 artifact storage', () => {
     await expect(listAsmCaseManifests()).rejects.toThrow(/manifest bytes/);
   });
 });
+
+function historicalCaseFixture(): {
+  root: string;
+  casesDir: string;
+  add: (index: number, status?: string, state?: string) => string;
+} {
+  const sample = createCase().manifest as AsmCaseManifestV2;
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'co-history-中文 空格-'));
+  temporaryRoots.push(root);
+  const casesDir = path.join(root, '.co', 'cases');
+  fs.mkdirSync(casesDir, { recursive: true });
+  vscodeState.state!.workspaceFolders.push({ uri: URI.file(root), name: 'history' });
+  return { root, casesDir, add: (index, status, state) => {
+    // Names deliberately sort opposite to creation times. Sessions and sources vary.
+    const caseId = `case-${100 - index}`;
+    const caseDir = path.join(casesDir, caseId);
+    fs.mkdirSync(caseDir);
+    const file = path.join(caseDir, 'case.json');
+    const manifest: AsmCaseManifestV2 = {
+      ...sample, caseId, createdAt: new Date(Date.UTC(2026, 0, 1, 0, index)).toISOString(),
+      source: index % 2 ? { kind: 'selected' } : { kind: 'builtin', generator: 'builtin:random-asm' },
+      metadata: {
+        ...(status ? { 'test.status': status } : {}),
+        ...(index % 2 ? { 'rerun.originalCaseId': 'original' } : {
+          'continuous.sessionId': index < 6 ? '11111111-1111-4111-8111-111111111111' : '22222222-2222-4222-8222-222222222222',
+          'continuous.state': state ?? status ?? 'generated'
+        }),
+        ...(state ? { 'continuous.state': state } : {})
+      }
+    };
+    fs.writeFileSync(file, JSON.stringify(manifest));
+    fs.writeFileSync(path.join(caseDir, 'program.asm'), 'nop');
+    fs.writeFileSync(path.join(caseDir, 'trace.out'), 'saved evidence');
+    return file;
+  } };
+}
 
 function makeContinuousOwnedCase(
   sessionId: string,

@@ -11,6 +11,8 @@ import { failureFocus, recordedTestStatus } from './courseTesting/failureDiagnos
 import { parseFailureEvidence, serializeFailureEvidence } from './courseTesting/failureEvidence';
 import { rerunCourseTestCase } from './courseTesting/caseRerun';
 import { tryAcquireCourseTestSession } from './courseTesting/courseTestSession';
+import { WorkspaceCaseRetention } from './courseTesting/workspaceCaseRetention';
+import { continuousAutomaticTestPolicy } from './courseTesting/automaticTestPolicy';
 import { isManifestV2, manifestP7Of } from './courseTesting/manifestCodec';
 import { probeScopeFromCase, specialTimerExlNotice } from './courseTesting/p7ProbeScope';
 import { normalizePathKey } from './pathUtils';
@@ -87,6 +89,16 @@ export async function openCourseTestFailure(services: AppServices, directory: st
         diagnostic: publicAutomaticDiagnosticMessage(outcome.result), evidence: serializeFailureEvidence(outcome.result)
       });
       const next = await loadCaseInspection(directory, outcome.result.caseId);
+      if (outcome.result.status === 'passed') {
+        try {
+          const retention = new WorkspaceCaseRetention(directory, continuousAutomaticTestPolicy.retainedPassingCases);
+          await retention.initialize();
+          const { refused } = await retention.prune();
+          if (refused) services.output.appendLine('部分历史通过测试点未能安全清理，已保留原始用例');
+        } catch {
+          services.output.appendLine('历史测试点清理失败，已保留原始用例');
+        }
+      }
       if (disposed) return;
       previousCaseId = original.asmCase.id;
       openCases.delete(key);

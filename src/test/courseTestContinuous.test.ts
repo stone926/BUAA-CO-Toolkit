@@ -87,11 +87,24 @@ const outcomeMocks = vi.hoisted(() => ({
   discardContinuousPassingAsmCase: vi.fn(async () => true)
 }));
 
-vi.mock('../asmCaseStore', () => outcomeMocks);
+vi.mock('../asmCaseStore', () => ({ ...outcomeMocks, asmCaseIndexDirectory: () => URI.file('E:/work/.co/cases').fsPath }));
 vi.mock('../courseTesting/continuousCaseRetention', () => ({
   markContinuousAsmCaseCancelled: outcomeMocks.markContinuousAsmCaseCancelled,
   discardContinuousGeneratedAsmCase: outcomeMocks.discardContinuousGeneratedAsmCase,
   discardContinuousPassingAsmCase: outcomeMocks.discardContinuousPassingAsmCase
+}));
+
+const retentionMocks = vi.hoisted(() => ({
+  initialize: vi.fn(async () => undefined),
+  observe: vi.fn(async (_paths: readonly string[]) => undefined),
+  prune: vi.fn(async (): Promise<{ removed: string[]; refused: number }> => ({ removed: [], refused: 0 }))
+}));
+vi.mock('../courseTesting/workspaceCaseRetention', () => ({
+  WorkspaceCaseRetention: class {
+    initialize = retentionMocks.initialize;
+    observe = retentionMocks.observe;
+    prune = retentionMocks.prune;
+  }
 }));
 
 vi.mock('../courseTestReport', async (importOriginal) => ({
@@ -112,7 +125,6 @@ import {
 } from '../courseTesting/continuousCaseRetention';
 import { recordAsmCaseTestOutcome } from '../asmCaseStore';
 import { tryAcquireCourseTestSession } from '../courseTesting/courseTestSession';
-import { continuousAutomaticTestPolicy } from '../courseTesting/automaticTestPolicy';
 import { renderContinuousTraceMonitor } from '../courseTestReport';
 
 interface TestSetup {
@@ -158,6 +170,7 @@ beforeEach(() => {
   policyMocks.retainedPassingCases.mockReturnValue(5);
   policyMocks.stopOnFailure.mockReturnValue(true);
   fileMocks.writeTextFile.mockResolvedValue(undefined);
+  retentionMocks.prune.mockResolvedValue({ removed: [], refused: 0 });
 });
 
 afterEach(() => {
@@ -828,109 +841,26 @@ describe('continuous generated trace orchestration', () => {
     expect(deps.runCourseTraceCase).not.toHaveBeenCalled();
   });
 
-  it.each(['failed', 'error'] as const)('retains the latest ten passing cases across batches and preserves %s evidence', async (problemStatus) => {
-    const generatedCases = Array.from({ length: 13 }, (_, index) => testAsmCase(`retention-${index}`));
-    const batches = [generatedCases.slice(0, 5), generatedCases.slice(5, 10), generatedCases.slice(10)];
-    let generation = 0;
+  it('loads workspace history once and marks globally removed cases after the batch drains', async () => {
+    const generated = [testAsmCase('old-pass'), testAsmCase('latest-pass')];
+    retentionMocks.prune.mockResolvedValueOnce({ removed: [], refused: 0 })
+      .mockResolvedValueOnce({ removed: [generated[0].manifestUri.fsPath], refused: 0 });
     const deps = createDependencies({
-      automaticPolicy: () => ({
-        ...continuousAutomaticTestPolicy,
-        maxIterations: batches.length,
-        // Exercise retention with an older problem as well as subsequent passing cases.
-        stopOnFailure: false
-      }),
-      runGeneratorAndCollectAsms: vi.fn(async () => {
-        expect(discardContinuousPassingAsmCase).not.toHaveBeenCalled();
-        const asmCases = batches[generation++];
-        return { asms: asmCases.map(item => item.asm), asmCases, source: { kind: 'generator' as const } };
-      }),
-      expandTraceCases: vi.fn<TestDependencies['expandTraceCases']>(async (_asms, asmCases) => asmCases!.map(asmCase => ({ asm: asmCase.asm, asmCase }))),
-      runCourseTraceCase: vi.fn<TestDependencies['runCourseTraceCase']>(async (_services, item) => ({
-        asm: item.asm.fsPath,
-        asmSnapshot: item.asmCase!.asm.fsPath,
-        status: item.asmCase!.id === generatedCases[0].id ? problemStatus : 'passed',
-        stage: 'compare' as const,
-        message: 'result'
-      }))
+      runGeneratorAndCollectAsms: vi.fn(async () => ({
+        asms: generated.map(item => item.asm), asmCases: generated, source: { kind: 'generator' as const }
+      })),
+      expandTraceCases: vi.fn(async () => generated.map(asmCase => ({ asm: asmCase.asm, asmCase })))
     });
 
     await startContinuousGeneratedTraceTests(createServices(), deps);
 
-    expect(vi.mocked(discardContinuousPassingAsmCase).mock.calls.map(([manifest]) => manifest))
-      .toEqual(generatedCases.slice(1, 3).map(item => item.manifestUri.fsPath));
-    expect(discardContinuousGeneratedAsmCase).not.toHaveBeenCalled();
-    const report = vi.mocked(renderContinuousTraceMonitor).mock.calls.at(-1)![0];
-    const results = report.iterations.flatMap(iteration => iteration.results);
-    expect(results.filter(result => result.status === 'passed' && !result.artifactsPruned)
-      .map(result => result.caseId).sort())
-      .toEqual(generatedCases.slice(3).map(item => item.id).sort());
-    expect(results.find(result => result.caseId === generatedCases[0].id)).toMatchObject({
-      status: problemStatus,
-      caseManifest: generatedCases[0].manifestUri.fsPath,
-      asmSnapshot: generatedCases[0].asm.fsPath
-    });
-  });
-
-  it('rotates a refused passing-retention case without starving a later victim', async () => {
-    policyMocks.maxIterations.mockReturnValue(2);
-    policyMocks.retainedPassingCases.mockReturnValue(0);
-    const generatedCases = [testAsmCase('retention-1'), testAsmCase('retention-2')];
-    let generation = 0;
-    vi.mocked(discardContinuousPassingAsmCase)
-      .mockResolvedValueOnce(false)
-      .mockResolvedValueOnce(false)
-      .mockResolvedValueOnce(true);
-    const deps = createDependencies({
-      runGeneratorAndCollectAsms: vi.fn(async () => {
-        const asmCase = generatedCases[generation++];
-        return {
-          asms: [asmCase.asm],
-          source: { kind: 'generator' as const },
-          asmCases: [asmCase]
-        };
-      }),
-      expandTraceCases: vi.fn(async (_asms, asmCases) => [{
-        asm: asmCases![0].asm,
-        asmCase: asmCases![0]
-      }]),
-      runCourseTraceCase: vi.fn(async (_services, item) => ({
-        asm: item.asm.fsPath,
-        caseId: item.asmCase!.id,
-        caseManifest: item.asmCase!.manifestUri.fsPath,
-        asmSnapshot: item.asmCase!.asm.fsPath,
-        status: 'passed' as const,
-        stage: 'compare' as const,
-        message: 'matched'
-      }))
-    });
-
-    await startContinuousGeneratedTraceTests(createServices(), deps);
-
-    expect(discardContinuousPassingAsmCase).toHaveBeenCalledTimes(3);
-    expect(discardContinuousPassingAsmCase).toHaveBeenNthCalledWith(
-      1,
-      generatedCases[0].manifestUri.fsPath,
-      expect.any(String)
-    );
-    expect(discardContinuousPassingAsmCase).toHaveBeenNthCalledWith(
-      3,
-      generatedCases[1].manifestUri.fsPath,
-      expect.any(String)
-    );
-    expect(discardContinuousPassingAsmCase).toHaveBeenNthCalledWith(
-      2,
-      generatedCases[0].manifestUri.fsPath,
-      expect.any(String)
-    );
-    const reports = fileMocks.writeTextFile.mock.calls.map(([, text]) => JSON.parse(String(text)));
-    const finalReport = reports.at(-1) as {
-      iterations: Array<{ results: Array<{ artifactsPruned?: boolean }> }>;
-    };
-    expect(finalReport.iterations.flatMap((iteration) => iteration.results))
-      .toEqual([
-        expect.objectContaining({ artifactsPruned: true }),
-        expect.not.objectContaining({ artifactsPruned: true })
-      ]);
+    expect(retentionMocks.initialize).toHaveBeenCalledTimes(1);
+    expect(retentionMocks.observe).toHaveBeenLastCalledWith(generated.map(item => item.manifestUri.fsPath));
+    expect(retentionMocks.prune).toHaveBeenCalledTimes(2);
+    const results = vi.mocked(renderContinuousTraceMonitor).mock.calls.at(-1)![0].iterations[0].results;
+    expect(results[0]).toMatchObject({ caseId: 'old-pass', artifactsPruned: true });
+    expect(results[0].caseManifest).toBeUndefined();
+    expect(results[1]).toMatchObject({ caseId: 'latest-pass', caseManifest: generated[1].manifestUri.fsPath });
   });
 
   it('releases the active session even when the final report write fails', async () => {

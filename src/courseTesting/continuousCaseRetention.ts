@@ -1,4 +1,4 @@
-// @index course-testing — 连续测试用例所有权校验、终态记录与安全保留清理
+// @index course-testing — 用例终态记录、会话所有权校验与历史通过点安全清理
 import { randomBytes } from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -26,7 +26,7 @@ export interface ContinuousAsmCaseOutcome {
   readonly state: 'passed' | 'failed' | 'error';
 }
 
-interface ContinuousOwnedAsmCase {
+interface StoredAsmCase {
   manifest: AsmCaseManifestV2;
   manifestPath: string;
   caseDir: string;
@@ -34,6 +34,30 @@ interface ContinuousOwnedAsmCase {
   caseIdentity: FsNodeIdentity;
   manifestIdentity: FsNodeIdentity;
   manifestSha256: string;
+}
+
+export function isPassingAsmCase(manifest: AsmCaseManifestV2): boolean {
+  const state = manifest.metadata?.['continuous.state'];
+  return manifest.metadata?.['test.status'] === 'passed'
+    && (state === undefined || state === 'passed')
+    && manifest.metadata?.['rerun.state'] !== 'cancelled';
+}
+
+/** Read a stored passing case without requiring ownership by the current session. */
+export async function readPassingAsmCase(manifestPath: string): Promise<{
+  manifestPath: string;
+  createdAt: string;
+} | undefined> {
+  const stored = await readStoredAsmCase(manifestPath);
+  return stored && isPassingAsmCase(stored.manifest)
+    ? { manifestPath: stored.manifestPath, createdAt: stored.manifest.createdAt }
+    : undefined;
+}
+
+/** Delete only a revalidated passing case beneath its workspace's case directory. */
+export async function discardPassingAsmCase(manifestPath: string): Promise<boolean> {
+  return await runSerializedCaseMutation(manifestPath,
+    async () => await discardStoredAsmCase(manifestPath, undefined, ['passed'], true));
 }
 
 interface FsNodeIdentity {
@@ -112,7 +136,7 @@ export async function discardContinuousGeneratedAsmCase(
   if (!manifestPath) return false;
   return await runSerializedCaseMutation(
     manifestPath,
-    async () => await discardContinuousAsmCase(manifestPath, sessionId, ['generated', 'cancelled'])
+    async () => await discardStoredAsmCase(manifestPath, sessionId, ['generated', 'cancelled'])
   );
 }
 
@@ -124,20 +148,23 @@ export async function discardContinuousPassingAsmCase(
   if (!manifestPath) return false;
   return await runSerializedCaseMutation(
     manifestPath,
-    async () => await discardContinuousAsmCase(manifestPath, sessionId, ['passed'], true)
+    async () => await discardStoredAsmCase(manifestPath, sessionId, ['passed'], true)
   );
 }
 
-async function discardContinuousAsmCase(
+async function discardStoredAsmCase(
   manifestPath: string,
-  sessionId: string,
+  sessionId: string | undefined,
   allowedStates: readonly ContinuousAsmCaseState[],
   requirePassedOutcome = false
 ): Promise<boolean> {
-  const owned = await readContinuousOwnedAsmCase(manifestPath, sessionId, allowedStates);
+  const read = async () => sessionId === undefined
+    ? await readStoredAsmCase(manifestPath)
+    : await readContinuousOwnedAsmCase(manifestPath, sessionId, allowedStates);
+  const owned = await read();
   if (!owned
     || (requirePassedOutcome
-      ? owned.manifest.metadata?.['test.status'] !== 'passed'
+      ? !isPassingAsmCase(owned.manifest)
       : owned.manifest.metadata?.['test.status'] !== undefined)) {
     return false;
   }
@@ -157,11 +184,12 @@ async function discardContinuousAsmCase(
 
   // Directory preparation awaited filesystem work. Re-read immediately before
   // rename so a concurrent terminal transition can only make cleanup refuse.
-  const current = await readContinuousOwnedAsmCase(manifestPath, sessionId, allowedStates);
+  const current = await read();
   if (!current
     || normalizePathKey(current.caseDir) !== normalizePathKey(owned.caseDir)
+    || current.manifestSha256 !== owned.manifestSha256
     || (requirePassedOutcome
-      ? current.manifest.metadata?.['test.status'] !== 'passed'
+      ? !isPassingAsmCase(current.manifest)
       : current.manifest.metadata?.['test.status'] !== undefined)) {
     return false;
   }
@@ -233,8 +261,21 @@ async function readContinuousOwnedAsmCase(
   manifestPath: string,
   sessionId: string,
   allowedStates: readonly ContinuousAsmCaseState[]
-): Promise<ContinuousOwnedAsmCase | undefined> {
+): Promise<StoredAsmCase | undefined> {
   if (!isContinuousSessionId(sessionId)) return undefined;
+  const stored = await readStoredAsmCase(manifestPath);
+  if (!stored) return undefined;
+  const { manifest } = stored;
+  if (manifest.source.kind !== 'builtin'
+    || (manifest.source.generator !== 'builtin:random-asm'
+      && manifest.source.generator !== 'builtin:register-coverage')) return undefined;
+  if (manifest.metadata?.['continuous.sessionId'] !== sessionId) return undefined;
+  const state = manifest.metadata?.['continuous.state'];
+  if (!state || !allowedStates.includes(state as ContinuousAsmCaseState)) return undefined;
+  return stored;
+}
+
+async function readStoredAsmCase(manifestPath: string): Promise<StoredAsmCase | undefined> {
   const resolvedManifest = path.resolve(manifestPath);
   if (path.basename(resolvedManifest).toLowerCase() !== 'case.json') return undefined;
   const caseDir = path.dirname(resolvedManifest);
@@ -276,12 +317,6 @@ async function readContinuousOwnedAsmCase(
   }
   if (!isKnownManifest(manifest) || !isManifestV2(manifest)) return undefined;
   if (manifest.caseId !== path.basename(caseDir)) return undefined;
-  if (manifest.source.kind !== 'builtin'
-    || (manifest.source.generator !== 'builtin:random-asm'
-      && manifest.source.generator !== 'builtin:register-coverage')) return undefined;
-  if (manifest.metadata?.['continuous.sessionId'] !== sessionId) return undefined;
-  const state = manifest.metadata?.['continuous.state'];
-  if (!state || !allowedStates.includes(state as ContinuousAsmCaseState)) return undefined;
   return {
     manifest,
     manifestPath: resolvedManifest,

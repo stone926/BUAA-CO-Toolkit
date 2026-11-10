@@ -67,6 +67,9 @@ const mocks = vi.hoisted(() => {
     findSourceAtPc: vi.fn<(...args: unknown[]) => unknown>(),
     rerun: vi.fn<(...args: unknown[]) => Promise<unknown>>(),
     recordOutcome: vi.fn(async (..._args: unknown[]) => undefined),
+    createRetention: vi.fn(),
+    initializeRetention: vi.fn(async () => undefined),
+    pruneRetention: vi.fn(async () => ({ removed: [], refused: 0 })),
     getProfile: vi.fn(() => 'P5'),
     groups: [] as unknown[]
   };
@@ -98,6 +101,13 @@ vi.mock('vscode', async () => {
 });
 
 vi.mock('../asmCaseStore', () => ({ recordAsmCaseTestOutcome: mocks.recordOutcome }));
+vi.mock('../courseTesting/workspaceCaseRetention', () => ({
+  WorkspaceCaseRetention: class {
+    constructor(directory: string, limit: number) { mocks.createRetention(directory, limit); }
+    initialize = mocks.initializeRetention;
+    prune = mocks.pruneRetention;
+  }
+}));
 vi.mock('../config', () => ({ getProfile: mocks.getProfile }));
 vi.mock('../courseTesting/caseInspection', () => ({
   loadCaseInspection: mocks.loadCaseInspection,
@@ -320,6 +330,20 @@ describe('course test failure panel', () => {
     expect(mocks.loadCaseInspection).toHaveBeenLastCalledWith('E:/work/.co/cases', 'new-case');
     expect(panel.webview.html).toContain('用例重跑结果');
     expect(panel.webview.html).toContain('重跑自 <code>old-case</code>');
+  });
+
+  it.each(['passed', 'failed', 'error'] as const)('applies global passing-history retention after a %s rerun only when it passes', async status => {
+    const panel = await open();
+    vi.mocked(rerunCourseTestCase).mockResolvedValue({ result: failingResult({ status }) });
+    await panel.listener?.({ action: 'rerun' });
+    if (status === 'passed') {
+      expect(mocks.createRetention).toHaveBeenCalledWith('E:/work/.co/cases', 10);
+      expect(mocks.initializeRetention).toHaveBeenCalledTimes(1);
+      expect(mocks.pruneRetention).toHaveBeenCalledTimes(1);
+      expect(mocks.recordOutcome.mock.invocationCallOrder[0]).toBeLessThan(mocks.pruneRetention.mock.invocationCallOrder[0]);
+    } else {
+      expect(mocks.createRetention).not.toHaveBeenCalled();
+    }
   });
 
   it('shows detailed preflight failure without recording history when no new case was created', async () => {

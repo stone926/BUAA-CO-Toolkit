@@ -1,4 +1,4 @@
-# course-testing | src/courseTesting/ | 75 files + host adapters
+# course-testing | src/courseTesting/ | 76 files + host adapters
 
 P3–P7 自动化测试：生成 ASM → 内置 TS assembler/ProgramImage → 内置 TS 课程 oracle → Verilog（bundled Icarus）或 Logisim 仿真 Trace → 对比/Probe 检查 → HTML/JSON 报告。通用 Verilog 仿真与自动 DUT lane 固定使用扩展内置 Icarus，运行目录 `.co/iverilog`。
 
@@ -20,7 +20,7 @@ P3–P7 自动化测试：生成 ASM → 内置 TS assembler/ProgramImage → �
 
 **有界并发、失败即停。** 会话启动时快照并发量；P3–P6 每轮生成对应数量的独立随机点，P7 保留原有 14 点套件。GPR / 常规 / 特殊测试之间有完成屏障，同一 manifest 的 stdin 变体互斥，空闲槽立即接新点。首个失败或错误立即停止派发并 abort 同批任务，等待所有在途任务（含进程退出、manifest 写入）完成后才清理或释放会话；取消不计 error，已完成结果和失败证据保存。并发量 1 维持串行顺序，轮间零延迟主动 yield 保持扩展宿主响应。报告写入仍串行合并，caseIndex 保持原测试点编号，activeCases 展示多个活动点并兼容旧 activeCase。
 
-**有界留存。** 每次持续测试会话只保留最近 10 个通过测试点的完整用例与产物，更早的通过点自动删除，失败和错误点不参与清理。留存清理对同一 manifest 串行，捕获并复验目录/manifest identity 后原子移入受控 `.co/trash`，所有不确定状态 fail-closed 保留；清理始终等待整批任务结束。
+**有界留存。** 同一工作区的全部历史合计只保留按创建时间最新的 10 个通过测试点及其完整用例与产物，跨会话、跨项目统一计算，失败和错误点不参与清理。持续测试启动时定向读取 `.co/cases` 一次，每批 drain 后增量更新；历史重跑通过后也应用同一策略。留存清理对同一 manifest 串行，复验通过终态、目录/manifest identity 与内容指纹后原子移入受控 `.co/trash`；状态冲突或路径不确定时保留，清理失败不会挤掉最新 10 点。
 
 **中文诊断。** P7 定向检查、普通写回差异、DM 写事务与 Logisim 检查在诊断来源生成中文消息；持续测试报告使用中文类别、参考/待测标签和复现编号。旧报告中已知的 CP0 复位及写回差异英文消息在展示时兼容转换，原始记录不改写。机器状态码、协议标记、寄存器/信号名和外部工具原始诊断保持原样。
 
@@ -109,3 +109,4 @@ P3–P7 自动化测试：生成 ASM → 内置 TS assembler/ProgramImage → �
 - `courseTestLogisim.ts` — P3 自动电路诊断与 ROM 注入对拍；原始 stdout 最多 64 MiB，触顶终止并报告截断原因
 - `courseTestReport.ts` / `courseTestMessages.ts` / `courseTestStdin.ts` / `courseTestTraceFiles.ts` / `courseTestCases.ts` / `continuous.ts` — HTML 报告、中文 diff 提示、stdin 发现、输出命名（`.co/out/{stem}.oracle.out` 与 `.sim.out`）、case 输入与留存裁剪
 - `asmCaseStore.ts` / `asmCaseStoreCore.ts` / `manifestCodec.ts` / `continuousCaseRetention.ts` / `pathContainment.ts` — 用例持久化与 manifest v1（只读）/v2 codec：创建时捕获完整 SourceUnit/include graph，后续汇编与 oracle 只读 case 内 immutable materialization；所有路径只接受 canonical `/`，大小写碰撞、symlink 与 containment escape fail closed
+- `workspaceCaseRetention.ts` — 历史通过用例的跨会话留存：启动扫描、按创建时间排序、批次增量观察与旧通过点安全清理
