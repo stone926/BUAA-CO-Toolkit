@@ -1,4 +1,4 @@
-# course-testing | src/courseTesting/ | 76 files + host adapters
+# course-testing | src/courseTesting/ | 77 files + host adapters
 
 P3–P7 自动化测试：生成 ASM → 内置 TS assembler/ProgramImage → 内置 TS 课程 oracle → Verilog（bundled Icarus）或 Logisim 仿真 Trace → 对比/Probe 检查 → HTML/JSON 报告。通用 Verilog 仿真与自动 DUT lane 固定使用扩展内置 Icarus，运行目录 `.co/iverilog`。
 
@@ -7,6 +7,8 @@ P3–P7 自动化测试：生成 ASM → 内置 TS assembler/ProgramImage → �
 **自动强度不可调。** `automaticTestPolicy.ts` 内部固定引擎、强度与外部工具预算；`co.test.instructions` 选择重点 payload 指令，`co.test.concurrency` 只控制并发资源上限（默认 4，1–8），不改变每点强度。instruction_count 只统计 payload，生成器统一追加 `_co_test_end` 自分支 + nop。随机点 P3–P6 用满 4094 条 payload，P7 用 1118 条且不覆盖 0x4180；工作区 legacy 回滚设置不能降低自动规模。教程硬件/builtin lane 使用完整 4096-word IM（0x3000..0x6fff）；手动 legacy v0.6.3 路径因 Compact 内存排他 bug 单独采用 4095-word policy。
 
 **独立 GPR 覆盖。** 每个持续测试会话先运行一个 127 条 payload 的独立测试点，为全部 31 个可写 GPR 写入互异非零值并经两个读端口传播存入 DM，最后发出完成标记；后续随机测试点不再重复 126 条 GPR 前导。该基础检查使用课程必需指令，不受 payload 重点指令设置影响。P4–P7 随机点固定覆盖 `ori/add/sub/lw → jr` × 间隔 0/1/2（错误旧目标写毒值，正确路径独立标记）；随机跳转将可观察毒指令计入最低预算，余量不足时改发其他指令。含 `ori` 且 payload ≥256 的程序在最后一槽发出 `_co_test_complete` 可见写，再接标准两条 halt 尾。
+
+**链接寄存器覆盖。** P5–P7 随机点按可用指令和剩余预算加入有界的 `jal → add/sub` 双读端口、不同间隔与寄存器堆成熟值检查，以及 `jal → ori/add/sub/lw 重写 $31 → 消费者` 的最新写优先、分支/存储/返回观察。合法返回包含调整和保存/恢复 `$ra`，错误跳转路径带可见毒写；调用返回按真实动态顺序进入冒险统计。通用定向生成器使用实际操作数检查算术溢出，不以“小于链接地址”的数值阈值排除合法依赖。回归在执行时注入错误链接值、陈旧读值和错误写优先，再用生产 trace 比较检查失败；这些是架构故障模型，不能替代周期级 RTL 验证。
 
 **P7 双通道。** 自动固定 `hybrid`：`anchor`（TS 课程 oracle 精确对拍 + 中断注入）与 `probe`（DM 探针黑盒检查）同时覆盖。正常 probe 分为 core / MMIO / Timer / MDU / hazard，另逐轮生成 5 个真实中断返回后再次中断的独立程序，最后执行 3 个特殊 Timer 分片。首轮加独立 GPR 共 15 点，后续 14 点；随机 payload 预算保持 1118。原 130 个变体全部保留，新增 4 个 older-MDU 变体、2 个 Mode1 停止态变体与 5 个返回程序；每个程序的用户文本留在 0x4180 之前、DM 记录不超过 64 个。**probe 是 DUT-only，不能冒充 full-stack reference evidence**；mode、分片与变体均不是公共设置。
 
@@ -60,6 +62,7 @@ P3–P7 自动化测试：生成 ASM → 内置 TS assembler/ProgramImage → �
 - `builtinAsm/instructionSemantics.ts` — ALU/立即数/移位/计数/分支判定与溢出的纯语义
 - `builtinAsm/registerCoverage.ts` — 全 GPR 写入/双读端口/DM 传播与 jr × 间隔矩阵；预算不足时不发出半套覆盖段
 - `builtinAsm/registerCoverageProgram.ts` — 独立 GPR 测试点，释放每个随机点的前导预算；由 workflow 每会话调度一次
+- `builtinAsm/linkRegisterCoverage.ts` — P5–P7 链接值的算术依赖、较新 `$31` 写优先与可观察调用返回；按指令子集和预算发射完整场景
 - `builtinAsm/controlTargetCoverage.ts` — 有界双向控制流图：自目标、低地址回边、高地址前跳、分支两臂汇合与可观察路径写；短预算使用紧凑图，循环不以静态值快照冒充动态冒险覆盖
 - `builtinAsm/programWriter.ts` / `builtinAsm/types.ts` / `builtinAsm/asmTemplates.ts` — 行累积与 PC 跟踪、P7 场景与期望类型、异常处理模板插值
 - `builtinAsm/hazard/hazardTracker.ts`、`builtinAsm/hazard/hazardTargets.ts`、`builtinAsm/hazard/hazardBlocks.ts`、`builtinAsm/hazard/operandSteer.ts` — 复用 hazard-analysis.md 的共享 AT 模型做定向冒险生成，按覆盖缺口先类别后元组选择

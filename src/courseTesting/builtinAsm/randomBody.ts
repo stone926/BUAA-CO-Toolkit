@@ -50,6 +50,7 @@ import {
 import { Random, hashSeed } from '../random';
 import { emitRegisterJumpCoverage, RegisterCoverageWriter } from './registerCoverage';
 import { emitControlTargetCoverage } from './controlTargetCoverage';
+import { emitLinkRegisterCoverage } from './linkRegisterCoverage';
 import { p7SafeInterruptAnchorMnemonics } from '../p7InterruptAnchor';
 import {
   p7RiWordCatalog,
@@ -434,6 +435,13 @@ class ProgramGenerator {
       }
     });
     emitRegisterJumpCoverage(coverageWriter, this.state, this.allowed, this.usesDelaySlot());
+    emitLinkRegisterCoverage({
+      ...coverageWriter,
+      remaining: () => this.randomBodyRemaining(),
+      skippedPoison: () => this.emitSkippedPoisonInstruction(true),
+      beginDynamicGroup: () => this.hazards?.beginGroup(),
+      endDynamicGroup: (order) => this.hazards?.endGroup(order)
+    }, this.state, this.allowed, this.usesDelaySlot());
 
     const coverageQueue = this.shuffle(Array.from(this.allowed));
     let guard = this.targetCount * 30 + 200;

@@ -3,7 +3,7 @@ import { CpuState } from '../../cpuState';
 import { branchMnemonics } from '../../mnemonicSets';
 import { alignDown } from '../../mipsUtil';
 import { Random } from '../../random';
-import { branchTaken, isSmallArithmeticOperand } from '../instructionSemantics';
+import { branchTaken } from '../instructionSemantics';
 import { HazardTarget, HazardTargetPlanner } from './hazardTargets';
 import { hazardClassOf, SourceRole } from '../../../hazardAnalysis/hazardTiming';
 import { OperandSteer, SteeredEmission } from './operandSteer';
@@ -590,9 +590,8 @@ export class HazardBlockEmitter {
       const lanes = consumer === 'sb' ? 0xff : consumer === 'sh' ? 0xffff : 0xffffffff;
       return ((value ^ stale) & lanes) !== 0;
     }
-    if (consumer === 'add' || consumer === 'sub' || consumer === 'addi') {
-      return isSmallArithmeticOperand(value);
-    }
+    // Arithmetic legality depends on both operands. The modeled emitter checks actual
+    // signed overflow; a magnitude cutoff here would reject every legal JAL link (>=0x3008).
     if ((consumer === 'sllv' || consumer === 'srlv' || consumer === 'srav') && role === 'rs') {
       return ((value ^ stale) & 31) !== 0;
     }

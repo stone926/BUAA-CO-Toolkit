@@ -1,11 +1,6 @@
 // @index generator-semantics — 内置生成器 GPR 写回值、溢出与分支判定的纯语义（随机体与冒险求解共用）
 import { clo32, clz32, signExtend16, signed32, unsigned32 } from '../mipsUtil';
 
-/** Registers the random body treats as small enough for non-overflowing signed arithmetic. */
-export function isSmallArithmeticOperand(value: number): boolean {
-  return Math.abs(signed32(value)) <= 0x2000;
-}
-
 export function signedAddOverflows(left: number, right: number): boolean {
   const result = signed32(left) + signed32(right);
   return result > 0x7fffffff || result < -0x80000000;
