@@ -12,6 +12,7 @@ import {
 import { hazardInstructionFor } from '../../../hazardAnalysis/hazardInstruction';
 import { HazardPipelineModel } from '../../../hazardAnalysis/hazardPipeline';
 import { HazardClass, hazardClassOf, hazardSourceRoles, SourceRole } from '../../../hazardAnalysis/hazardTiming';
+import { forwardOperandKey } from './targetKeys';
 
 export type HazardGap = 0 | 1 | 2;
 
@@ -34,6 +35,7 @@ export interface PlannedHazardTarget {
   readonly classKey: string;
   /** Course forward/stall tuples a clean realization produces (forward targets only). */
   readonly tupleKeys: readonly string[];
+  readonly operandKey?: string;
   failures: number;
 }
 
@@ -110,39 +112,64 @@ export function predictForwardTuples(producer: string, consumer: string, role: S
 }
 
 /**
- * Chooses the next hazard scenario by coverage gap: first every class-level target (producer
- * class x consumer port x gap, discarded-$0 writes, forwarding priority, HI/LO), then course
- * mnemonic-level tuples. The coverage object is fed by the dynamic pipeline model, so hazards
- * that the random stream creates incidentally are never re-targeted.
+ * Interleave broad class coverage with concrete mnemonic/port coverage. Each concrete round
+ * visits class-pair/port buckets fairly; a short P7 program cannot spend its entire budget
+ * paying class debt while rare mnemonic targets wait indefinitely behind it.
  */
 export class HazardTargetPlanner {
   private readonly targets: PlannedHazardTarget[];
+  private readonly operandBuckets: PlannedHazardTarget[][];
+  private readonly operandCursors: number[];
+  private classCursor = 0;
+  private bucketCursor = 0;
+  private selectionCount = 0;
+  private selectedTier: 1 | 2 | undefined;
 
   constructor(
     allowed: ReadonlySet<string>,
     private readonly coverage: HazardCoverage,
-    shuffle: <T>(items: T[]) => T[]
+    shuffle: <T>(items: T[]) => T[],
+    private readonly observedOperands: ReadonlySet<string> = new Set<string>()
   ) {
     this.targets = shuffle(enumerateTargets(allowed, shuffle));
+    const buckets = new Map<string, PlannedHazardTarget[]>();
+    for (const planned of this.targets) {
+      if (planned.target.kind !== 'forward') continue;
+      const target = planned.target;
+      const key = `${hazardClassOf(target.producer)}>${hazardClassOf(target.consumer)}.${target.role}`;
+      const bucket = buckets.get(key) ?? [];
+      bucket.push(planned);
+      buckets.set(key, bucket);
+    }
+    this.operandBuckets = shuffle([...buckets.values()]);
+    this.operandCursors = this.operandBuckets.map(() => 0);
   }
 
   get size(): number {
     return this.targets.length;
   }
 
+  get lastSelectionTier(): 1 | 2 | undefined {
+    return this.selectedTier;
+  }
+
   next(realizable: (target: HazardTarget) => boolean): PlannedHazardTarget | undefined {
-    for (const tier of [1, 2] as const) {
-      for (const planned of this.targets) {
-        if (planned.failures >= maximumRealizationFailures || !this.open(planned, tier)) continue;
-        if (realizable(planned.target)) return planned;
-      }
+    // The concrete domain is much larger: two mnemonic/port turns per class turn.
+    // Neither tier can defer the other beyond two successful selection opportunities.
+    const preferred = this.selectionCount++ % 3 === 2 ? 1 : 2;
+    this.selectedTier = undefined;
+    for (const tier of [preferred, preferred === 1 ? 2 : 1] as const) {
+      const planned = tier === 1 ? this.pickClass(realizable) : this.pickOperand(realizable);
+      if (!planned) continue;
+      this.selectedTier = tier;
+      return planned;
     }
     return undefined;
   }
 
   /** Counts a realization that covered none of the target's open keys as a failure. */
   settle(planned: PlannedHazardTarget, openBefore: readonly string[]): void {
-    if (!openBefore.some((key) => this.coverage.covers(key))) {
+    if (!openBefore.some((key) => this.covers(key))) {
       planned.failures++;
     } else if (!this.open(planned, 1) && !this.open(planned, 2)) {
       planned.failures = maximumRealizationFailures;
@@ -150,7 +177,8 @@ export class HazardTargetPlanner {
   }
 
   openKeys(planned: PlannedHazardTarget): string[] {
-    return [planned.classKey, ...planned.tupleKeys].filter((key) => !this.coverage.covers(key));
+    return [planned.classKey, ...planned.tupleKeys, ...(planned.operandKey ? [planned.operandKey] : [])]
+      .filter((key) => !this.covers(key));
   }
 
   hasOpenTargets(): boolean {
@@ -160,7 +188,39 @@ export class HazardTargetPlanner {
 
   private open(planned: PlannedHazardTarget, tier: 1 | 2): boolean {
     if (tier === 1) return !this.coverage.covers(planned.classKey);
-    return planned.tupleKeys.some((key) => !this.coverage.covers(key));
+    return (!!planned.operandKey && !this.observedOperands.has(planned.operandKey)) ||
+      planned.tupleKeys.some((key) => !this.coverage.covers(key));
+  }
+
+  private covers(key: string): boolean {
+    return this.coverage.covers(key) || this.observedOperands.has(key);
+  }
+
+  private pickClass(realizable: (target: HazardTarget) => boolean): PlannedHazardTarget | undefined {
+    for (let offset = 0; offset < this.targets.length; offset++) {
+      const index = (this.classCursor + offset) % this.targets.length;
+      const planned = this.targets[index];
+      if (planned.failures >= maximumRealizationFailures || !this.open(planned, 1) || !realizable(planned.target)) continue;
+      this.classCursor = (index + 1) % this.targets.length;
+      return planned;
+    }
+    return undefined;
+  }
+
+  private pickOperand(realizable: (target: HazardTarget) => boolean): PlannedHazardTarget | undefined {
+    for (let offset = 0; offset < this.operandBuckets.length; offset++) {
+      const index = (this.bucketCursor + offset) % this.operandBuckets.length;
+      const bucket = this.operandBuckets[index];
+      for (let position = 0; position < bucket.length; position++) {
+        const targetIndex = (this.operandCursors[index] + position) % bucket.length;
+        const planned = bucket[targetIndex];
+        if (planned.failures >= maximumRealizationFailures || !this.open(planned, 2) || !realizable(planned.target)) continue;
+        this.operandCursors[index] = (targetIndex + 1) % bucket.length;
+        this.bucketCursor = (index + 1) % this.operandBuckets.length;
+        return planned;
+      }
+    }
+    return undefined;
   }
 }
 
@@ -178,6 +238,7 @@ function enumerateTargets(allowed: ReadonlySet<string>, shuffle: <T>(items: T[])
           target: { kind: 'forward', producer, consumer, role, gap },
           classKey: forwardClassKey(hazardClassOf(producer), hazardClassOf(consumer), role, gap),
           tupleKeys: predictForwardTuples(producer, consumer, role, gap),
+          operandKey: forwardOperandKey(producer, consumer, role, gap),
           failures: 0
         });
       }

@@ -67,7 +67,8 @@ export class HazardWitnessEmitter {
         store(second, address);
         constant(first, 0x31);
         if (witness.loadLast) {
-          constant(first, left);
+          // Keep a real older ALU result in flight, distinct from both the stale GRF and load.
+          emit('add', { write: first, reads: { rs: first, rt: first } });
           load(first, address);
         } else {
           load(first, address);

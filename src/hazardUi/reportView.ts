@@ -2,6 +2,7 @@
 import { escapeHtml } from '../language/common/util';
 import { renderResourceTemplate } from '../templates/templateRegistry';
 import type { HazardClassCoverage, HazardReport, HazardReportEvent, HazardStopReason } from '../hazardAnalysis/reportTypes';
+import { renderHazardDetails, renderHazardExecution } from './detailView';
 
 export interface HazardReportMetadata {
   readonly inputLabel: string;
@@ -48,8 +49,9 @@ export function renderHazardReport(report: HazardReport, metadata: HazardReportM
         <button type="button" class="secondary" data-action="openJson">打开 JSON</button>
       </div>
     </header>
-    <nav class="jump-nav" aria-label="报告目录"><a href="#coverage-heading">覆盖概览</a><a href="#matrix-heading">分类矩阵</a><a href="#events-heading">事件实例</a><a href="#improvements-heading">改进建议</a></nav>
+    <nav class="jump-nav" aria-label="报告目录"><a href="#coverage-heading">覆盖概览</a><a href="#detail-heading">完整统计</a><a href="#matrix-heading">分类矩阵</a><a href="#events-heading">事件实例</a><a href="#improvements-heading">改进建议</a></nav>
     <main>
+      ${renderHazardExecution(report)}
       <section class="summary overview" aria-label="分析摘要">
         <div class="metric status-card"><span class="card-kicker">执行状态</span><strong><span class="badge ${stop.tone}">${stop.title}</span></strong><span>${stop.detail}</span><span class="status-pc">停止 PC · ${hexAddress(report.stopPc)}</span></div>
         <div class="metric metric-card"><span class="card-kicker">已执行指令</span><strong>${formatCount(summary.instructions)}</strong><span>${formatCount(summary.cycles)} 周期</span></div>
@@ -61,15 +63,16 @@ export function renderHazardReport(report: HazardReport, metadata: HazardReportM
         <div class="coverage-grid">
           ${coverageCard('转发覆盖', summary.forwardCovered, summary.forwardExpected, summary.forwardCoverage, summary.forwardGrade, 'forward')}
           ${coverageCard('阻塞覆盖', summary.stallCovered, summary.stallExpected, summary.stallCoverage, summary.stallGrade, 'stall')}
-          <article class="coverage-card validity"><div class="card-top"><span>转发有效率</span><span class="small-label">${formatCount(summary.validForwardEvents)} / ${formatCount(summary.forwardEvents)} 次</span></div><strong>${percent(summary.forwardValidRate)}</strong><progress class="meter" aria-label="转发有效率" value="${meterWidth(summary.forwardValidRate)}" max="100">${percent(summary.forwardValidRate)}</progress><p>只有能改变消费者结果的转发，才计入有效转发。</p></article>
+          <article class="coverage-card validity"><div class="card-top"><span>课程值差有效率</span><span class="small-label">${formatCount(summary.validForwardEvents)} / ${formatCount(summary.forwardEvents)} 次</span></div><strong>${percent(summary.forwardValidRate)}</strong><progress class="meter" aria-label="课程值差有效率" value="${meterWidth(summary.forwardValidRate)}" max="100">${percent(summary.forwardValidRate)}</progress><p>只表示转发值与当时 GRF 旧值不同；结果是否改变见下方效果检查。</p></article>
         </div>
       </section>
+      ${renderHazardDetails(report)}
       <section class="section" aria-labelledby="matrix-heading">
         <div class="section-head"><div><p class="eyebrow">02 / 分类矩阵</p><h2 id="matrix-heading">按指令类别查看</h2></div><p>行内按“消费者 ← 生产者”排列；空白上限表示该模型没有对应的考核元组。</p></div>
         ${coverageTable(report.classCoverage)}
       </section>
       <section class="section" aria-labelledby="events-heading">
-        <div class="section-head"><div><p class="eyebrow">03 / 动态证据</p><h2 id="events-heading">事件实例</h2></div><p>选择类型、有效性，或按指令、寄存器与 PC 搜索。</p></div>
+        <div class="section-head"><div><p class="eyebrow">03 / 动态证据</p><h2 id="events-heading">事件实例</h2></div><p>选择事件类型和值差，或按指令、寄存器、PC 与效果检查结果搜索。</p></div>
         ${eventSection(report.events, report.omittedEvents)}
       </section>
       <section class="section lower-grid" aria-label="下一步和课程说明">
@@ -108,8 +111,8 @@ function cellCoverage(covered: number, expected: number, kind: string): string {
 }
 
 function eventSection(events: readonly HazardReportEvent[], omitted: number): string {
-  if (events.length === 0) return '<div class="empty-state">这次执行尚未记录冒险事件。尝试加入相邻的生产者与消费者指令，然后重新分析。</div>';
-  const controls = `<div class="event-controls"><label>事件类型<select id="event-kind"><option value="all">全部类型</option>${(Object.entries(eventLabels) as Array<[HazardReportEvent['kind'], string]>).map(([kind, label]) => `<option value="${kind}">${label}</option>`).join('')}</select></label><label>有效性<select id="event-valid"><option value="all">全部事件</option><option value="valid">有效</option><option value="invalid">无效</option><option value="unknown">未判定</option></select></label><label class="search-label">搜索事件<input id="event-search" type="search" placeholder="指令、寄存器或 PC" autocomplete="off" spellcheck="false"></label><button type="button" class="secondary reset-filters" id="event-reset" hidden>清除筛选</button><span id="event-count" class="result-count" role="status" aria-live="polite" aria-atomic="true"></span></div>`;
+  if (events.length === 0) return `<div class="empty-state">${omitted ? '本报告未保留事件实例；实际发生次数请查看上方完整统计。' : '这次执行尚未记录冒险事件。尝试加入相邻的生产者与消费者指令，然后重新分析。'}</div>`;
+  const controls = `<div class="event-controls"><label>事件类型<select id="event-kind"><option value="all">全部类型</option>${(Object.entries(eventLabels) as Array<[HazardReportEvent['kind'], string]>).map(([kind, label]) => `<option value="${kind}">${label}</option>`).join('')}</select></label><label>新旧值<select id="event-valid"><option value="all">全部事件</option><option value="valid">值不同</option><option value="invalid">值相同</option><option value="unknown">未判定</option></select></label><label class="search-label">搜索事件<input id="event-search" type="search" placeholder="指令、寄存器或 PC" autocomplete="off" spellcheck="false"></label><button type="button" class="secondary reset-filters" id="event-reset" hidden>清除筛选</button><span id="event-count" class="result-count" role="status" aria-live="polite" aria-atomic="true"></span></div>`;
   const cards = events.map((event) => {
     const validity = event.valid === true ? 'valid' : event.valid === false ? 'invalid' : 'unknown';
     const origin = [event.producer, event.producerOrder === undefined ? undefined : `#${formatCount(event.producerOrder + 1)}`].filter(Boolean).join(' ');
@@ -128,12 +131,15 @@ function eventDetail(event: HazardReportEvent): string {
   if (event.role) parts.push(`源操作数 ${event.role}`);
   if (event.sourceStage && event.destinationStage) parts.push(`${event.sourceStage} → ${event.destinationStage} 级`);
   if (event.interval !== undefined) parts.push(`阻塞间隔 ${event.interval}`);
+  if (event.gap !== undefined) parts.push(`动态间隔 ${event.gap}`);
+  if (event.olderProducer && event.newerProducer) parts.push(`旧 ${event.olderProducer} → 新 ${event.newerProducer}，间隔 ${event.olderGap ?? '—'}/${event.newerGap ?? '—'}`);
+  if (event.observability) parts.push(event.observability === 'observable' ? '替换旧值后当前指令效果改变' : event.observability === 'masked' ? '替换旧值后当前指令效果不变' : '当前指令效果未评估');
   if (parts.length === 0) parts.push('流水线相关事件');
   return parts.join(' · ');
 }
 
 function validityLabel(value: string): string {
-  return value === 'valid' ? '有效' : value === 'invalid' ? '无效' : '未判定';
+  return value === 'valid' ? '值不同' : value === 'invalid' ? '值相同' : '未判定';
 }
 
 function suggestionSection(rows: readonly HazardClassCoverage[], warnings: readonly string[]): string {

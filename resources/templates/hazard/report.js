@@ -1,6 +1,15 @@
 (function () {
   'use strict';
   var vscode = acquireVsCodeApi();
+  var navigation = document.querySelector('.jump-nav');
+  if (navigation) {
+    function updateNavigationOffset() {
+      document.documentElement.style.setProperty('--hazard-nav-offset', (navigation.getBoundingClientRect().height + 12) + 'px');
+    }
+    updateNavigationOffset();
+    window.addEventListener('resize', updateNavigationOffset);
+    if (typeof ResizeObserver !== 'undefined') new ResizeObserver(updateNavigationOffset).observe(navigation);
+  }
   var actions = { reanalyze: true, openInput: true, openJson: true };
   document.querySelectorAll('[data-action]').forEach(function (button) {
     button.addEventListener('click', function () {

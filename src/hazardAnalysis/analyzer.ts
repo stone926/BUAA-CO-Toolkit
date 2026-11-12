@@ -2,11 +2,13 @@
 import type { ProgramImage } from '../mips/core/api';
 import { CommitEvent } from '../mips/core/events/commitEvent';
 import { CourseSystemSession } from '../mips/core/machine/system';
-import { evaluateInstruction } from '../mips/core/machine/transition';
+import type { ExternalInterruptRequest } from '../mips/core/devices/interruptController';
 import { matchExactInstruction } from '../mips/core/isa/decoder';
 import { resolveCourseProfile } from '../mips/core/profiles/courseProfiles';
 import { forwardTupleKey, stallTupleKey } from './hazardCoverage';
-import { hazardInstructionFor } from './hazardInstruction';
+import { hazardInstructionFor, HazardInstruction } from './hazardInstruction';
+import { HazardDetailedAccumulator } from './detailedStats';
+import { discardedHazardWriteValue, prepareHazardAssessment } from './observability';
 import { HazardObservation, HazardObservationValues, HazardPipelineModel } from './hazardPipeline';
 import {
   courseHazardClassOf, courseHazardGrade, courseHazardModelFor,
@@ -29,6 +31,9 @@ export interface AnalyzeHazardOptions {
   readonly signal?: { readonly aborted: boolean };
   /** Called after each bounded slice; defaults to a host event-loop turn. */
   readonly yieldControl?: () => Promise<void>;
+  readonly externalInterrupts?: readonly ExternalInterruptRequest[];
+  readonly executionSource?: 'standalone' | 'case';
+  readonly caseId?: string;
 }
 
 /** Analyze actual committed instructions; unused text and wrong-path fetches cannot create hazards. */
@@ -36,6 +41,11 @@ export async function analyzeHazardProgram(image: ProgramImage, options: Analyze
   const maxSteps = boundedOption(options.maxSteps, defaultMaxSteps, absoluteMaxSteps, 'maxSteps');
   const maxEvents = boundedOption(options.maxEvents, defaultMaxEvents, absoluteMaxEvents, 'maxEvents', true);
   const sliceSize = boundedOption(options.sliceSize, defaultSliceSize, 1024, 'sliceSize');
+  const externalInterrupts = interruptSnapshot(options);
+  const executionSource = options.executionSource ?? 'standalone';
+  const caseId = options.caseId;
+  if (executionSource !== 'standalone' && executionSource !== 'case') throw new RangeError('Invalid executionSource');
+  if (caseId !== undefined && (typeof caseId !== 'string' || !caseId.length || caseId.length > 128)) throw new RangeError('Invalid caseId');
   const model = courseHazardModelFor(options.profile);
   const theory = courseHazardTheory[model];
   const pipeline = new HazardPipelineModel();
@@ -44,6 +54,8 @@ export async function analyzeHazardProgram(image: ProgramImage, options: Analyze
   const classForwards = new Map<string, Set<string>>();
   const classStalls = new Map<string, Set<string>>();
   const destinationCache = new Map<number, number | null>();
+  const instructionCache = new Map<number, HazardInstruction | undefined>();
+  const detailed = new HazardDetailedAccumulator();
   const events: HazardReportEvent[] = [];
   const warnings: string[] = [];
   let omittedWarnings = 0;
@@ -55,7 +67,8 @@ export async function analyzeHazardProgram(image: ProgramImage, options: Analyze
   const textEnd = contiguousTextEnd(image);
   const session = new CourseSystemSession({
     profile: resolveCourseProfile(options.profile), image, maxSteps, layers: analysisLayers,
-    deviceSchedule: { kind: 'disabled' }
+    deviceSchedule: { kind: 'disabled' },
+    externalInterrupts
   });
   let lastInstruction: CommitEvent | undefined;
 
@@ -77,6 +90,8 @@ export async function analyzeHazardProgram(image: ProgramImage, options: Analyze
         }
         const hiBefore = session.machine.state.hi;
         const loBefore = session.machine.state.lo;
+        const hiDefinedBefore = session.machine.state.hiDefined;
+        const loDefinedBefore = session.machine.state.loDefined;
         // The commit stream intentionally suppresses $0 writes. Ask the core's own pure evaluator
         // for that discarded value only when the decoded destination is $0.
         const fetchedWord = session.machine.memory.fetch(pc).word;
@@ -91,13 +106,17 @@ export async function analyzeHazardProgram(image: ProgramImage, options: Analyze
               : field === 'rt' ? (fetchedWord >>> 16) & 31
                 : field === 'rs' ? (fetchedWord >>> 21) & 31 : null;
           destinationCache.set(fetchedWord, destination);
+          instructionCache.set(fetchedWord, entry ? hazardInstructionFor(entry.mnemonic, {
+            rs: `$${(fetchedWord >>> 21) & 31}`, rt: `$${(fetchedWord >>> 16) & 31}`, rd: `$${(fetchedWord >>> 11) & 31}`
+          }) : undefined);
         }
+        const facts = fetchedWord === undefined ? undefined : instructionCache.get(fetchedWord);
         const previousValue = destination == null ? undefined : session.machine.state.gpr.read(destination);
-        const zeroRaw = destination === 0 ? evaluateInstruction({
-          profile: session.profile, state: session.machine.state, memory: session.machine.memory,
-          scope: { profile: options.profile, enabledLayers: analysisLayers },
-          undefinedBehavior: 'fail-closed'
-        }).gprWrites.find((write) => write.register === 0)?.value : undefined;
+        const zeroRaw = destination === 0 && facts && fetchedWord !== undefined ? discardedHazardWriteValue(
+          session.profile, session.machine.state, session.machine.memory, fetchedWord) : undefined;
+        const assess = facts && fetchedWord !== undefined ? prepareHazardAssessment(
+          session.profile, session.machine.state, session.machine.memory, fetchedWord, facts.mnemonic,
+          pipeline.counterfactuals(facts)) : undefined;
         const result = session.stepInstruction();
         stopPc = session.machine.state.pc >>> 0;
         if (result.event?.kind === 'instruction') {
@@ -106,9 +125,7 @@ export async function analyzeHazardProgram(image: ProgramImage, options: Analyze
           const mnemonic = event.mnemonic;
           if (mnemonic && event.instructionWord !== undefined) {
             const word = event.instructionWord;
-            const decoded = hazardInstructionFor(mnemonic, {
-              rs: `$${(word >>> 21) & 31}`, rt: `$${(word >>> 16) & 31}`, rd: `$${(word >>> 11) & 31}`
-            });
+            const decoded = instructionCache.get(word);
             const instruction = decoded && (mnemonic === 'movn' || mnemonic === 'movz')
               && !event.gprWrites.length && zeroRaw === undefined
               ? { ...decoded, write: undefined } : decoded;
@@ -123,7 +140,8 @@ export async function analyzeHazardProgram(image: ProgramImage, options: Analyze
                   ...(registerNumber === 0 && zeroRaw !== undefined ? { raw: zeroRaw } : {})
                 }),
                 hiLoPrevious: { hi: hiBefore, lo: loBefore },
-                hiLoNext: { hi: session.machine.state.hi, lo: session.machine.state.lo }
+                hiLoPreviousDefined: { hi: hiDefinedBefore, lo: loDefinedBefore },
+                hiLoNext: { hi: session.machine.state.hi, lo: session.machine.state.lo }, assess
               };
               record(pipeline.observe(instruction, values), event);
             }
@@ -191,10 +209,14 @@ export async function analyzeHazardProgram(image: ProgramImage, options: Analyze
     },
     classCoverage,
     forwardTuples: [...forwardTuples].sort(), stallTuples: [...stallTuples].sort(),
-    events, omittedEvents, warnings, stopReason, stopPc
+    events, omittedEvents, warnings, stopReason, stopPc,
+    detailed: detailed.result(),
+    execution: { source: executionSource, externalInterrupts,
+      ...(caseId ? { caseId } : {}) }
   };
 
   function record(observation: HazardObservation, commit: CommitEvent): void {
+    detailed.record(observation, commit.mnemonic ?? '');
     const consumerOrder = pipeline.instructions - 1;
     function add(event: HazardReportEvent): void {
       if (events.length < maxEvents) events.push(event);
@@ -212,7 +234,8 @@ export async function analyzeHazardProgram(image: ProgramImage, options: Analyze
       }
       add({ kind: 'forward', consumerPc: commit.pcBefore, consumerOrder, cycle: pipeline.cycles - 5, consumer: forward.consumer,
         producer: forward.producer, producerPc: forward.producerPc, producerOrder: forward.producerOrder, register: forward.register,
-        role: forward.role, sourceStage: forward.source, destinationStage: forward.destination, valid: forward.valid });
+        role: forward.role, sourceStage: forward.source, destinationStage: forward.destination, valid: forward.valid,
+        gap: forward.gap, observability: forward.observability });
     }
     for (const stall of observation.stalls) {
       const key = stallTupleKey(stall.consumer, stall.cause, stall.interval);
@@ -222,20 +245,22 @@ export async function analyzeHazardProgram(image: ProgramImage, options: Analyze
       if (consumerClass && producerClass) addClassTuple(classStalls, consumerClass, producerClass, key);
       add({ kind: 'stall', consumerPc: commit.pcBefore, consumerOrder, cycle: pipeline.cycles - 5, consumer: stall.consumer,
         producer: stall.cause, producerPc: stall.causePc, producerOrder: stall.causeOrder, register: stall.register,
-        interval: stall.interval, sourceStage: stall.interval === 0 ? 'E' : 'M' });
+        interval: stall.interval, role: stall.role, gap: stall.gap, sourceStage: stall.interval === 0 ? 'E' : 'M' });
     }
     for (const zero of observation.zeroDestinations) add({
       kind: 'zero', consumerPc: commit.pcBefore, consumerOrder, cycle: pipeline.cycles - 5, consumer: commit.mnemonic ?? '',
       producer: zero.producer, producerPc: zero.producerPc, producerOrder: zero.producerOrder,
-      register: '$0', role: zero.role, valid: zero.valid
+      register: '$0', role: zero.role, valid: zero.valid, gap: zero.gap, observability: zero.observability
     });
     for (const priority of observation.priorities) add({
       kind: 'priority', consumerPc: commit.pcBefore, consumerOrder, cycle: pipeline.cycles - 5, consumer: commit.mnemonic ?? '',
-      role: priority.role, valid: priority.valid
+      role: priority.role, valid: priority.valid, observability: priority.observability,
+      olderProducer: priority.olderProducer, newerProducer: priority.newerProducer,
+      olderGap: priority.olderGap, newerGap: priority.newerGap
     });
     for (const hilo of observation.hiLo) add({
       kind: 'hilo', consumerPc: commit.pcBefore, consumerOrder, cycle: pipeline.cycles - 5, consumer: hilo.reader,
-      producer: hilo.writer, producerPc: hilo.writerPc, valid: hilo.valid
+      producer: hilo.writer, producerPc: hilo.writerPc, valid: hilo.valid, gap: hilo.gap, observability: hilo.observability
     });
   }
 
@@ -259,6 +284,19 @@ function boundedOption(value: number | undefined, fallback: number, maximum: num
     throw new RangeError(`${label} must be an integer in ${allowZero ? '0' : '1'}..${maximum}`);
   }
   return result;
+}
+
+function interruptSnapshot(options: AnalyzeHazardOptions): ExternalInterruptRequest[] {
+  const requests = options.externalInterrupts ?? [];
+  if (!Array.isArray(requests) || requests.length > 4096) throw new RangeError('externalInterrupts must contain at most 4096 requests');
+  if (requests.length && options.profile !== 'P7') throw new RangeError('External interrupts require P7');
+  return requests.map((request) => {
+    if (!request || !Number.isInteger(request.victimPc) || request.victimPc < 0x3000 || request.victimPc > 0x6ffc
+      || request.victimPc % 4 !== 0 || !Number.isSafeInteger(request.occurrence) || request.occurrence < 1) {
+      throw new RangeError('Invalid external interrupt PC/occurrence');
+    }
+    return { victimPc: request.victimPc, occurrence: request.occurrence };
+  });
 }
 
 function averageGrade(values: readonly (number | null)[]): number | null {

@@ -395,7 +395,8 @@ class ProgramGenerator {
     this.pendingExceptionCoverage = this.buildExceptionCoverageQueue();
     if (this.pipelineProfile()) {
       this.hazards = new HazardTracker(this.state);
-      const planner = new HazardTargetPlanner(this.allowed, this.hazards.coverage, (items) => this.shuffle(items));
+      const planner = new HazardTargetPlanner(this.allowed, this.hazards.coverage, (items) => this.shuffle(items),
+        this.hazards.forwardOperands);
       this.hazardBlocks = new HazardBlockEmitter(this.createHazardHost(), planner);
     }
   }
@@ -441,7 +442,9 @@ class ProgramGenerator {
       skippedPoison: () => this.emitSkippedPoisonInstruction(true),
       beginDynamicGroup: () => this.hazards?.beginGroup(),
       endDynamicGroup: (order) => this.hazards?.endGroup(order)
-    }, this.state, this.allowed, this.usesDelaySlot());
+    }, this.state, this.allowed, this.usesDelaySlot(), {
+      compactTimings: this.profile !== 'P5', timingShard: hashSeed(this.seed)
+    });
 
     const coverageQueue = this.shuffle(Array.from(this.allowed));
     let guard = this.targetCount * 30 + 200;

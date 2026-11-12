@@ -32,7 +32,7 @@ describe('native hazard report view', () => {
     expect(page).toContain('正常结束');
     expect(page).toContain('6.7%');
     expect(page).toContain('70.0%');
-    expect(page).toContain('<progress class="meter" aria-label="转发有效率" value="70" max="100">');
+    expect(page).toContain('<progress class="meter" aria-label="课程值差有效率" value="70" max="100">');
     expect(page).toContain('cal_rr &lt;~~ load');
     expect(page).toContain('0x00003004');
     expect(page).toContain('周期 4');

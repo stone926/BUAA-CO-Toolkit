@@ -1,6 +1,13 @@
 // @index hazard-pipeline — 课程五级流水线 AT 模型：按动态指令流推算 D 级阻塞、首次正确值转发、优先级与 $0 写
 import { HazardInstruction } from './hazardInstruction';
 import { HazardClass, pipelineStageIndex, pipelineStages, PipelineStage, SourceRole } from './hazardTiming';
+import type { HazardObservability } from './reportTypes';
+
+export interface HazardCounterfactual {
+  readonly role?: SourceRole;
+  readonly half?: 'hi' | 'lo';
+  readonly value: number;
+}
 
 export interface HazardObservationValues {
   readonly pc?: number;
@@ -11,7 +18,9 @@ export interface HazardObservationValues {
   /** Value the instruction computed before `$0` discarded it. */
   readonly raw?: number;
   readonly hiLoPrevious?: { readonly hi: number; readonly lo: number };
+  readonly hiLoPreviousDefined?: { readonly hi: boolean; readonly lo: boolean };
   readonly hiLoNext?: { readonly hi: number; readonly lo: number };
+  readonly assess?: (alternative: HazardCounterfactual) => HazardObservability;
 }
 
 export interface ForwardEvent {
@@ -30,6 +39,7 @@ export interface ForwardEvent {
   readonly destination: PipelineStage;
   /** Course validity: the forwarded value differs from what the GRF holds at that moment. */
   readonly valid: boolean;
+  readonly observability: HazardObservability;
 }
 
 export interface StallEvent {
@@ -43,6 +53,8 @@ export interface StallEvent {
   readonly register: string;
   /** Course interval: instructions between D and the stalling stage (E=0, M=1). */
   readonly interval: number;
+  readonly role: SourceRole;
+  readonly gap: number;
 }
 
 export interface ZeroDestinationEvent {
@@ -55,9 +67,12 @@ export interface ZeroDestinationEvent {
   readonly gap: number;
   /** The discarded write carried a nonzero value, so forwarding it would be observable. */
   readonly valid: boolean;
+  readonly observability: HazardObservability;
 }
 
 export interface PriorityEvent {
+  readonly olderProducer: string;
+  readonly newerProducer: string;
   readonly consumerClass: HazardClass;
   readonly role: SourceRole;
   /** Instructions between the older and the newer in-flight writer. */
@@ -65,6 +80,7 @@ export interface PriorityEvent {
   /** Instructions between the newer writer and the consumer. */
   readonly newerGap: number;
   readonly valid: boolean;
+  readonly observability: HazardObservability;
 }
 
 export interface HiLoEvent {
@@ -73,11 +89,14 @@ export interface HiLoEvent {
   readonly reader: string;
   readonly gap: number;
   readonly valid: boolean;
+  readonly observability: HazardObservability;
 }
 
 export interface HazardObservation {
   readonly forwards: readonly ForwardEvent[];
   readonly stalls: readonly StallEvent[];
+  /** All blocking dependencies per stalled cycle; not additional stall cycles. */
+  readonly stallCauses: readonly StallEvent[];
   readonly zeroDestinations: readonly ZeroDestinationEvent[];
   readonly priorities: readonly PriorityEvent[];
   readonly hiLo: readonly HiLoEvent[];
@@ -101,6 +120,7 @@ interface HiLoWrite {
   readonly pc?: number;
   readonly mnemonic: string;
   readonly changed: boolean;
+  readonly previous?: number;
 }
 
 const hiLoHazardWindow = 2;
@@ -160,10 +180,20 @@ export class HazardPipelineModel {
     }
 
     const stalls: StallEvent[] = [];
+    const stallCauses: StallEvent[] = [];
     const stallKeys = new Set<string>();
     for (let cycle = decodeCycle; cycle < executeCycle - 1; cycle++) {
       let cause: typeof dependencies[number] | undefined;
       for (const dependency of dependencies) {
+        if (dependency.requiredExecute > cycle + 1) {
+          stallCauses.push({
+            consumer: instruction.mnemonic, consumerClass: instruction.hazardClass,
+            cause: dependency.writer.mnemonic, causeClass: dependency.writer.hazardClass,
+            causePc: dependency.writer.pc, causeOrder: dependency.writer.order,
+            register: dependency.register, role: dependency.role,
+            gap: order - dependency.writer.order - 1, interval: cycle - dependency.writer.executeCycle
+          });
+        }
         if (dependency.requiredExecute > cycle + 1 && (!cause || dependency.requiredExecute > cause.requiredExecute)) {
           cause = dependency;
         }
@@ -185,7 +215,9 @@ export class HazardPipelineModel {
         causeClass: cause.writer.hazardClass,
         causeOrder: cause.writer.order,
         register: cause.register,
-        interval
+        interval,
+        role: cause.role,
+        gap: order - cause.writer.order - 1
       });
     }
 
@@ -207,15 +239,19 @@ export class HazardPipelineModel {
         gap: order - writer.order - 1,
         source: pipelineStages[1 + forwardCycle - writer.executeCycle],
         destination: pipelineStages[destinationIndex],
-        valid: writer.next !== this.registerFileValue(dependency.register, forwardCycle)
+        valid: writer.next !== this.registerFileValue(dependency.register, forwardCycle),
+        observability: values.assess?.({ role: dependency.role, value: this.registerFileValue(dependency.register, forwardCycle) }) ?? 'unknown'
       });
       if (dependency.older) {
         priorities.push({
+          olderProducer: dependency.older.mnemonic,
+          newerProducer: writer.mnemonic,
           consumerClass: instruction.hazardClass,
           role: dependency.role,
           olderGap: writer.order - dependency.older.order - 1,
           newerGap: order - writer.order - 1,
-          valid: writer.next !== dependency.older.next
+          valid: writer.next !== dependency.older.next,
+          observability: values.assess?.({ role: dependency.role, value: dependency.older.next }) ?? 'unknown'
         });
       }
     }
@@ -233,7 +269,8 @@ export class HazardPipelineModel {
           consumerClass: instruction.hazardClass,
           role: read.role,
           gap: order - zero.order - 1,
-          valid: zero.next !== 0
+          valid: zero.next !== 0,
+          observability: values.assess?.({ role: read.role, value: zero.next }) ?? 'unknown'
         });
       }
     }
@@ -244,13 +281,37 @@ export class HazardPipelineModel {
         const writer = this.hiLoWrites.get(half);
         const gap = writer ? order - writer.order - 1 : Infinity;
         if (writer && gap <= hiLoHazardWindow) {
-          hiLo.push({ writer: writer.mnemonic, ...(writer.pc === undefined ? {} : { writerPc: writer.pc }), reader: instruction.mnemonic, gap, valid: writer.changed });
+          hiLo.push({ writer: writer.mnemonic, ...(writer.pc === undefined ? {} : { writerPc: writer.pc }), reader: instruction.mnemonic, gap, valid: writer.changed,
+            observability: writer.previous === undefined ? 'unknown' : values.assess?.({ half, value: writer.previous }) ?? 'unknown' });
         }
       }
     }
 
     this.commit(instruction, values, order, executeCycle);
-    return { forwards, stalls, zeroDestinations, priorities, hiLo };
+    return { forwards, stalls, stallCauses, zeroDestinations, priorities, hiLo };
+  }
+
+  /** Read-only alternatives for evaluation before the real instruction mutates RAM/state. */
+  counterfactuals(instruction: HazardInstruction): HazardCounterfactual[] {
+    const result: HazardCounterfactual[] = [];
+    for (const read of instruction.reads) {
+      if (read.register === '$0') {
+        for (const writer of this.zeroWrites) if (writer.writebackCycle >= this.nextDecodeCycle) {
+          result.push({ role: read.role, value: writer.next });
+        }
+      } else {
+        const [writer, older] = this.inFlightWriters(read.register);
+        if (writer) result.push({ role: read.role, value: this.registerFileValue(read.register, Math.max(this.nextDecodeCycle, writer.readyCycle)) });
+        if (older) result.push({ role: read.role, value: older.next });
+      }
+    }
+    if (instruction.hazardClass === 'mv_fr') for (const half of instruction.hiLoReads) {
+      const writer = this.hiLoWrites.get(half);
+      if (writer?.previous !== undefined && this.order - writer.order - 1 <= hiLoHazardWindow) {
+        result.push({ half, value: writer.previous });
+      }
+    }
+    return result;
   }
 
   /** The pipeline drained (exception entry): nothing older can forward to later instructions. */
@@ -327,7 +388,8 @@ export class HazardPipelineModel {
     for (const half of instruction.hiLoWrites) {
       const before = values.hiLoPrevious?.[half];
       const after = values.hiLoNext?.[half];
-      this.hiLoWrites.set(half, { order, ...(values.pc === undefined ? {} : { pc: values.pc }), mnemonic: instruction.mnemonic, changed: before !== after });
+      this.hiLoWrites.set(half, { order, ...(values.pc === undefined ? {} : { pc: values.pc }), mnemonic: instruction.mnemonic, changed: before !== after,
+        previous: values.hiLoPreviousDefined?.[half] === true ? before : undefined });
     }
     this.nextDecodeCycle = executeCycle;
     this.lastWritebackCycle = executeCycle + 2;

@@ -11,6 +11,8 @@ import { createTestServices } from './helpers/appServices';
 import { readHazardReport } from '../hazardUi/reportStore';
 import { isHazardReport } from '../hazardUi/reportValidation';
 import { buildProgramImage } from '../mips/core/programImage';
+import { assembleCourseSource } from '../mips/core/assembler/assembler';
+import * as caseInput from '../hazardUi/caseInput';
 
 const testState = vi.hoisted(() => ({
   state: undefined as ReturnType<typeof import('./helpers/vscodeMock').createVscodeMockState> | undefined,
@@ -156,6 +158,24 @@ describe('native hazard command workflow', () => {
     expect(saved.report.imageFingerprint).toBe(image.fingerprint);
     expect(saved.report.summary.validForwardEvents).toBe(2);
     expect(saved.report.stopReason).toBe('program-end');
+  });
+
+  it('carries a verified case IRQ context through the command into the saved report', async () => {
+    const assembled = assembleCourseSource({ id: 'saved', text: '.text\nori $26,$0,0x1001\nmtc0 $26,$12\nori $1,$0,7\nori $2,$0,9\nend: beq $0,$0,end\nnop\n.ktext 0x4180\nsw $0,0x7f20($0)\neret\nnop' }, { profile: 'P7' });
+    expect(assembled.ok).toBe(true);
+    const context = vi.spyOn(caseInput, 'loadHazardCaseInput').mockResolvedValue({
+      image: assembled.image!, caseId: 'verified-case', externalInterrupts: [{ victimPc: 0x300c, occurrence: 1 }]
+    });
+    try {
+      vi.mocked(ensureConcreteProfile).mockResolvedValue('P7');
+      await commandMap().get(Commands.Hazard.AnalyzeCurrentMachineCode)!(source);
+      expect(vscode.window.showErrorMessage).not.toHaveBeenCalled();
+      const { saved } = await generatedReport();
+      expect(saved.report.execution).toEqual({ source: 'case', caseId: 'verified-case', externalInterrupts: [{ victimPc: 0x300c, occurrence: 1 }] });
+      expect(saved.report.warnings.filter((warning) => warning.includes('发生中断'))).toHaveLength(1);
+      expect(saved.report.detailed!.forward.events).toBeGreaterThan(0);
+      expect(saved.report.stopReason).toBe('course-halt-loop');
+    } finally { context.mockRestore(); }
   });
 
   it('validates imported JSON and ignores arbitrary webview commands or injected paths', async () => {

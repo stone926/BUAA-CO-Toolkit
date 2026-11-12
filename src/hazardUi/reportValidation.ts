@@ -23,7 +23,9 @@ export function isHazardReport(value: unknown): value is HazardReport {
     || !['forwardCoverage', 'stallCoverage'].every((key) => range(summary[key], 1))
     || !nullableRange(summary.forwardValidRate, 1)
     || !['forwardGrade', 'stallGrade'].every((key) => nullableRange(summary[key], 100))) return false;
-  return list(value.classCoverage, 200, classRow)
+  return (value.detailed === undefined || detailedStats(value.detailed))
+    && (value.execution === undefined || executionContext(value.execution))
+    && list(value.classCoverage, 200, classRow)
     && list(value.events, 10000, eventRow)
     && list(value.forwardTuples, 20000, text) && list(value.stallTuples, 20000, text)
     && list(value.warnings, 100, text);
@@ -40,11 +42,45 @@ function eventRow(value: unknown): boolean {
   if (!record(value) || !member(value.kind, ['forward', 'stall', 'zero', 'priority', 'hilo'])
     || !text(value.consumer) || !count(value.consumerOrder) || !count(value.cycle) || !range(value.consumerPc, 0xffffffff)
     || !Number.isInteger(value.consumerPc)) return false;
-  return ['producer', 'register'].every((key) => value[key] === undefined || text(value[key]))
+  return ['producer', 'register', 'olderProducer', 'newerProducer'].every((key) => value[key] === undefined || text(value[key]))
     && (value.producerOrder === undefined || count(value.producerOrder))
     && (value.producerPc === undefined || (range(value.producerPc, 0xffffffff) && Number.isInteger(value.producerPc)))
     && (value.interval === undefined || count(value.interval))
     && (value.valid === undefined || typeof value.valid === 'boolean')
+    && (value.observability === undefined || member(value.observability, ['observable', 'masked', 'unknown']))
+    && ['gap', 'olderGap', 'newerGap'].every((key) => value[key] === undefined || count(value[key]))
     && (value.role === undefined || member(value.role, ['rs', 'rt']))
     && ['sourceStage', 'destinationStage'].every((key) => value[key] === undefined || member(value[key], ['D', 'E', 'M', 'W']));
+}
+
+const detailKeys = (value: unknown): value is string[] => list(value, 2048,
+  (key) => typeof key === 'string' && key.length > 0 && key.length <= 160)
+  && new Set(value as string[]).size === (value as string[]).length;
+
+function detailGroup(value: unknown): boolean {
+  if (!record(value) || !count(value.events) || !count(value.validEvents) || value.validEvents > value.events
+    || !detailKeys(value.keys) || !detailKeys(value.validKeys)
+    || value.keys.length > value.events || value.validKeys.length > value.validEvents
+    || typeof value.keysTruncated !== 'boolean' || typeof value.validKeysTruncated !== 'boolean'
+    || !record(value.observability)) return false;
+  const sensitivity = value.observability;
+  if (!count(sensitivity.observable) || !count(sensitivity.masked) || !count(sensitivity.unknown)
+    || sensitivity.observable + sensitivity.masked + sensitivity.unknown !== value.events) return false;
+  return value.keysTruncated || value.validKeys.every((key) => (value.keys as string[]).includes(key));
+}
+
+function detailedStats(value: unknown): boolean {
+  if (!record(value) || value.schemaVersion !== 1
+    || !['forward', 'zero', 'priority', 'hiLo'].every((key) => detailGroup(value[key]))) return false;
+  const causes = value.stallCauses;
+  return record(causes) && count(causes.events) && detailKeys(causes.keys)
+    && causes.keys.length <= causes.events && typeof causes.keysTruncated === 'boolean';
+}
+
+function executionContext(value: unknown): boolean {
+  return record(value) && member(value.source, ['standalone', 'case'])
+    && (value.caseId === undefined || (text(value.caseId) && value.caseId.length > 0 && value.caseId.length <= 128))
+    && list(value.externalInterrupts, 4096, (entry) => record(entry)
+      && count(entry.victimPc) && entry.victimPc <= 0xffffffff && entry.victimPc % 4 === 0
+      && count(entry.occurrence) && entry.occurrence > 0);
 }

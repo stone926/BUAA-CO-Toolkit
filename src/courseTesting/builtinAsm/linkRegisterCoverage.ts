@@ -13,17 +13,24 @@ const savedLinkAddress = 0x94;
 const replacementAddress = 0x90;
 const observationAddress = 0x98;
 type Producer = 'ori' | 'add' | 'sub' | 'lw';
-type Consumer = 'alu' | 'branch' | 'branch_rt' | 'store' | 'jr';
+type Consumer = 'alu' | 'alu_rt' | 'branch' | 'branch_rt' | 'store' | 'jr';
+
+export interface LinkRegisterCoverageOptions {
+  /** Rotate extra timing groups instead of repeating a large fixed product in every payload. */
+  readonly compactTimings?: boolean;
+  readonly timingShard?: number;
+}
 
 /** Each available matrix is atomic; short/focus-only cases retain their random payload. */
 export function emitLinkRegisterCoverage(
   writer: LinkRegisterCoverageWriter,
   state: CpuState,
   allowed: ReadonlySet<string>,
-  delaySlot: boolean
+  delaySlot: boolean,
+  options: LinkRegisterCoverageOptions = {}
 ): void {
   if (!delaySlot || !['ori', 'jal', 'nop'].every((op) => allowed.has(op))) return;
-  new LinkCoverage(writer, state, allowed).emit();
+  new LinkCoverage(writer, state, allowed, options).emit();
 }
 
 class LinkCoverage {
@@ -32,7 +39,8 @@ class LinkCoverage {
   constructor(
     private readonly writer: LinkRegisterCoverageWriter,
     private readonly state: CpuState,
-    private readonly allowed: ReadonlySet<string>
+    private readonly allowed: ReadonlySet<string>,
+    private readonly options: LinkRegisterCoverageOptions
   ) {}
 
   emit(): void {
@@ -114,36 +122,66 @@ class LinkCoverage {
       this.allowed.has(op) && (op !== 'lw' || this.allowed.has('sw')));
     const consumers: Consumer[] = [];
     if (this.allowed.has('add') || this.allowed.has('sub')) consumers.push('alu');
+    if (this.allowed.has('sub')) consumers.push('alu_rt');
     if (this.allowed.has('beq')) consumers.push('branch', 'branch_rt');
     if (this.allowed.has('sw')) consumers.push('store');
     if (this.allowed.has('jr')) consumers.push('jr');
     const cost = (producer: Producer, consumer: Consumer): number => 1 + Number(producer === 'lw') +
       (consumer === 'jr' ? 7 : consumer === 'branch' || consumer === 'branch_rt' ? 6 + Number(this.allowed.has('sw')) :
-        consumer === 'alu' ? 4 + Number(this.allowed.has('sw')) : 4);
-    if (!this.fits(producers.reduce((sum, producer) =>
-      sum + consumers.reduce((total, consumer) => total + cost(producer, consumer), 0), 0))) return;
+        consumer === 'alu' || consumer === 'alu_rt' ? 4 + Number(this.allowed.has('sw')) : 4);
+    const baseCost = producers.reduce((sum, producer) =>
+      sum + consumers.reduce((total, consumer) => total + cost(producer, consumer), 0), 0);
+    if (!this.fits(baseCost)) return;
+    const allTimings = !this.options.compactTimings && this.fits(3 * baseCost + 2 * producers.length * consumers.length);
     for (const producer of producers) {
       for (const consumer of consumers) this.emitRewrite(producer, consumer);
     }
+    for (const [shape, [olderGap, newerGap]] of ([[0, 1], [1, 0]] as const).entries()) {
+      // Short profiles use one bounded producer/timing group per seed. Divide the shard
+      // before choosing the producer so timing parity cannot lock out half the producers.
+      const shard = this.options.timingShard ?? 0;
+      if (!allTimings && shape !== shard % 2) continue;
+      const selected = allTimings ? producers : producers.length
+        ? [producers[Math.floor(shard / 2) % producers.length]] : [];
+      const groupCost = selected.reduce((sum, producer) => sum + consumers.reduce((total, consumer) =>
+        total + cost(producer, consumer) + olderGap + newerGap, 0), 0);
+      if (!this.fits(groupCost)) continue;
+      for (const producer of selected) for (const consumer of consumers) {
+        this.emitRewrite(producer, consumer, olderGap, newerGap);
+      }
+    }
   }
 
-  private emitRewrite(producer: Producer, consumer: Consumer): void {
-    const label = `_co_link_cov_rewrite_${producer}_${consumer}`;
+  private emitRewrite(producer: Producer, consumer: Consumer, olderGap = 0, newerGap = 0): void {
+    const suffix = olderGap || newerGap ? `_og${olderGap}_ng${newerGap}` : '';
+    const label = `_co_link_cov_rewrite_${producer}_${consumer}${suffix}`;
     this.writer.label(label);
     // The JR target follows JAL, its slot, poison, JR, its slot, and a second poison.
     const setupLength = 1 + Number(producer === 'lw');
-    const replacement = consumer === 'jr' ? this.writer.pc() + 4 * (setupLength + 6) : 0x44;
+    const replacement = consumer === 'jr' ? this.writer.pc() + 4 * (setupLength + 6 + olderGap + newerGap) : 0x44;
     this.ori('$22', replacement);
     if (producer === 'lw') this.store('$22', replacementAddress);
     this.writer.label(`${label}_jal`);
     this.jal(`${label}_target`);
+    if (olderGap) {
+      this.put('nop', 'nop');
+      this.poison();
+      this.writer.label(`${label}_target`);
+    }
+    this.writer.label(`${label}_writer`);
     if (producer === 'ori') this.ori('$31', replacement);
     else if (producer === 'lw') this.put('lw', `lw $31, ${replacementAddress}($0)`, '$31', replacement);
     else this.put(producer, `${producer} $31, $22, $0`, '$31', replacement);
-    this.poison();
-    this.writer.label(`${label}_target`);
+    if (!olderGap) {
+      this.poison();
+      this.writer.label(`${label}_target`);
+    }
+    if (newerGap) this.put('nop', 'nop');
     this.writer.label(`${label}_consumer`);
-    if (consumer === 'alu') {
+    if (consumer === 'alu_rt') {
+      this.put('sub', 'sub $20, $0, $31', '$20', -replacement);
+      if (this.allowed.has('sw')) this.store('$20', observationAddress);
+    } else if (consumer === 'alu') {
       const op = this.allowed.has('add') ? 'add' : 'sub';
       // Addition keeps either source-port priority error visible, including identical errors.
       this.put(op, `${op} $20, $31, ${op === 'add' ? '$31' : '$0'}`, '$20',

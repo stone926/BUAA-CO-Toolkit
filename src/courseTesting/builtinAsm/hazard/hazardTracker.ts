@@ -3,6 +3,7 @@ import { CpuState } from '../../cpuState';
 import { HazardCoverage } from '../../../hazardAnalysis/hazardCoverage';
 import { decodeHazardInstruction, HazardInstruction } from '../../../hazardAnalysis/hazardInstruction';
 import { HazardObservationValues, HazardPipelineModel } from '../../../hazardAnalysis/hazardPipeline';
+import { forwardOperandKey } from './targetKeys';
 
 interface PendingRecord {
   readonly index: number;
@@ -22,6 +23,7 @@ interface PendingRecord {
 export class HazardTracker {
   readonly coverage = new HazardCoverage();
   readonly model = new HazardPipelineModel();
+  readonly forwardOperands = new Set<string>();
   private pending: PendingRecord | undefined;
   private group: PendingRecord[] | undefined;
 
@@ -99,7 +101,12 @@ export class HazardTracker {
       return;
     }
     if (record.executed && record.decoded) {
-      this.coverage.record(this.model.observe(record.decoded, record.values));
+      const observation = this.model.observe(record.decoded, record.values);
+      this.coverage.record(observation);
+      for (const forward of observation.forwards) {
+        if (forward.valid) this.forwardOperands.add(forwardOperandKey(
+          forward.producer, forward.consumer, forward.role, forward.gap));
+      }
     }
   }
 }

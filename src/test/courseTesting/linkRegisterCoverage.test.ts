@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { automaticTestPolicy } from '../../courseTesting/automaticTestPolicy';
 import { generateBuiltinAsmTestCase } from '../../courseTesting/builtinAsmGenerator';
 import * as linkCoverage from '../../courseTesting/builtinAsm/linkRegisterCoverage';
+import { CpuState } from '../../courseTesting/cpuState';
 import { compareTraces } from '../../language/mips/traceCompare';
 import { parseCpuTraceOutput } from '../../language/mips/traceParser';
 import type { CourseProfile } from '../../mips/core/generated/isaCatalog';
@@ -160,6 +161,44 @@ describe('generated link-register coverage', () => {
     }
   });
 
+  it('executes and rejects stale reads at both writer timings and the younger-load subtraction port', () => {
+    const program = fixture();
+    const normal = executeLinkFault(program);
+    const pcs = normal.events.map((event) => event.pcBefore);
+    const kinds = [...consumers, 'alu_rt'] as const;
+    let injections = 0;
+    for (const producer of producers) for (const consumer of kinds) {
+      for (const [olderGap, newerGap] of [[0, 0], [0, 1], [1, 0]]) {
+        const suffix = olderGap || newerGap ? `_og${olderGap}_ng${newerGap}` : '';
+        const label = `${prefix}rewrite_${producer}_${consumer}${suffix}`;
+        const jal = labelPc(program.image, `${label}_jal`);
+        const writer = labelPc(program.image, `${label}_writer`);
+        const use = labelPc(program.image, `${label}_consumer`);
+        expect(pcs.indexOf(writer) - pcs.indexOf(jal), label).toBe(olderGap + 1);
+        expect(pcs.indexOf(use) - pcs.indexOf(writer), label).toBe(newerGap + 1);
+        expect(normal.events[pcs.indexOf(writer)], label).toMatchObject({ mnemonic: producer });
+        if (consumer === 'alu_rt') {
+          expect(instructionAt(program.image, use) & 0x3f, label).toBe(0x22);
+          expect((instructionAt(program.image, use) >>> 16) & 31, label).toBe(31);
+          expect(normal.events[pcs.indexOf(use)].gprWrites, label)
+            .toEqual([{ register: 20, value: (-0x44) >>> 0 }]);
+        }
+        // The preceding tests retain the original 60 execution-time faults. These 60
+        // additional faults cover both new timings and the previously absent SUB/rt use.
+        if (!olderGap && !newerGap && consumer !== 'alu_rt') continue;
+        for (const readIndex of consumer === 'alu' ? [0, 1] as const : [0] as const) {
+          const mutant = executeLinkFault(program, { kind: 'operand', pc: use, readIndex, replacement: 'older-jal' });
+          expect(mutant.hits, `${label} port ${readIndex}`).toBe(1);
+          expect(mutant.injection?.actual, label).toBe(jal + 8);
+          expect(mutant.injection?.actual, label).not.toBe(mutant.injection?.expected);
+          expect(compare(program.oracle.trace!, mutant.trace).matched, `${label} port ${readIndex}`).toBe(false);
+          injections++;
+        }
+      }
+    }
+    expect(injections).toBe(60);
+  });
+
   it.each(['P4', 'P7'] as const)('keeps %s semantics and the automatic image budget', (profile) => {
     const generated = generate(profile, `link-compatibility-${profile}`, profile === 'P7' ? basic : '');
     const program = assembleLinkProgram(generated.text, profile);
@@ -169,6 +208,33 @@ describe('generated link-register coverage', () => {
     expect(text.words).toHaveLength(generated.instructionCount + 2);
     expect(text.baseAddress + text.words.length * 4).toBeLessThanOrEqual(profile === 'P7' ? 0x4180 : 0x7000);
     expect(generated.text.includes(prefix)).toBe(profile === 'P7');
+  });
+
+  it('rotates every producer and timing independently in compact programs that really halt', () => {
+    const timings = new Set<string>();
+    for (let timingShard = 0; timingShard < 8; timingShard++) {
+      const lines = ['.text', 'main:'];
+      let emitted = 0;
+      const emit = (_mnemonic: string, text: string): void => { lines.push(text); emitted++; };
+      linkCoverage.emitLinkRegisterCoverage({
+        remaining: () => 1118 - emitted,
+        pc: () => 0x3000 + emitted * 4,
+        emit, label: (label) => lines.push(`${label}:`),
+        skippedPoison: () => emit('ori', 'ori $26, $0, 0xdead'),
+        beginDynamicGroup: () => undefined, endDynamicGroup: () => undefined
+      }, new CpuState(), new Set(basic.split(',')), true, { compactTimings: true, timingShard });
+      expect(emitted).toBeLessThanOrEqual(1118 - 128);
+      lines.push('_co_test_end:', 'beq $0, $0, _co_test_end', 'nop');
+      const program = assembleLinkProgram(lines.join('\n'), 'P7');
+      expect(program.oracle).toMatchObject({ status: 'halted', haltReason: 'course-halt-loop' });
+      const groups = program.image.symbols.map((symbol) => symbol.name)
+        .filter((name) => /^_co_link_cov_rewrite_(ori|add|sub|lw)_jr_og[01]_ng[01]$/.test(name));
+      expect(groups).toHaveLength(1);
+      timings.add(groups[0]);
+    }
+    expect([...timings].sort()).toEqual(producers.flatMap((producer) => [
+      `${prefix}rewrite_${producer}_jr_og0_ng1`, `${prefix}rewrite_${producer}_jr_og1_ng0`
+    ]).sort());
   });
 
   it.each([

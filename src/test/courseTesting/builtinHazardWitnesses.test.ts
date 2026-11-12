@@ -63,6 +63,19 @@ function staleOperand(lines: readonly string[], consumer: number, operand: numbe
 }
 
 describe('architecturally observable hazard witnesses', () => {
+  it('makes an actual ADD compete with a younger load before either ADD source port consumes it', () => {
+    const block = witnesses('P5').find(({ name }) => /_priority_1_0_/.test(name))!;
+    expect(block).toBeDefined();
+    const consumer = block.lines.map((line) => /^add /.test(line)).lastIndexOf(true);
+    expect(block.lines[consumer - 2]).toMatch(/^add /);
+    expect(block.lines[consumer - 1]).toMatch(/^lw /);
+    const normal = execute(prepare(block.lines, 'P5'));
+    for (const port of [0, 1]) {
+      const mutated = staleOperand(block.lines, consumer, port);
+      expect(mutated.trace, `ADD > LW > ADD port ${port}`).not.toEqual(normal.trace);
+    }
+  });
+
   it.each(['P5', 'P6', 'P7'] as const)('includes compact independently executable %s witnesses', (profile) => {
     const blocks = witnesses(profile);
     expect(blocks.filter(({ name }) => name.includes('_priority_'))).toHaveLength(6);
@@ -79,7 +92,7 @@ describe('architecturally observable hazard witnesses', () => {
     for (const { name, lines } of witnesses('P6').filter(({ name }) => !name.includes('_lane_'))) {
       const consumer = name.includes('_address_data_')
         ? lines.findIndex((line) => /^sw (\$\d+), 0\(\1\)$/.test(line))
-        : lines.findIndex((line) => /^(?:add|sub) /.test(line));
+        : lines.map((line) => /^(?:add|sub) /.test(line)).lastIndexOf(true);
       expect(consumer, name).toBeGreaterThan(0);
       const golden = execute(prepare(lines));
       for (const operand of [0, 1]) {

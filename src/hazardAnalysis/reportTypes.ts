@@ -1,6 +1,36 @@
 // @index hazard-report-types — 内置冲突冒险报告的可序列化稳定契约
 import type { CourseHazardClass, CourseHazardModel } from './courseHazardTheory';
 import type { PipelineStage, SourceRole } from './hazardTiming';
+import type { ExternalInterruptRequest } from '../mips/core/devices/interruptController';
+
+export type HazardObservability = 'observable' | 'masked' | 'unknown';
+
+/** Current consumer's single-operand architectural-effect sensitivity, not a program fault rate. */
+export interface HazardDetailGroup {
+  readonly events: number;
+  readonly validEvents: number;
+  readonly keys: readonly string[];
+  readonly validKeys: readonly string[];
+  readonly keysTruncated: boolean;
+  readonly validKeysTruncated: boolean;
+  readonly observability: Readonly<Record<HazardObservability, number>>;
+}
+
+/** Full-stream observations; deliberately no claimed exhaustive feasibility denominator. */
+export interface HazardDetailedStats {
+  readonly schemaVersion: 1;
+  readonly forward: HazardDetailGroup;
+  readonly zero: HazardDetailGroup;
+  readonly priority: HazardDetailGroup;
+  readonly hiLo: HazardDetailGroup;
+  readonly stallCauses: { readonly events: number; readonly keys: readonly string[]; readonly keysTruncated: boolean };
+}
+
+export interface HazardExecutionContext {
+  readonly source: 'standalone' | 'case';
+  readonly externalInterrupts: readonly ExternalInterruptRequest[];
+  readonly caseId?: string;
+}
 
 export type HazardProfile = 'P5' | 'P6' | 'P7';
 export type HazardStopReason = 'course-halt-loop' | 'program-end' | 'step-limit' | 'out-of-domain' | 'cancelled' | 'engine-error';
@@ -51,6 +81,12 @@ export interface HazardReportEvent {
   readonly destinationStage?: PipelineStage;
   readonly interval?: number;
   readonly valid?: boolean;
+  readonly observability?: HazardObservability;
+  readonly gap?: number;
+  readonly olderProducer?: string;
+  readonly newerProducer?: string;
+  readonly olderGap?: number;
+  readonly newerGap?: number;
 }
 
 /** Every numeric rate is in [0,1]; absent rate/grade is JSON null, never NaN. */
@@ -68,4 +104,7 @@ export interface HazardReport {
   readonly warnings: readonly string[];
   readonly stopReason: HazardStopReason;
   readonly stopPc: number;
+  /** Absent in historical v1 reports. */
+  readonly detailed?: HazardDetailedStats;
+  readonly execution?: HazardExecutionContext;
 }

@@ -41,11 +41,13 @@ export class HazardWorkflow implements vscode.Disposable {
           if (token.isCancellationRequested) controller.abort();
           try {
             progress.report({ message: '读取程序 / 内置汇编' });
-            const image = await prepareHazardInput(this.services, source, folder, profile, controller.signal);
-            if (!image || controller.signal.aborted) return;
+            const prepared = await prepareHazardInput(this.services, source, folder, profile, controller.signal);
+            if (!prepared || controller.signal.aborted) return;
             progress.report({ message: '分析动态指令流与转发、阻塞' });
-            const report = await analyzeHazardProgram(image, {
+            const report = await analyzeHazardProgram(prepared.image, {
               profile, signal: controller.signal, maxEvents: 500,
+              externalInterrupts: prepared.externalInterrupts,
+              executionSource: prepared.executionSource, caseId: prepared.caseId,
               yieldControl: () => new Promise((resolve) => setImmediate(resolve))
             });
             if (controller.signal.aborted || this.disposed || report.stopReason === 'cancelled') return;
