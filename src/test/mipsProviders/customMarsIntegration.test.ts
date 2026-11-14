@@ -67,11 +67,11 @@ describe.runIf(Boolean(jar && fixtures))('real custom Mars provider, case eviden
     return { source, services, asmCase, dump: dump! };
   }
   const programs = [
-    ['P3', 'P3_L10_addm_2023/files/addm.class', 'addm $3,$1,$2', '00000003'],
-    ['P4', 'P4_L10_pcadd_2023/files/pcadd.class', 'pcadd $3,$1', '00003009'],
-    ['P5', 'P5_L4_addei_2022/files/addei.class', 'addei $3,$1,2', 'ffff0003'],
-    ['P6', 'P5_L4_addei_2022/files/addei.class', 'addei $3,$1,2', 'ffff0003'],
-    ['P7', 'P5_L4_addei_2022/files/addei.class', 'addei $3,$1,2', 'ffff0003']
+    ['P3', 'P3_L10_addm_2023/addm.class', 'addm $3,$1,$2', '00000003'],
+    ['P4', 'P4_L10_pcadd_2023/pcadd.class', 'pcadd $3,$1', '00003009'],
+    ['P5', 'P5_L4_addei_2022/addei.class', 'addei $3,$1,2', 'ffff0003'],
+    ['P6', 'P5_L4_addei_2022/addei.class', 'addei $3,$1,2', 'ffff0003'],
+    ['P7', 'P5_L4_addei_2022/addei.class', 'addei $3,$1,2', 'ffff0003']
   ] as const;
   it.each(programs)('%s binds the external assembler and oracle and records complete text evidence', async (profile, fixture, instruction, value) => {
     const { services, asmCase, dump } = await create(profile, fixture, instruction);
@@ -210,9 +210,9 @@ public class coori implements InstructionLoad {
     expect(live.checked.passed).toBe(true);
   }, 60000);
   it.runIf(Boolean(process.env.CO_CUSTOM_CPU_ROOT)).each([
-    ['p5_blztal_1047', 'P5_L3_blztal_2022/files/blztal.class',
+    ['p5_blztal_1047', 'P5_L3_blztal_2022/blztal.class',
       '.text\nori $2,$0,1\nsub $1,$0,$2\nblztal $1,$2,1\nori $3,$0,0x33\nori $4,$0,0xdead\nsw $31,0($0)\nori $1,$0,1\nblztal $1,$2,1\nori $5,$0,0x55\nori $6,$0,0x66\nsw $6,4($0)\nhalt: beq $0,$0,halt\nnop\n'],
-    ['p5_bonall_1046', 'P5_L2_bonall_2022/files/bonall.class',
+    ['p5_bonall_1046', 'P5_L2_bonall_2022/bonall.class',
       '.text\nori $1,$0,1\nsub $2,$0,$1\nbonall $1,$2,target\nori $3,$0,0x33\nori $4,$0,0xdead\ntarget: sw $31,0($0)\nbonall $1,$1,fail\nori $5,$0,0xbeef\nori $6,$0,0x66\nbeq $0,$0,done\nnop\nfail: ori $7,$0,0xbad\ndone: sw $6,4($0)\nhalt: beq $0,$0,halt\nnop\n']
   ])('compares loaded Mars instruction against real CPU %s and detects a Verilog mutation', async (cpuName, fixture, sourceText) => {
     const { services, asmCase, dump } = await create('P5', fixture, '', '', sourceText);

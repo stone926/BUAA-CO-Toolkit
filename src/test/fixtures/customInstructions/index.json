@@ -3,205 +3,228 @@
     "exercise": "P3_L10_addm_2023",
     "mnemonic": "addm",
     "profile": "P3",
-    "class": "P3_L10_addm_2023/files/addm.class",
-    "markdownSha256": "05765a7fef2c4b89836f4c0fb9c91cfa941fcadf8357d37a800a7ddf9e8d1997",
+    "class": "P3_L10_addm_2023/addm.class",
+    "markdownSha256": "f4f2ac9c41deedfa8aa75162925eaec20d71f538ed1da96f2061d44a6395640c",
     "classSha256": "38be024e1af18a7ec00bfbae729db6fafe89c5b55982e0adf9cb146c42a5e5a1",
-    "vectorCount": 5
+    "vectorCount": 5,
+    "originalMarkdownSha256": "05765a7fef2c4b89836f4c0fb9c91cfa941fcadf8357d37a800a7ddf9e8d1997"
   },
   {
     "exercise": "P3_L12_lsh_2023",
     "mnemonic": "lsh",
     "profile": "P3",
-    "class": "P3_L12_lsh_2023/files/lsh.class",
-    "markdownSha256": "0e0888f264dd1606c14bafd395cfd770bf9621b3c428bdfbd707130965f28157",
+    "class": "P3_L12_lsh_2023/lsh.class",
+    "markdownSha256": "4cf6fbaa54714e4d2bc12630f27a16a58d3145ea1fa08cb67fc10a237e00df73",
     "classSha256": "b1ee8ff2dd5bfc72fd90565928a6a760ef8f891b7b4af4926fdbd82d743e5382",
-    "vectorCount": 4
+    "vectorCount": 4,
+    "originalMarkdownSha256": "0e0888f264dd1606c14bafd395cfd770bf9621b3c428bdfbd707130965f28157"
   },
   {
     "exercise": "P3_L15_bomez_2023",
     "mnemonic": "bomez",
     "profile": "P3",
-    "class": "P3_L15_bomez_2023/files/bomez.class",
-    "markdownSha256": "e159abdc16da6a967934b936742953f3e0f2f65a0d5b87a6b71b096a65649498",
+    "class": "P3_L15_bomez_2023/bomez.class",
+    "markdownSha256": "c248a98725dc9f454ee8b873919b838821efcdbfa41b437ad98e344e3d448a23",
     "classSha256": "4cc38f179c862cccdf6010974da731af7a31a1a6a18408d3f9c15213ed02b8d1",
-    "vectorCount": 6
+    "vectorCount": 6,
+    "originalMarkdownSha256": "e159abdc16da6a967934b936742953f3e0f2f65a0d5b87a6b71b096a65649498"
   },
   {
     "exercise": "P4_L2_BOMEZ_2022",
     "mnemonic": "bomez",
     "profile": "P4",
-    "class": "P4_L2_BOMEZ_2022/files/bomez.class",
-    "markdownSha256": "9c5b4859c250356a80027c7b51bf5b022f77cd8c91f0b3f1e826ef8832d5be3d",
+    "class": "P4_L2_BOMEZ_2022/bomez.class",
+    "markdownSha256": "57adcf24ee5d5de1661ae2caf54769ff179a6c2de7b16cad52621ba7d8d46b00",
     "classSha256": "4cc38f179c862cccdf6010974da731af7a31a1a6a18408d3f9c15213ed02b8d1",
-    "vectorCount": 6
+    "vectorCount": 6,
+    "originalMarkdownSha256": "9c5b4859c250356a80027c7b51bf5b022f77cd8c91f0b3f1e826ef8832d5be3d"
   },
   {
     "exercise": "P3_L16_lboez_2023",
     "mnemonic": "lboez",
     "profile": "P3",
-    "class": "P3_L16_lboez_2023/files/lboez.class",
-    "markdownSha256": "b1c069dc6237b5d2d85a4b96ecb2dbebb6bfa0c44f26f4aed1ad686872eecbae",
+    "class": "P3_L16_lboez_2023/lboez.class",
+    "markdownSha256": "4b3176971c0eace394661e0424eb8db7ad4bffe171c422e69917f0088d3c24a7",
     "classSha256": "d313862afc0f715fcf0ef2a7c7a5613de7d3e68be5a755c9a8e2e79cfba33e98",
-    "vectorCount": 4
+    "vectorCount": 4,
+    "originalMarkdownSha256": "b1c069dc6237b5d2d85a4b96ecb2dbebb6bfa0c44f26f4aed1ad686872eecbae"
   },
   {
     "exercise": "P4_L6_LBOEZ_2022",
     "mnemonic": "lboez",
     "profile": "P4",
-    "class": "P4_L6_LBOEZ_2022/files/lboez.class",
-    "markdownSha256": "a4664f41ad2c325d06e23c70f132680907600ac260767750190be5d3eb0ff1ff",
+    "class": "P4_L6_LBOEZ_2022/lboez.class",
+    "markdownSha256": "813c3406a03e198e307a6c21573ed4db23377362e9aeaff1ee5cb49788bd0129",
     "classSha256": "d313862afc0f715fcf0ef2a7c7a5613de7d3e68be5a755c9a8e2e79cfba33e98",
-    "vectorCount": 4
+    "vectorCount": 4,
+    "originalMarkdownSha256": "a4664f41ad2c325d06e23c70f132680907600ac260767750190be5d3eb0ff1ff"
   },
   {
     "exercise": "P4_L10_pcadd_2023",
     "mnemonic": "pcadd",
     "profile": "P4",
-    "class": "P4_L10_pcadd_2023/files/pcadd.class",
-    "markdownSha256": "9bb16ccea54fda48c6f08f36e3200231500bb49317c27cc4549106accc73a1ab",
+    "class": "P4_L10_pcadd_2023/pcadd.class",
+    "markdownSha256": "87176862dd2377ae9506426ac1452418fbb13c1ed006dea62e8aadcab50ea563",
     "classSha256": "6ef030d5e2d64a0653a6105cdce419bc956387e161da6313b8e612c21bb54864",
-    "vectorCount": 5
+    "vectorCount": 5,
+    "originalMarkdownSha256": "9bb16ccea54fda48c6f08f36e3200231500bb49317c27cc4549106accc73a1ab"
   },
   {
     "exercise": "P4_L4_PCADD_2022",
     "mnemonic": "pcadd",
     "profile": "P4",
-    "class": "P4_L4_PCADD_2022/files/pcadd.class",
-    "markdownSha256": "dafa46c3e2107fcda0666a322d468fae57ef61e57cf24a2b47257d0f7c66e171",
+    "class": "P4_L4_PCADD_2022/pcadd.class",
+    "markdownSha256": "269147adde703f784487bb924f895ce31afbbdae06b6cc30a7a71757ebe5bca9",
     "classSha256": "6ef030d5e2d64a0653a6105cdce419bc956387e161da6313b8e612c21bb54864",
-    "vectorCount": 5
+    "vectorCount": 5,
+    "originalMarkdownSha256": "dafa46c3e2107fcda0666a322d468fae57ef61e57cf24a2b47257d0f7c66e171"
   },
   {
     "exercise": "P4_L1_RLB_2022",
     "mnemonic": "rlb",
     "profile": "P4",
-    "class": "P4_L1_RLB_2022/files/rlb.class",
-    "markdownSha256": "56e0bebb94188b55b23515396c3fc012157a15a6d41ff41540965ba87bb902f3",
+    "class": "P4_L1_RLB_2022/rlb.class",
+    "markdownSha256": "aaac28c4c26d0e5a4d3dfbd06e589bf591bf6a2602486b703be44859747eacdf",
     "classSha256": "4aa09cd0d4d8dfd2582810f483ff5197b9d46ae8de05a66b506f0fc2f49c8884",
-    "vectorCount": 4
+    "vectorCount": 4,
+    "originalMarkdownSha256": "56e0bebb94188b55b23515396c3fc012157a15a6d41ff41540965ba87bb902f3"
   },
   {
     "exercise": "P4_L3_LWRR_2022",
     "mnemonic": "lwrr",
     "profile": "P4",
-    "class": "P4_L3_LWRR_2022/files/lwrr.class",
-    "markdownSha256": "5d21076796fd8a86a367feb1ae163bab643f8357cc19acd26491f526944cf8ec",
+    "class": "P4_L3_LWRR_2022/lwrr.class",
+    "markdownSha256": "23fa89b9eac333ec143f17bf83755f61069170a435445d08fbebdf118f6849e7",
     "classSha256": "b1032d566fca17b8c0d5dd0e635ade83b60de895fbb630ea1b0976b016a86b3e",
-    "vectorCount": 4
+    "vectorCount": 4,
+    "originalMarkdownSha256": "5d21076796fd8a86a367feb1ae163bab643f8357cc19acd26491f526944cf8ec"
   },
   {
     "exercise": "P4_L4_SSZE_2022",
     "mnemonic": "ssze",
     "profile": "P4",
-    "class": "P4_L4_SSZE_2022/files/ssze.class",
-    "markdownSha256": "98d9c9e7702125d27584eedb3d21491121712b8de0b4888ab7a10a38ad73d59b",
+    "class": "P4_L4_SSZE_2022/ssze.class",
+    "markdownSha256": "7eb0ea608d91b3a2685506d87edc77f034e11e184e2c4b77130836b668ae8b0b",
     "classSha256": "b4c8573bb5dd8b48c9225a7fe67209b0e26f3ebc312bbb823da358be4d3225f4",
-    "vectorCount": 5
+    "vectorCount": 5,
+    "originalMarkdownSha256": "98d9c9e7702125d27584eedb3d21491121712b8de0b4888ab7a10a38ad73d59b"
   },
   {
     "exercise": "P4_L5_BNEZALC_2022",
     "mnemonic": "bnezalc",
     "profile": "P4",
-    "class": "P4_L5_BNEZALC_2022/files/bnezalc.class",
-    "markdownSha256": "7685bfbc1b43fc6c432f3b1dd75e16e61a3913f5a8d29c5ebd1d7fae434e413c",
+    "class": "P4_L5_BNEZALC_2022/bnezalc.class",
+    "markdownSha256": "14ca097edccfeb73312de40b4398088322ee07cd1ed3c8d6b42310e20b749a8b",
     "classSha256": "c353aa790aca433311e6c3cd446827d3e94b022516c4c25560253e6bde7caa16",
-    "vectorCount": 3
+    "vectorCount": 3,
+    "originalMarkdownSha256": "7685bfbc1b43fc6c432f3b1dd75e16e61a3913f5a8d29c5ebd1d7fae434e413c"
   },
   {
     "exercise": "P4_L5_sbsam_2023",
     "mnemonic": "sbsam",
     "profile": "P4",
-    "class": "P4_L5_sbsam_2023/files/sbsam.class",
-    "markdownSha256": "4770184148cd71a82395613158b2822a7d02db384e52206db4cf273eb342dea4",
+    "class": "P4_L5_sbsam_2023/sbsam.class",
+    "markdownSha256": "6308aba028c4b976eab774acb495a2abefea4340df3297d8ac5b5e27f4efba7b",
     "classSha256": "bfeba83379ec9c95df27f9d7ea39fa2914089e331604712427dff5b435bea733",
-    "vectorCount": 7
+    "vectorCount": 7,
+    "originalMarkdownSha256": "4770184148cd71a82395613158b2822a7d02db384e52206db4cf273eb342dea4"
   },
   {
     "exercise": "P4_L7_TFTC_2022",
     "mnemonic": "tftc",
     "profile": "P4",
-    "class": "P4_L7_TFTC_2022/files/tftc.class",
-    "markdownSha256": "339610009eab6f82256f985338898a7e68215b85bdc36fdae84166eb58ec692a",
+    "class": "P4_L7_TFTC_2022/tftc.class",
+    "markdownSha256": "fc1d869b2fd5e4571aefedb537c28d96e821d5d4a67e07e62c8fd2c0d52736ab",
     "classSha256": "14e252c7384a1f201334f1948976ce03341e5f19ff6becf1847730419e31ac7b",
-    "vectorCount": 5
+    "vectorCount": 5,
+    "originalMarkdownSha256": "339610009eab6f82256f985338898a7e68215b85bdc36fdae84166eb58ec692a"
   },
   {
     "exercise": "P4_L8_SB_2022",
     "mnemonic": "sb",
     "profile": "P4",
     "class": null,
-    "markdownSha256": "b189f548e1f16c4fd5836f9ba04524abf11cc186a65ce3731f718649efd88284",
-    "vectorCount": 5
+    "markdownSha256": "9d17208c21e78d7e209eab294a5cf924e40a9562412ff182fd46f8bca00c2c92",
+    "vectorCount": 5,
+    "originalMarkdownSha256": "b189f548e1f16c4fd5836f9ba04524abf11cc186a65ce3731f718649efd88284"
   },
   {
     "exercise": "P4_L9_BAO_2022",
     "mnemonic": "bao",
     "profile": "P4",
-    "class": "P4_L9_BAO_2022/files/bao.class",
-    "markdownSha256": "665c0a9d2c0f7b589abeaab85b8e9de8888389587259be2efceb080b10fa7321",
+    "class": "P4_L9_BAO_2022/bao.class",
+    "markdownSha256": "36ed60bf80a1c15aba06df77f12e13fafacb5ea0afdc35d8e459ef5ac33d9c9f",
     "classSha256": "d9798c14d9c4c0071dcb64520ea0f73e48e5ca50ee5db35d7a9e9d6bfdcf8f48",
-    "vectorCount": 6
+    "vectorCount": 6,
+    "originalMarkdownSha256": "665c0a9d2c0f7b589abeaab85b8e9de8888389587259be2efceb080b10fa7321"
   },
   {
     "exercise": "P4_L9_ras_2023",
     "mnemonic": "ras",
     "profile": "P4",
-    "class": "P4_L9_ras_2023/files/ras.class",
-    "markdownSha256": "785a26964ed700601cede977170b18d90db0edc58bc054cffc7f9fee9134ac33",
+    "class": "P4_L9_ras_2023/ras.class",
+    "markdownSha256": "5ef3df8b44dceac62e890401e44c9ffe6c56c1e9d06ad23b2190836219598e34",
     "classSha256": "aa48521d43e9c51b6679ef3e96cea2a40286625ad16c456038f6d143dd4434e5",
-    "vectorCount": 7
+    "vectorCount": 7,
+    "originalMarkdownSha256": "785a26964ed700601cede977170b18d90db0edc58bc054cffc7f9fee9134ac33"
   },
   {
     "exercise": "P5_L2_bonall_2022",
     "mnemonic": "bonall",
     "profile": "P5",
-    "class": "P5_L2_bonall_2022/files/bonall.class",
-    "markdownSha256": "5c64d21571cfcf9a020481d60eaaccd6c1e29a96e0145089dc4af1b3c7efa9cd",
+    "class": "P5_L2_bonall_2022/bonall.class",
+    "markdownSha256": "fbaf57b2c7cdceb35b8de19bc79f7e678180f036d046bc512e3a03d092c077b0",
     "classSha256": "7eb7c41169ff115d3c42aa48b2442b381eddb498dcce2ddda399bee5f2005d02",
-    "vectorCount": 6
+    "vectorCount": 6,
+    "originalMarkdownSha256": "5c64d21571cfcf9a020481d60eaaccd6c1e29a96e0145089dc4af1b3c7efa9cd"
   },
   {
     "exercise": "P5_L3_blztal_2022",
     "mnemonic": "blztal",
     "profile": "P5",
-    "class": "P5_L3_blztal_2022/files/blztal.class",
-    "markdownSha256": "992da196453eaa9cbd8441d34c08e276937f71fbc1892174e5cf789244b8199e",
+    "class": "P5_L3_blztal_2022/blztal.class",
+    "markdownSha256": "b85feef1b944a575c688f3a6888c295dd7bd6e24a81cf00c5b63562e9b564137",
     "classSha256": "2cb5e84fa4f874eaf0679ffd0e34612b9dad4e02c859dd046e1714e0402d70dc",
-    "vectorCount": 5
+    "vectorCount": 5,
+    "originalMarkdownSha256": "992da196453eaa9cbd8441d34c08e276937f71fbc1892174e5cf789244b8199e"
   },
   {
     "exercise": "P5_L4_addei_2022",
     "mnemonic": "addei",
     "profile": "P5",
-    "class": "P5_L4_addei_2022/files/addei.class",
-    "markdownSha256": "9c1782c39aaacd1449e311526f116b2b886d95ca2d92eb43703e18c333bf2065",
+    "class": "P5_L4_addei_2022/addei.class",
+    "markdownSha256": "8449cf766721a9fe7a1f5a337951cea8b97580f0b9b86ecd01108a8aa0cab0b1",
     "classSha256": "e0c7db93ca1d69deb826cd9d937c274ab4a0f70c2b3004d60afc8ae14d77cb07",
-    "vectorCount": 4
+    "vectorCount": 4,
+    "originalMarkdownSha256": "9c1782c39aaacd1449e311526f116b2b886d95ca2d92eb43703e18c333bf2065"
   },
   {
     "exercise": "P5_L5_lhogez_2022",
     "mnemonic": "lhogez",
     "profile": "P5",
-    "class": "P5_L5_lhogez_2022/files/lhogez.class",
-    "markdownSha256": "6a41bf6807123395d463ff06732f67e93bd47b95c34a9cddbc82e0e6f44f20b3",
+    "class": "P5_L5_lhogez_2022/lhogez.class",
+    "markdownSha256": "c244df16340833249d402d6315fb9d8b4495772fe3de1bca888a31582164e5b5",
     "classSha256": "a304258d3534960f08fe51032c35625eb569de576ca8d35f8ee0121b057f2860",
-    "vectorCount": 6
+    "vectorCount": 6,
+    "originalMarkdownSha256": "6a41bf6807123395d463ff06732f67e93bd47b95c34a9cddbc82e0e6f44f20b3"
   },
   {
     "exercise": "P5_L6_lbget_2022",
     "mnemonic": "lbget",
     "profile": "P5",
-    "class": "P5_L6_lbget_2022/files/lbget.class",
-    "markdownSha256": "769434f20f8038c0ab4a412efaffa489ffd736ae64fa6168437ff503885584f2",
+    "class": "P5_L6_lbget_2022/lbget.class",
+    "markdownSha256": "53a3b907c5e73b790840e4e97a867f795f98cff90e6d29de53f71dc5dc153186",
     "classSha256": "b91ec34623636e9e85ae1c55e4e06fa046b3a7c70d684bee47ee18238d7fbbf5",
-    "vectorCount": 4
+    "vectorCount": 4,
+    "originalMarkdownSha256": "769434f20f8038c0ab4a412efaffa489ffd736ae64fa6168437ff503885584f2"
   },
   {
     "exercise": "P5_M_lwer_2022",
     "mnemonic": "lwer",
     "profile": "P5",
     "class": null,
-    "markdownSha256": "4b324079c13a71bcc354158dca35ef679fb062f8c3041264176d68ebaaa0d8ee",
-    "vectorCount": 6
+    "markdownSha256": "2334ff1138049ba0f84b90bc1b5e13feb2f344d8dc214bc2e45ee5e93a79c313",
+    "vectorCount": 6,
+    "originalMarkdownSha256": "4b324079c13a71bcc354158dca35ef679fb062f8c3041264176d68ebaaa0d8ee"
   }
 ]

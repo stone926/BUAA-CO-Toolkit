@@ -8,7 +8,9 @@ the resulting instruction has no runtime imports, Java, Node package, or compile
 dependency. The creation command installs the `@buaa-co/instructions` editor declarations
 for copied files; the same public SDK is used by these fixtures.
 
-`index.json` records source Markdown and original class SHA-256 identities.
+`index.json` records the flattened source paths and current Markdown/class SHA-256 identities.
+`originalMarkdownSha256` preserves the pre-flattening Markdown identity. The published
+exercise repository is https://github.com/stone926/BUAA-CO-Add-Instruction-Exams.
 Repeated names and incompatible encodings remain separate packages. In particular,
 `addei` and `lhogez` share opcode 110011, while `bonall` and `lwer` share opcode
 011001. They must not be loaded together. Each package declares all course modes

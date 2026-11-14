@@ -71,7 +71,10 @@ describe('all 23 independent course instruction exercise translations',()=>{
   it.each(exercises)('$exercise assembles and executes all boundary vectors through a frozen TS worker',async exercise=>{
     const root=path.join(directory,exercise.exercise);
     await fs.mkdir(path.join(root,'.co/custom-instructions'),{recursive:true});
-    await fs.copyFile(path.join(fixtureRoot,exercise.exercise,'instruction.ts'),path.join(root,'.co/custom-instructions/instruction.ts'));
+    const scriptSource=originals
+      ? path.join(originals,exercise.exercise,`${exercise.mnemonic}.ts`)
+      : path.join(fixtureRoot,exercise.exercise,'instruction.ts');
+    await fs.copyFile(scriptSource,path.join(root,'.co/custom-instructions/instruction.ts'));
     const vectors=JSON.parse(await fs.readFile(path.join(fixtureRoot,exercise.exercise,'vectors.json'),'utf8')) as Vector[];
     const runtime=new MipsRuntimeManager({scriptWorkerPath:workerPath});
     try {
