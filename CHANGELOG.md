@@ -4,6 +4,8 @@ All notable changes to BUAA CO Toolkit are documented in this file.
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-11-14
+
 - 新增 JS/TS 自定义指令：一份定义可用于内置汇编、执行、机器码导出及 CPU 随机对拍，提供创建命令、类型提示、生成配方和冒险时序元数据，无需额外安装 Java、Node 或 tsc。
 - 恢复魔改 MARS 自定义指令支持：运行、导出或用户 ASM 测试遇到未知指令时，可使用 `co.toolchain.mars` 和工作区 `.co/custom-instructions` 中的指令类；随包提供 Java 适配桥，并保留控制台输入、终端交互、文件读写和取消能力。
 - 新增用户汇编文件或目录批量测试，复用 P3–P7 对拍、失败报告与测试历史；每个用例绑定相同的脚本或 Jar/class 快照，重跑时核实参考依赖，保留 P7 原有 Timer、MMIO、异常和中断黑盒检查。
