@@ -155,6 +155,7 @@ export async function runCourseTraceCase(
     source: asmCaseSourceFromBatchSource(options.source ?? { kind: 'selected', asmFiles: [asm.fsPath] }),
     stdin: item.stdin,
     resource,
+    engineResource,
     sourceRoot: options.sourceRoot,
     metadata: { 'test.cpuResource': resource.fsPath, 'test.engineResource': engineResource.fsPath },
     enginePlan,

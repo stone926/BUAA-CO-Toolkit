@@ -72,6 +72,11 @@ import { HazardTargetPlanner } from './hazard/hazardTargets';
 import { hazardClassOf, SourceRole } from '../../hazardAnalysis/hazardTiming';
 import { HazardTracker } from './hazard/hazardTracker';
 import { OperandSteer, SteeredEmission } from './hazard/operandSteer';
+import type { CustomInstructionRegistry } from '../../mips/core/custom/registry';
+import { applyCustomEffect, previewCustomInstruction } from './customInstructions';
+import type { HazardInstruction } from '../../hazardAnalysis/hazardInstruction';
+import type { HazardObservationValues } from '../../hazardAnalysis/hazardPipeline';
+import { assertCustomGeneratorNativeDependencies, generatedSourceMnemonics } from './customGeneratorCompatibility';
 
 // Historical API only. New built-in sources use raw `.word` RI cells.
 export { p7InternalUnknownInstructionMnemonic } from '../p7RiInstruction';
@@ -79,6 +84,8 @@ export { p7InternalUnknownInstructionMnemonic } from '../p7RiInstruction';
 export type P7ExceptionKind = 'adel' | 'ades' | 'syscall' | 'ri' | 'ov';
 
 export interface BuiltinAsmGeneratorOptions extends P7ProbeOptions {
+  /** Worker-local executable registry; never serialized into an extension-host request. */
+  customRegistry?: CustomInstructionRegistry;
   profile: ProjectProfile;
   instructionText: string;
   /** Randomized main-program payload count; the required two-instruction halt tail is additional. */
@@ -188,12 +195,12 @@ export function effectiveBuiltinGeneratorProfile(profile: ProjectProfile): CpuPr
   return cpuProfiles.has(profile) ? profile as CpuProfile : 'P5';
 }
 
-export function resolveBuiltinInstructionSet(profile: ProjectProfile, instructionText: string): BuiltinInstructionSet {
+export function resolveBuiltinInstructionSet(profile: ProjectProfile, instructionText: string, registry?: CustomInstructionRegistry): BuiltinInstructionSet {
   const effectiveProfile = effectiveBuiltinGeneratorProfile(profile);
   const configured = instructionText.trim().length > 0;
   const rawTokens = configured
     ? instructionText.split(/[,\s]+/).map((token) => token.trim()).filter(Boolean)
-    : defaultInstructionSets[effectiveProfile];
+    : [...defaultInstructionSets[effectiveProfile], ...(registry?.metadata(effectiveProfile).filter((entry) => entry.generation).map((entry) => entry.mnemonic) ?? [])];
 
   const seen = new Set<string>();
   const mnemonics: string[] = [];
@@ -208,6 +215,13 @@ export function resolveBuiltinInstructionSet(profile: ProjectProfile, instructio
       continue;
     }
     seen.add(mnemonic);
+
+    const custom = registry?.get(mnemonic, effectiveProfile);
+    if (custom) {
+      if (!custom.generation) unsupported.push(raw);
+      else mnemonics.push(mnemonic);
+      continue;
+    }
 
     const instruction = instructions[mnemonic] as MipsInstruction | undefined;
     if (!instruction) {
@@ -262,7 +276,7 @@ export function generateBuiltinAsmTestCase(options: BuiltinAsmGeneratorOptions):
     throw new BuiltinAsmGeneratorError('Built-in ASM generator instruction count must be a positive integer.');
   }
 
-  const instructionSet = resolveBuiltinInstructionSet(options.profile, options.instructionText);
+  const instructionSet = resolveBuiltinInstructionSet(options.profile, options.instructionText, options.customRegistry);
   const interrupt = instructionSet.profile === 'P7' && options.interrupt === true;
   const exceptionRate = instructionSet.profile === 'P7' ? clamp01(options.exceptionRate ?? 0) : 0;
   const exceptionTypes = instructionSet.profile === 'P7' ? normalizeP7ExceptionTypes(options.exceptionTypes) : [];
@@ -276,7 +290,7 @@ export function generateBuiltinAsmTestCase(options: BuiltinAsmGeneratorOptions):
     count,
     seed,
     options.generatedAt ?? new Date(),
-    { interrupt, exceptionRate, exceptionTypes }
+    { interrupt, exceptionRate, exceptionTypes }, options.customRegistry
   );
   return generator.generate();
 }
@@ -338,6 +352,7 @@ class ProgramGenerator {
   private readonly state = new CpuState();
   private readonly lines: string[] = [];
   private readonly used = new Set<string>();
+  private readonly nativeDependencies = new Set<string>(['beq', 'nop']);
   /** Indices (0-based instruction positions) that are safe external-interrupt targets. */
   private readonly interruptCandidates: number[] = [];
   /** Indices of generated instructions that are expected to raise an internal exception. */
@@ -371,7 +386,8 @@ class ProgramGenerator {
     targetCount: number,
     seed: string,
     generatedAt: Date,
-    options: { interrupt: boolean; exceptionRate: number; exceptionTypes?: readonly P7ExceptionKind[] } = { interrupt: false, exceptionRate: 0 }
+    options: { interrupt: boolean; exceptionRate: number; exceptionTypes?: readonly P7ExceptionKind[] } = { interrupt: false, exceptionRate: 0 },
+    private readonly customRegistry?: CustomInstructionRegistry
   ) {
     this.profile = profile;
     this.allowed = new Set(mnemonics);
@@ -445,6 +461,7 @@ class ProgramGenerator {
     }, this.state, this.allowed, this.usesDelaySlot(), {
       compactTimings: this.profile !== 'P5', timingShard: hashSeed(this.seed)
     });
+    this.emitCustomDependencies();
 
     const coverageQueue = this.shuffle(Array.from(this.allowed));
     let guard = this.targetCount * 30 + 200;
@@ -499,6 +516,8 @@ class ProgramGenerator {
 
     const interruptSchedule = this.interruptEnabled ? this.chooseInterruptSchedule() : [];
     const hazardCoverage = this.hazards?.coverage.summary();
+    for (const mnemonic of generatedSourceMnemonics(this.renderP7ExceptionHandler().join('\n'))) this.nativeDependencies.add(mnemonic);
+    assertCustomGeneratorNativeDependencies(this.customRegistry, this.profile, this.nativeDependencies);
 
     return {
       text: this.render(hazardCoverage),
@@ -528,6 +547,7 @@ class ProgramGenerator {
         ` class_targets=${hazardCoverage.classTargets} valid_forwards=${hazardCoverage.validForwardEvents}/${hazardCoverage.forwardEvents}`,
         '# hazard_coverage_scope: course AT reference pipeline (full forwarding, D-stage stalls)'
       ] : []),
+      ...(this.customRegistry ? ['# script_hazard_scope: declared AT timing and actual effects only; unknown timing flushes coverage observation'] : []),
       '.data',
       '.align 2',
       '_co_data:',
@@ -986,14 +1006,12 @@ class ProgramGenerator {
       return undefined;
     }
 
-    const weighted: string[] = [];
+    let ticket = this.rng.int(0, candidates.reduce((sum, mnemonic) => sum + this.weightFor(mnemonic), 0) - 1);
     for (const mnemonic of candidates) {
-      const weight = this.weightFor(mnemonic);
-      for (let i = 0; i < weight; i++) {
-        weighted.push(mnemonic);
-      }
+      ticket -= this.weightFor(mnemonic);
+      if (ticket < 0) return mnemonic;
     }
-    return this.rng.pick(weighted);
+    return candidates[candidates.length - 1];
   }
 
   private pickAnyMnemonic(remainingBudget: number): string | undefined {
@@ -1002,6 +1020,8 @@ class ProgramGenerator {
   }
 
   private weightFor(mnemonic: string): number {
+    const custom = this.customRegistry?.get(mnemonic, this.profile);
+    if (custom) return custom.generation?.weight ?? 3;
     if (this.profile === 'P5' || this.profile === 'P6' || this.profile === 'P7') {
       if (loadMnemonics.has(mnemonic) || storeMnemonics.has(mnemonic)) {
         return 5;
@@ -1026,6 +1046,11 @@ class ProgramGenerator {
     if (remaining <= 0) {
       return false;
     }
+    const custom = this.customRegistry?.get(mnemonic, this.profile);
+    if (custom) {
+      const setup = Math.max(0, ...(custom.generation?.cases ?? []).map((entry) => Object.keys(entry.registerValues).length * 2));
+      return !!custom.generation && remaining >= setup + (custom.controlFlow ? (this.usesDelaySlot() ? 3 : 2) : 1);
+    }
     if (controlMnemonics.has(mnemonic)) {
       return this.canEmitControl(mnemonic as ControlMnemonic, remaining);
     }
@@ -1033,6 +1058,8 @@ class ProgramGenerator {
   }
 
   private canEmitSingle(mnemonic: string): boolean {
+    const custom = this.customRegistry?.get(mnemonic, this.profile);
+    if (custom) return !!custom.generation && !custom.controlFlow && !custom.generation.cases?.length;
     if (this.state.mduProtectedSlots > 0 && (hiLoWriteMnemonics.has(mnemonic) || mnemonic === 'mul')) {
       return false;
     }
@@ -1089,10 +1116,14 @@ class ProgramGenerator {
 
   private hasDelaySlotCandidate(): boolean {
     return Array.from(this.allowed).some((mnemonic) =>
-      !controlMnemonics.has(mnemonic) && mnemonic !== 'syscall' && !trapMnemonics.has(mnemonic) && this.canEmitSingle(mnemonic));
+      !this.customRegistry?.get(mnemonic, this.profile) && !controlMnemonics.has(mnemonic) && mnemonic !== 'syscall' && !trapMnemonics.has(mnemonic) && this.canEmitSingle(mnemonic));
   }
 
   private emitMnemonic(mnemonic: string): void {
+    if (this.customRegistry?.get(mnemonic, this.profile)) {
+      if (!this.emitCustom(mnemonic)) this.emitNop();
+      return;
+    }
     if (controlMnemonics.has(mnemonic)) {
       this.emitControl(mnemonic as ControlMnemonic);
       return;
@@ -1100,7 +1131,79 @@ class ProgramGenerator {
     this.emitSingle(mnemonic);
   }
 
+  private emitCustom(mnemonic: string, steer?: OperandSteer): SteeredEmission | undefined {
+    const definition = this.customRegistry?.get(mnemonic, this.profile);
+    if (!definition || !this.canEmit(mnemonic, this.randomBodyRemaining())) return undefined;
+    const fixedFields: Record<string, number> = {};
+    if (!steer && definition.generation?.cases?.length) {
+      const selected = this.rng.pick([...definition.generation.cases]);
+      let index = 23;
+      for (const [field, value] of Object.entries(selected.registerValues)) {
+        const register = `$${index}`;
+        fixedFields[field] = index--;
+        if ((value >>> 16) !== 0) {
+          this.emitModeledLui(register, value >>> 16);
+          this.emitModeledOri(register, register, value & 0xffff);
+        } else this.emitModeledOri(register, '$0', value & 0xffff);
+      }
+    }
+    const label = `_co_custom_merge_${this.labelIndex++}`;
+    const candidate = previewCustomInstruction(definition, this.state, this.rng, this.currentPc(), this.usesDelaySlot(), label, steer, fixedFields);
+    if (!candidate) return undefined;
+    this.hazards?.settle();
+    const assessments = new Map<string, ReturnType<typeof candidate.assess>>();
+    const key = (alternative: Parameters<typeof candidate.assess>[0]): string => `${alternative.role ?? alternative.half}:${alternative.value}`;
+    for (const alternative of candidate.hazard ? this.hazards?.model.counterfactuals(candidate.hazard) ?? [] : []) {
+      assessments.set(key(alternative), candidate.assess(alternative));
+    }
+    this.recordInstruction(mnemonic, candidate.text, candidate.hazard ?? null, (alternative) => assessments.get(key(alternative)) ?? 'unknown');
+    this.noteMduProgress(mnemonic);
+    applyCustomEffect(this.state, candidate.effect);
+    const write = candidate.effect.gprWrites?.[0];
+    if (candidate.effect.control) {
+      const control = candidate.effect.control;
+      const marker = (skipped: boolean): void => {
+        const previous = this.recordingSkipped;
+        this.recordingSkipped = skipped;
+        const value = this.rng.int(1, 0xffff);
+        this.emitStaticInstruction('ori', `ori $26, $0, ${value}`);
+        if (!skipped) this.state.setRegister('$26', value);
+        this.recordingSkipped = previous;
+      };
+      if (this.usesDelaySlot()) marker(!control.taken && control.annulDelaySlot === true);
+      marker(control.taken);
+      this.addLabel(label);
+    }
+    return write ? { write: `$${write.register}`, value: write.value } : {};
+  }
+
+  /** Concrete mixed builtin/custom dependencies retain the executed destination and conditional write outcome. */
+  private emitCustomDependencies(): void {
+    if (!this.customRegistry || !this.pipelineProfile()) return;
+    const budget = Math.min(Math.floor(this.targetCount / 4), this.randomBodyRemaining());
+    const start = this.emittedCount;
+    for (const mnemonic of this.allowed) {
+      const definition = this.customRegistry.get(mnemonic, this.profile);
+      if (!definition?.generation || !definition.timing?.hazardClass) continue;
+      for (const read of definition.timing.reads ?? []) {
+        for (const gap of [0, 1, 2]) {
+          const cost = 3 + gap + (definition.controlFlow ? (this.usesDelaySlot() ? 2 : 1) : 0);
+          if (this.emittedCount - start + cost > budget || this.randomBodyRemaining() < cost) return;
+          this.emit('ori', 'ori $21, $0, 256');
+          this.state.setRegister('$21', 256);
+          for (let index = 0; index < gap; index++) this.emitNop();
+          const result = this.emitCustom(mnemonic, { reads: { [read.role]: '$21' } });
+          if (result?.write && result.write !== '$0' && this.randomBodyRemaining() > 0) {
+            this.emit('ori', `ori $22, ${result.write}, 1`);
+            this.state.setRegister('$22', (result.value ?? 0) | 1);
+          }
+        }
+      }
+    }
+  }
+
   private emitSingle(mnemonic: string, steer?: OperandSteer): SteeredEmission | undefined {
+    if (this.customRegistry?.get(mnemonic, this.profile)) return this.emitCustom(mnemonic, steer);
     switch (mnemonic) {
       case 'add':
       case 'addu':
@@ -1740,7 +1843,7 @@ class ProgramGenerator {
     // Random exceptions in a delay slot need a different EPC recovery rule. Dedicated P7 probe
     // scenarios cover that rule; keep the stateful random stream free of nested control hazards.
     return this.rng.pick(Array.from(this.allowed).filter((mnemonic) =>
-      !controlMnemonics.has(mnemonic) && mnemonic !== 'syscall' && !trapMnemonics.has(mnemonic) && this.canEmitSingle(mnemonic)));
+      !this.customRegistry?.get(mnemonic, this.profile) && !controlMnemonics.has(mnemonic) && mnemonic !== 'syscall' && !trapMnemonics.has(mnemonic) && this.canEmitSingle(mnemonic)));
   }
 
   private hasStatefulPoisonCandidate(): boolean {
@@ -2242,12 +2345,13 @@ class ProgramGenerator {
     this.recordInstruction(mnemonic, text);
   }
 
-  private recordInstruction(mnemonic: string, text: string): void {
+  private recordInstruction(mnemonic: string, text: string, customHazard?: HazardInstruction | null, assess?: HazardObservationValues['assess']): void {
     if (this.remaining() <= 0) {
       throw new BuiltinAsmGeneratorError('Internal generator error: attempted to emit past the requested instruction count.');
     }
     this.lines.push(`    ${text}`);
-    this.hazards?.record(this.emittedCount, text, !this.recordingSkipped && !this.suppressControlHazards);
+    if (customHazard === undefined) this.nativeDependencies.add(mnemonic);
+    this.hazards?.record(this.emittedCount, text, !this.recordingSkipped && !this.suppressControlHazards, customHazard, assess);
     this.emittedCount++;
     this.used.add(mnemonic);
   }

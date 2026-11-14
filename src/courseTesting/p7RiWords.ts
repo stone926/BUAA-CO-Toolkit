@@ -1,6 +1,8 @@
 // @index course-testing — P7 raw-word RI catalog shared by generators and machine-code validation
 
 import { parseAssemblerLine } from '../mips/core/assembler/syntax';
+import { matchRuntimeInstruction } from '../mips/core/isa/decoder';
+import type { CustomInstructionRegistry } from '../mips/core/custom/registry';
 
 export type P7RiWordVariant = 'unknown-opcode' | 'unknown-funct';
 
@@ -29,6 +31,10 @@ export const p7RiWordCatalog: readonly P7RiWordCatalogEntry[] = Object.freeze([
 ]);
 
 const p7RiWords = new Set(p7RiWordCatalog.map((entry) => entry.word >>> 0));
+/** Finite deterministic replacement pool, all rejected by the native runtime decoder. */
+const replacementRiWords = Array.from({ length: 64 }, (_, index) => [((63 - index) << 26) >>> 0, 63 - index]).flat()
+  .filter((word) => !matchRuntimeInstruction(word, { profile: 'P7', enabledLayers: ['required', 'commonExtensions', 'marsCompatibility'] }));
+for (const word of replacementRiWords) p7RiWords.add(word);
 const p7RiWordsByVariant = new Map(p7RiWordCatalog.map((entry) => [entry.variant, entry] as const));
 
 export function isP7RiWord(word: number): boolean {
@@ -48,6 +54,19 @@ export function p7RiWordEntryAt(occurrence: number): P7RiWordCatalogEntry {
 
 export function p7RiWordDirective(entry: P7RiWordCatalogEntry): string {
   return `.word 0x${(entry.word >>> 0).toString(16).padStart(8, '0')}`;
+}
+
+/** Preserve every probe and PC while ensuring an RI cell is not a registered instruction. */
+export function avoidCustomP7RiCollisions(text: string, registry: CustomInstructionRegistry): string {
+  return text.replace(/^(\s*\.word\s+)0x([\da-f]{8})(\s*(?:#.*)?)$/gim, (line: string, prefix: string, hex: string, suffix: string) => {
+    const original = Number.parseInt(hex, 16) >>> 0;
+    if (!isP7RiWord(original) || !registry.decode(original, 'P7')) return line;
+    const opcodeFamily = (original >>> 26) !== 0;
+    const replacement = replacementRiWords.find((word) => ((word >>> 26) !== 0) === opcodeFamily && !registry.decode(word, 'P7'))
+      ?? replacementRiWords.find((word) => !registry.decode(word, 'P7'));
+    if (replacement === undefined) throw new Error('Custom instructions occupy every reserved RI probe encoding; no truthful RI probe can be generated.');
+    return `${prefix}0x${replacement.toString(16).padStart(8, '0')}${suffix}`;
+  });
 }
 
 /**

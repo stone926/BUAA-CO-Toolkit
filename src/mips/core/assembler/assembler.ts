@@ -49,11 +49,16 @@ import { immediateSignedKind, realInstructionForms } from './instructionForms';
 import { isAssemblerDirective } from './directives';
 import { marsIntegerExtensionMnemonics } from './marsIntegerInstructionFacts';
 import { marsInstructionByMnemonic } from './marsInstructionFacts';
+import type { CustomInstructionRegistry } from '../custom/registry';
+import { customAssemblerExtension } from '../custom/assembler';
+import type { CustomInstructionMode } from '../custom/api';
 
 export const courseAssemblerSemanticsRevision = 6 as const;
 export const builtinAssemblerCapabilitiesRevision = 2 as const;
 
 export interface CourseAssemblerOptions extends SegmentBuilderOptions {
+  readonly customInstructions?: CustomInstructionRegistry;
+  readonly customInstructionMode?: CustomInstructionMode;
   readonly profile: CourseProfile;
   readonly sourceResolver?: CourseSourceResolver;
   readonly layers?: readonly InstructionLayer[];
@@ -73,6 +78,8 @@ export interface CourseAssemblerOptions extends SegmentBuilderOptions {
 }
 
 export interface AssemblerInstructionExtension {
+  /** A scoped custom definition owns mnemonic/profile/layer validation for its IR. */
+  handlesScope?(mnemonic: string): boolean;
   expand(statement: ParsedStatement, options: { compactAddresses: boolean; maximumInstructionsPerStatement: number }): WorkResult | undefined;
   encode(instruction: WorkInstruction, address: number, resolve: (name: string) => number | undefined):
     { word?: number; diagnostic?: AssemblerDiagnostic } | undefined;
@@ -174,6 +181,15 @@ export function assembleCourseSource(
   root: SourceUnit,
   options: CourseAssemblerOptions
 ): CourseAssemblerResult {
+  if (options.customInstructions) {
+    const custom = customAssemblerExtension(options.customInstructions, options.customInstructionMode ?? options.profile);
+    const previous = options.instructionExtension;
+    return assembleCourseSource(root, { ...options, customInstructions: undefined, instructionExtension: {
+      handlesScope: (mnemonic) => custom.handlesScope?.(mnemonic) === true || previous?.handlesScope?.(mnemonic) === true,
+      expand: (statement, expansionOptions) => custom.expand(statement, expansionOptions) ?? previous?.expand(statement, expansionOptions),
+      encode: (instruction, address, resolve) => custom.encode(instruction, address, resolve) ?? previous?.encode(instruction, address, resolve)
+    } });
+  }
   const profile = options.profile;
   const layers = options.layers ?? defaultLayers;
   const expandedGraph = expandAssemblerSourceGraph(
@@ -1165,6 +1181,7 @@ function validateFinalInstructionScope(
   state: AssemblyState
 ): AssemblerDiagnostic | undefined {
   if (instruction.mnemonic === '_co_internal_unknown_instruction') return undefined;
+  if (state.options.instructionExtension?.handlesScope?.(instruction.mnemonic)) return undefined;
   const entry = isaInstructionByMnemonic.get(instruction.mnemonic);
   if (!entry) return undefined;
   if (!entry.profiles.includes(state.profile)) {

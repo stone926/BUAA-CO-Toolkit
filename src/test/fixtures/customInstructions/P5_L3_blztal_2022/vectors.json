@@ -1,0 +1,27 @@
+[
+  {
+    "name": "taken-shift-0",
+    "rs": 4294967295,
+    "rt": 0
+  },
+  {
+    "name": "taken-shift-1",
+    "rs": 4294967295,
+    "rt": 1
+  },
+  {
+    "name": "taken-shift-2",
+    "rs": 4294967295,
+    "rt": 2
+  },
+  {
+    "name": "taken-shift-3",
+    "rs": 4294967295,
+    "rt": 3
+  },
+  {
+    "name": "not-taken",
+    "rs": 1,
+    "rt": 0
+  }
+]

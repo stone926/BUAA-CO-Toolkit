@@ -18,13 +18,14 @@ import {
 } from './resources';
 import { MipsSemanticReferenceKind } from './semantic';
 import { MipsServerState } from './state';
+import { customInstructionFactsRevision } from './customInstructionFacts';
 
 const semanticTokenCache = new DocumentResultCache<SemanticTokens>();
 
 export function getMipsSemanticTokens(document: TextDocument, settings: CoSettings, state: MipsServerState): SemanticTokens {
   return semanticTokenCache.getOrCreate(
     document,
-    `mips-semantic:${settings.mips.instructionTokenMode}`,
+    `mips-semantic:${settings.mips.instructionTokenMode}:${customInstructionFactsRevision(document.uri)}`,
     () => buildMipsSemanticTokens(document, settings, state)
   );
 }
@@ -159,6 +160,9 @@ function collectMnemonicToken(
   if (instruction) {
     const parsedInstruction = instructionByRange.get(key);
     collector.add(range, instructionSemanticTokenType(instruction, settings.mips.instructionTokenMode, parsedInstruction?.usesPseudoForm));
+  } else if (instructionByRange.has(key)) {
+    collector.add(range, settings.mips.instructionTokenMode === 'same' ? 'mipsInstruction'
+      : settings.mips.instructionTokenMode === 'realVsPseudo' ? 'mipsRealInstruction' : 'mipsSpecialInstruction');
   }
 }
 

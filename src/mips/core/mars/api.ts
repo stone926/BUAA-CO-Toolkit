@@ -1,3 +1,4 @@
+import type { CustomInstructionRegistry } from '../custom/registry';
 // @index mips-core — Resumable ordinary-MARS syscall DTOs; host IO stays outside the CPU
 import { ProgramImage } from '../api';
 import { MarsMemoryConfiguration } from '../profiles/marsMemoryLayout';
@@ -29,6 +30,7 @@ export interface MarsIoResponse {
 }
 
 export interface MarsSessionOptions {
+  readonly customInstructions?: CustomInstructionRegistry;
   readonly image: ProgramImage;
   readonly memoryConfiguration?: MarsMemoryConfiguration;
   readonly delayedBranching?: boolean;

@@ -9,6 +9,8 @@ interface PendingRecord {
   readonly index: number;
   readonly decoded: HazardInstruction | undefined;
   readonly executed: boolean;
+  readonly opaque: boolean;
+  readonly assess?: HazardObservationValues['assess'];
   readonly previous: number | undefined;
   readonly hiLoPrevious: { hi: number; lo: number };
   victim: boolean;
@@ -29,15 +31,17 @@ export class HazardTracker {
 
   constructor(private readonly state: CpuState) {}
 
-  record(index: number, text: string, executed: boolean): void {
+  record(index: number, text: string, executed: boolean, customFacts?: HazardInstruction | null, assess?: HazardObservationValues['assess']): void {
     this.settle();
-    const decoded = decodeHazardInstruction(text);
+    const decoded = customFacts === undefined ? decodeHazardInstruction(text) : customFacts ?? undefined;
     const destination = decoded?.write?.register;
     this.state.lastWrite = undefined;
     this.pending = {
       index,
       decoded,
       executed,
+      opaque: customFacts === null,
+      assess,
       previous: destination ? this.state.regValue(destination) : undefined,
       hiLoPrevious: { hi: this.state.hi, lo: this.state.lo },
       victim: false
@@ -82,6 +86,7 @@ export class HazardTracker {
     const destination = record.decoded?.write?.register;
     const lastWrite = this.state.lastWrite;
     record.values = {
+      assess: record.assess,
       previous: record.previous,
       next: destination ? this.state.regValue(destination) : undefined,
       raw: destination && lastWrite?.register === destination ? lastWrite.value : undefined,
@@ -96,14 +101,25 @@ export class HazardTracker {
   }
 
   private feed(record: PendingRecord): void {
+    if (record.executed && record.opaque) {
+      this.model.flush();
+      return;
+    }
     if (record.victim) {
       this.model.flush();
       return;
     }
     if (record.executed && record.decoded) {
       const observation = this.model.observe(record.decoded, record.values);
-      this.coverage.record(observation);
-      for (const forward of observation.forwards) {
+      const confirmed = record.assess ? {
+        ...observation,
+        forwards: observation.forwards.map((event) => ({ ...event, valid: event.valid && event.observability === 'observable' })),
+        zeroDestinations: observation.zeroDestinations.map((event) => ({ ...event, valid: event.valid && event.observability === 'observable' })),
+        priorities: observation.priorities.map((event) => ({ ...event, valid: event.valid && event.observability === 'observable' })),
+        hiLo: observation.hiLo.map((event) => ({ ...event, valid: event.valid && event.observability === 'observable' }))
+      } : observation;
+      this.coverage.record(confirmed);
+      for (const forward of confirmed.forwards) {
         if (forward.valid) this.forwardOperands.add(forwardOperandKey(
           forward.producer, forward.consumer, forward.role, forward.gap));
       }

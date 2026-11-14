@@ -1,0 +1,32 @@
+[
+  {
+    "name": "zero",
+    "rs": 0,
+    "rt": 0
+  },
+  {
+    "name": "positive",
+    "rs": 3,
+    "rt": 1
+  },
+  {
+    "name": "reverse",
+    "rs": 1,
+    "rt": 3
+  },
+  {
+    "name": "opposites",
+    "rs": 1,
+    "rt": 4294967295
+  },
+  {
+    "name": "signed-overflow",
+    "rs": 2147483647,
+    "rt": 1
+  },
+  {
+    "name": "minimum-pair",
+    "rs": 2147483648,
+    "rt": 2147483648
+  }
+]

@@ -1,5 +1,6 @@
 // @index mips-core — MachineSession：原子提交、异常/中断仲裁、停机检测与状态快照
 import { ProgramImage } from '../api';
+import type { CustomInstructionRegistry } from '../custom/registry';
 import { DeviceBusPort } from '../devices/deviceBus';
 import {
   CommitEvent,
@@ -63,6 +64,7 @@ export interface MachineSnapshot {
 }
 
 export interface MachineSessionOptions {
+  readonly customInstructions?: CustomInstructionRegistry;
   readonly profile: CourseExecutionProfile;
   readonly image: ProgramImage;
   /** Instruction layers recognised at runtime; defaults to the profile's own set. */
@@ -136,6 +138,10 @@ export class MachineSession {
     return this.executed;
   }
 
+  customInstruction(word: number): boolean {
+    return this.options.customInstructions?.decode(word, this.options.profile.syscallMode === 'services' ? 'mars' : this.options.profile.id) !== undefined;
+  }
+
   get done(): boolean {
     return this.finished;
   }
@@ -182,7 +188,8 @@ export class MachineSession {
       syscallServices: this.options.syscallServices,
       syscallWrites: input.syscallWrites,
       syscallCommit: input.syscallCommit,
-      instructionExtension: this.options.instructionExtension
+      instructionExtension: this.options.instructionExtension,
+      customInstructions: this.options.customInstructions
     });
     if (input.syscallException && this.options.profile.syscallMode === 'services' && effect.mnemonic === 'syscall') {
       effect = { ...effect, exception: input.syscallException, gprWrites: [], extensionCommit: undefined };
@@ -199,6 +206,7 @@ export class MachineSession {
       });
     }
     if (effect.outOfDomain) {
+      if (effect.deviceAccess && this.devices) this.devices.abort(effect.deviceAccess);
       this.finished = true;
       return {
         status: 'out-of-domain',
@@ -208,6 +216,7 @@ export class MachineSession {
     }
     if (effect.exception) {
       if (!this.state.cp0) {
+        if (effect.deviceAccess && this.devices) this.devices.abort(effect.deviceAccess);
         this.finished = true;
         return {
           status: 'out-of-domain',
@@ -502,6 +511,10 @@ export class MachineSession {
    * PC alone never stops the run (COURSE-P56-DOMAIN-001).
    */
   private updateHaltDetector(effect: InstructionEffect): boolean {
+    if (effect.word !== undefined && this.customInstruction(effect.word)) {
+      this.haltCandidatePc = undefined;
+      return false;
+    }
     const halt = this.options.profile.halt;
     const word = effect.word;
     const candidate = this.haltCandidatePc;

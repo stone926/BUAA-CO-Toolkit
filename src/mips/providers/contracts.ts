@@ -12,6 +12,7 @@ import {
 import type { CommitEvent } from '../core/events/commitEvent';
 import type { AssemblerDiagnostic } from '../core/assembler/diagnostics';
 import type { CustomInstructionEncoding } from '../host/customMarsBridge';
+import type { ScriptInstructionBundle } from '../host/scriptInstructionBundle';
 import type { CourseEnginePlan } from './courseEnginePolicy';
 import type { CoverageBin } from '../core/events/coverage';
 import type { CpuTraceEvent } from '../../language/mips/traceParser';
@@ -108,6 +109,8 @@ export interface AssembleTarget {
 
 export interface AssembleRequest {
   sourceUri: vscode.Uri;
+  /** Immutable custom ISA closure; null prevents workspace rediscovery on replay. */
+  scriptInstructions?: ScriptInstructionBundle | null;
   /** Original project configuration context; sourceUri can be an immutable case snapshot. */
   resourceUri?: vscode.Uri;
   /** Commands validate/project the image before atomically publishing the final artifact. */
@@ -137,6 +140,7 @@ export interface AssembleRequest {
 
 export interface AssembleResult {
   ok: boolean;
+  scriptInstructions?: ScriptInstructionBundle;
   assemblyDiagnostics?: readonly AssemblerDiagnostic[];
   customInstructionEncodings?: readonly CustomInstructionEncoding[];
   /** Final, immutable full-stack selection, resolved before any program execution. */
@@ -158,7 +162,7 @@ export interface AssembleResult {
 export interface MipsAssemblerProvider {
   readonly descriptor: EngineDescriptor;
   readonly capabilities: EngineCapabilities;
-  preflight(request: AssembleRequest): ProviderPreflightResult;
+  preflight(request: AssembleRequest, context?: ProviderRunContext): ProviderPreflightResult;
   assemble(request: AssembleRequest, context?: ProviderRunContext): Promise<AssembleResult>;
 }
 
@@ -169,12 +173,19 @@ export interface MipsAssemblerProvider {
  * as an identity-bound capability and never reads the source path or branches on the engine kind.
  * A native ProgramImage executor does not need a binding.
  */
-export interface ProviderExecutionBinding {
+export interface SourceReassemblyBinding {
   kind: 'source-reassembly';
   providerId: string;
   sourceUri: vscode.Uri;
   imageFingerprint: string;
 }
+export interface ScriptInstructionExecutionBinding {
+  kind: 'script-instructions';
+  providerId: 'builtin-ts';
+  imageFingerprint: string;
+  bundle: ScriptInstructionBundle;
+}
+export type ProviderExecutionBinding = SourceReassemblyBinding | ScriptInstructionExecutionBinding;
 
 export interface ArchitecturalWriteTraceRequest {
   kind: 'architectural-writes';
@@ -266,7 +277,7 @@ export interface ResolvedEngineRun {
 export interface MipsExecutionProvider {
   readonly descriptor: EngineDescriptor;
   readonly capabilities: EngineCapabilities;
-  preflight(request: ExecuteRequest): ProviderPreflightResult;
+  preflight(request: ExecuteRequest, context?: ProviderRunContext): ProviderPreflightResult;
   execute(request: ExecuteRequest, context?: ProviderRunContext): Promise<ExecuteResult>;
 }
 

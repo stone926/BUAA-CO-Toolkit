@@ -98,7 +98,7 @@ export async function runMarsFile(services: AppServices, asmUri: vscode.Uri, mod
     maxSteps: options.maxSteps, stdin: options.stdin, signal: options.signal, runtime: services.mipsRuntime, console: options.console
   }, mode === 'run');
   let external = false;
-  if (!options.signal?.aborted && needsCustomMars(output.result, output.assemblyDiagnostics)) {
+  if (!options.signal?.aborted && !output.scriptInstructions && needsCustomMars(output.result, output.assemblyDiagnostics)) {
     external = true;
     try { output = await runCustomMarsConsole(asmUri, mode === 'run', options); }
     catch (error) { output = { result: { ...output.result, stderr: error instanceof Error ? error.message : String(error) } }; }

@@ -1,4 +1,4 @@
-# course-testing | src/courseTesting/ | 81 files + host adapters
+# course-testing | src/courseTesting/ | 84 files + host adapters
 
 P3–P7 自动化测试：生成 ASM → 内置 TS assembler/ProgramImage → 内置 TS 课程 oracle → Verilog（bundled Icarus）或 Logisim 仿真 Trace → 对比/Probe 检查 → HTML/JSON 报告。通用 Verilog 仿真与自动 DUT lane 固定使用扩展内置 Icarus，运行目录 `.co/iverilog`。
 
@@ -20,7 +20,7 @@ P3–P7 自动化测试：生成 ASM → 内置 TS assembler/ProgramImage → �
 
 **证据诚实。** probe 在首次 mtc0/异常前用 mfc0 读取 SR/Cause/EPC 并把原始值写入 DM，metadata 把样本绑定到各自的 store PC 并严格检查初值零、唯一、早于 handler 记录。MDU 黑盒结果无法区分产生相同完整结果的合法早启动与非法晚启动，因此**不**宣称为内部启动时刻的证明。报告也说明"通过"只对应本次可观察结果，完整无写回执行、课程周期与结构仍需独立验证。
 
-**引擎边界。** 随机生成点固定 builtin；用户 ASM 的 auto 在未知指令汇编失败后、执行前选择 custom，显式 Mars 直接使用自定义参考。prepare 与 oracle 必须复用最终 CourseEnginePlan 及相同 Jar/class 快照。机器码校验保留课程布局、容量、零 DM 初态与停机要求，custom 编码由实际加载的注册表授权。P7 probe 继续走现有 DUT-only 黑盒检查，不经过 Mars Timer 时钟推断。历史重跑保留原 CPU/ASM 上下文并核实参考依赖版本，不静默换引擎。
+**引擎边界。** 随机生成点使用 builtin 与冻结 JS/TS 定义；没有脚本绑定时，用户 ASM 的 auto 在未知指令汇编失败后、执行前选择 custom，显式 Mars 直接使用自定义参考。prepare 与 oracle 必须复用最终 CourseEnginePlan 及相同 JS/TS 或 Jar/class 快照。机器码校验保留课程布局、容量、零 DM 初态与停机要求，custom 编码由实际加载的注册表授权。P7 probe 继续走现有 DUT-only 黑盒检查，不经过 Mars Timer 时钟推断。历史重跑保留原 CPU/ASM 上下文并核实参考依赖版本，不静默换引擎。
 
 **有界并发、失败即停。** 会话启动时快照并发量；P3–P6 每轮生成对应数量的独立随机点，P7 保留原有 14 点套件。GPR / 常规 / 特殊测试之间有完成屏障，同一 manifest 的 stdin 变体互斥，空闲槽立即接新点。首个失败或错误立即停止派发并 abort 同批任务，等待所有在途任务（含进程退出、manifest 写入）完成后才清理或释放会话；取消不计 error，已完成结果和失败证据保存。并发量 1 维持串行顺序，轮间零延迟主动 yield 保持扩展宿主响应。报告写入仍串行合并，caseIndex 保持原测试点编号，activeCases 展示多个活动点并兼容旧 activeCase。
 
@@ -118,3 +118,11 @@ P3–P7 自动化测试：生成 ASM → 内置 TS assembler/ProgramImage → �
 - `courseTestReport.ts` / `courseTestMessages.ts` / `courseTestStdin.ts` / `courseTestTraceFiles.ts` / `courseTestCases.ts` / `continuous.ts` — HTML 报告、中文 diff 提示、stdin 发现、输出命名（`.co/out/{stem}.oracle.out` 与 `.sim.out`）、case 输入与留存裁剪
 - `asmCaseStore.ts` / `asmCaseStoreCore.ts` / `manifestCodec.ts` / `continuousCaseRetention.ts` / `pathContainment.ts` — 用例持久化与 manifest v1（只读）/v2 codec：创建时捕获完整 SourceUnit/include graph，后续汇编与 oracle 只读 case 内 immutable materialization；所有路径只接受 canonical `/`，大小写碰撞、symlink 与 containment escape fail closed
 - `workspaceCaseRetention.ts` — 历史通过用例的跨会话留存：启动扫描、按创建时间排序、批次增量观察与旧通过点安全清理
+
+## 自定义 JS/TS 随机测试
+
+- `builtinAsm/customInstructions.ts` — 声明式操作数规划、纯语义预览、动态写回和访存/控制效果应用
+- `builtinAsm/customGeneratorCompatibility.ts` — 实际发射的前导/处理程序/停机原生依赖与自定义覆盖冲突检查
+- `scriptInstructionSnapshot.ts` — 按原 ASM 上下文捕获脚本，case-local 保存、身份验证与重跑
+
+生成配置带冻结 ISA，脚本生成在独立 Worker 中完成；功能覆盖与可选 timing 的冒险覆盖区分。P7 RI 选择避开自定义编码，原 Timer/MMIO/返回黑盒 probe 保留。

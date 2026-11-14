@@ -3,11 +3,12 @@ import { DocumentResultCache } from '../common/documentResultCache';
 import { CoSettings } from '../common/settings';
 import { MipsParseOptions, MipsParseResult, parseMips } from './parser';
 import type { MipsServerState } from './state';
+import { customInstructionFactsRevision } from './customInstructionFacts';
 
 const parseCache = new DocumentResultCache<MipsParseResult>();
 
 export function getCachedMipsParse(document: TextDocument, settings: CoSettings, state: MipsServerState): MipsParseResult {
-  const settingKey = cacheKey(settings, state);
+  const settingKey = `${customInstructionFactsRevision(document.uri)}:${cacheKey(settings, state)}`;
   return parseCache.getOrCreate(document, settingKey, () => {
     const options: MipsParseOptions = {
       ignoredPseudoInstructionFiles: state.ignoredPseudoInstructionFiles,

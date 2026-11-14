@@ -1,4 +1,4 @@
-# mips-lsp | src/language/mips/ | 34 files
+# mips-lsp | src/language/mips/ | 35 files
 
 MIPS 汇编（`.asm` / `.s` / `.mips`）LSP：解析 → AST → 语义 → 诊断 → 补全/hover/跳转/格式化/高亮/签名/折叠/重命名/内联提示/代码操作。另保留历史 MARS trace 解析对比；LSP 不启动 MARS。
 
@@ -54,3 +54,5 @@ MIPS 汇编（`.asm` / `.s` / `.mips`）LSP：解析 → AST → 语义 → 诊�
 
 - `traceParser.ts` — 解析 coL1/coL2 为 `CpuTraceEvent[]`；legacy MARS oracle 固定用 coL2（支持停机尾证明与动态兼容检查），默认 builtin TS oracle 不经过此解析器
 - `traceCompare.ts` — 事件对比引擎；自动判定与交互对照共用 `iterTraceDiffEntries`（包含同周期相邻换序规则）
+
+- `customInstructionFacts.ts` — 按工作区隔离的纯元数据注册表；共享汇编操作数诊断、补全、hover、签名与缓存版本

@@ -1,4 +1,4 @@
-# mips-replay | src/mips/replay/ | 9 files
+# mips-replay | src/mips/replay/ | 10 files
 
 用例证据基础设施：源码快照、ProgramImage 序列化、有界文件校验与不可变引擎注册表。持续测试、MARS 运行与开发验证脚本共用这些模块；未接入任何用户/CLI 入口的 exact replay / re-evaluate 服务已移除。
 
@@ -19,3 +19,7 @@
 **引擎授权 = 身份 + 显式信任。** registry 以 `role + SHA-256` 为唯一键，`stageForExecution` 只接受两种授权根：当前进程通过 `registerFile/registerBytes` 绑定的可信输入，或编译进插件的 `EngineArtifactTrustManifest`（固定 MARS v0.6.3 / course1 的 SHA-256、大小与角色）。**磁盘上"恰好有该 digest"只证明身份，不证明信任**——`.co`、case 目录与 artifact 邻近位置可被工作区写入，伪造 receipt JSON 不增加任何执行权限。若将来增加动态 approval receipt，必须先用插件内嵌公钥验签再转成内部 trust identity。保留策略固定为 `retain-until-explicit-live-manifest-gc`。
 
 **Workspace Trust。** 扩展声明 `untrustedWorkspaces.supported=false`，由 VS Code Restricted Mode 禁用。若改为 `limited` / `true`，必须同时给 MARS 执行入口加函数级 Workspace Trust gate，并把 Java/JAR/RI 工具链列入 `restrictedConfigurations`；registry 的 role+digest 授权不替代发行方真实性或工作区信任。
+
+- `scriptInstructionArtifact.ts` — JS/TS 闭包的 canonical artifact 和 builtin 引擎依赖一致性检查
+
+脚本快照随 case 源输入保存；重跑核实闭包哈希和 assembler/oracle 依赖，不读取后来修改的工作区定义。空注册表也固定。

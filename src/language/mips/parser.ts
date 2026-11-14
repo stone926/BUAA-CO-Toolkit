@@ -41,6 +41,7 @@ import {
   parseIntegerLiteral
 } from './syntax';
 import type { MipsParsedLine, MipsParsedToken } from './syntax';
+import { customInstructionFor, customInstructionDisplay, customInstructionSyntaxIssue } from './customInstructionFacts';
 import {
   buildMipsSemanticModel,
   resolveMipsSemanticMacroParamAtPosition,
@@ -313,7 +314,8 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
       continue;
     }
 
-    const instruction = instructions[mnemonic];
+    const customInstruction = customInstructionFor(document.uri, profile, mnemonic);
+    const instruction = customInstruction ? customInstructionDisplay(customInstruction, mnemonic) : instructions[mnemonic];
     const macroOverloads = macros.get(executableAst.mnemonic);
     if (!instruction && !macroOverloads?.length) {
       const continuation = statement.dataContinuation;
@@ -363,7 +365,7 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
           diagnostics.push(makeDiagnostic(executableAst.mnemonicRange, 'P2 syscall 以 $v0 值为调用号, 但 $v0 自上次 syscall 起未赋值', DiagnosticSeverity.Warning, 'syscall-v0-uninitialized'));
         }
       }
-      const usesPseudoForm = instruction.pseudo || usesMarsPseudoInstructionForm(mnemonic, astOperands, activeMacro, eqvSymbols);
+      const usesPseudoForm = !customInstruction && (instruction.pseudo || usesMarsPseudoInstructionForm(mnemonic, astOperands, activeMacro, eqvSymbols));
       instructionsSeen.push({
         line: lineNumber,
         mnemonic,
@@ -372,7 +374,10 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
         usesPseudoForm
       });
       if (includeDiagnostics) {
-        validateInstruction(document, lineNumber, instruction, astOperands, profile, settings, options, activeMacro, eqvSymbols, diagnostics);
+        if (customInstruction) {
+          const issue = customInstructionSyntaxIssue(document.uri, profile, lineAt(document, lineNumber).text);
+          if (issue) diagnostics.push(makeDiagnostic(executableAst.mnemonicRange, issue, DiagnosticSeverity.Error, 'operand-count'));
+        } else validateInstruction(document, lineNumber, instruction, astOperands, profile, settings, options, activeMacro, eqvSymbols, diagnostics);
       }
       const labelRef = labelOperand(instruction, astOperands);
       if (includeDiagnostics && labelRef && isSymbolLike(labelRef)) {

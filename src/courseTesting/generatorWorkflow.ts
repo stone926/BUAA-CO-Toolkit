@@ -15,6 +15,8 @@ import {
   BuiltinAsmGeneratorError,
   generateBuiltinAsmTestCase,
   generateRegisterCoverageAsmTestCase,
+  type BuiltinAsmGeneratorOptions,
+  type BuiltinAsmGeneratorResult,
   type P7ProbeShard,
   type P7StressMode
 } from './builtinAsmGenerator';
@@ -31,8 +33,13 @@ import {
   automaticTestPolicy
 } from './automaticTestPolicy';
 import { resolveCourseEnginePlan } from '../mips/providers/courseEnginePolicy';
+import { MipsRuntimeManager } from '../mips/host/runtimeManager';
+import type { ScriptInstructionBundle } from '../mips/host/scriptInstructionBundle';
+import { captureScriptInstructions } from '../mips/host/scriptInstructions';
 
 export interface BuiltinGeneratorRunSetup {
+  /** Captured once for the entire session; the same bytes bind generation, oracle and replay. */
+  scriptInstructions?: ScriptInstructionBundle;
   kind: 'builtin';
   folder: vscode.WorkspaceFolder;
   resource: vscode.Uri;
@@ -47,6 +54,22 @@ export interface BuiltinGeneratorRunSetup {
   probeScenarioCount: number;
   exceptionRate: number;
   exceptionTypes: string[];
+}
+
+const scriptSnapshots = new WeakMap<BuiltinGeneratorRunSetup, Promise<ScriptInstructionBundle | undefined>>();
+
+async function generatorScriptSnapshot(setup: BuiltinGeneratorRunSetup, signal?: AbortSignal): Promise<ScriptInstructionBundle | undefined> {
+  if (setup.scriptInstructions) return setup.scriptInstructions;
+  let captured = scriptSnapshots.get(setup);
+  if (!captured) {
+    captured = (async () => {
+      try { setup.scriptInstructions = await captureScriptInstructions(setup.folder.uri.fsPath, { signal }); }
+      catch (error) { throw new Error(`自定义指令加载失败：${error instanceof Error ? error.message.slice(0, 2000) : String(error).slice(0, 2000)}`); }
+      return setup.scriptInstructions;
+    })();
+    scriptSnapshots.set(setup, captured);
+  }
+  return captured;
 }
 
 export interface GeneratedAsmBatch {
@@ -100,6 +123,18 @@ export function generatorResource(setup: BuiltinGeneratorRunSetup): vscode.Uri {
   return setup.resource;
 }
 
+async function generateWithScripts(services: AppServices, bundle: ScriptInstructionBundle, options: BuiltinAsmGeneratorOptions, signal?: AbortSignal, registerCoverage = false): Promise<BuiltinAsmGeneratorResult> {
+  const runtime = services.mipsRuntime ?? new MipsRuntimeManager();
+  try {
+    const result = await runtime.runScriptJob(bundle, { kind: 'script-generate', payload: { ...options, registerCoverage, generatedAt: options.generatedAt?.toISOString() } }, { signal });
+    if (result.kind !== 'result' || !result.ok) {
+      const detail = result.kind === 'result' ? result.error ?? 'Worker 未返回结果' : 'Worker 未返回结果';
+      throw new Error(detail.startsWith('自定义指令') ? detail : `自定义指令生成失败：${detail.slice(0, 2000)}`);
+    }
+    return result.payload as BuiltinAsmGeneratorResult;
+  } finally { if (!services.mipsRuntime) runtime.dispose(); }
+}
+
 export function generatorFolder(setup: BuiltinGeneratorRunSetup): vscode.WorkspaceFolder {
   return setup.folder;
 }
@@ -149,33 +184,28 @@ export async function runGeneratorAndCollectAsms(
   if (!options.continuous || options.continuous.iteration === 1) {
     specs.unshift({ mode: 'off', registerCoverage: true });
   }
-  const enginePlan = resolveCourseEnginePlan(automaticTestEngineMode, setup.profile);
   const asms: vscode.Uri[] = [];
   const asmCases: AsmCase[] = [];
   try {
+    const scriptInstructions = await generatorScriptSnapshot(setup, options.signal);
+    const enginePlan = Object.freeze({ ...resolveCourseEnginePlan(automaticTestEngineMode, setup.profile), scriptInstructions: scriptInstructions ?? null });
     for (const spec of specs) {
       if (options.signal?.aborted) {
         throw new Error('continuous builtin generation cancelled');
       }
       const mode = spec.mode;
-      const generated = spec.registerCoverage
-        ? generateRegisterCoverageAsmTestCase({ profile: setup.profile, generatedAt })
-        : generateBuiltinAsmTestCase({
-          profile: setup.profile,
-          instructionText: setup.instructionText,
-          instructionCount: setup.instructionCount,
-          generatedAt,
-          interrupt: setup.interrupt && mode !== 'off' && spec.probeShard !== 'timer',
-          p7StressMode: mode,
-          timerInterrupt: mode === 'probe' && setup.timerInterrupt,
-          externalInterruptIntensity: setup.externalInterruptIntensity,
-          timerIntensity: setup.timerIntensity,
-          probeScenarioCount: spec.probeScenarioCount ?? setup.probeScenarioCount,
-          probeShard: spec.probeShard,
-          probeReturnVariant: spec.probeReturnVariant,
-          exceptionRate: mode === 'probe' ? 0 : setup.exceptionRate,
-          exceptionTypes: setup.exceptionTypes
-        });
+      const generationOptions: BuiltinAsmGeneratorOptions = {
+        profile: setup.profile, instructionText: setup.instructionText, instructionCount: setup.instructionCount,
+        generatedAt, interrupt: setup.interrupt && mode !== 'off' && spec.probeShard !== 'timer', p7StressMode: mode,
+        timerInterrupt: mode === 'probe' && setup.timerInterrupt, externalInterruptIntensity: setup.externalInterruptIntensity,
+        timerIntensity: setup.timerIntensity, probeScenarioCount: spec.probeScenarioCount ?? setup.probeScenarioCount,
+        probeShard: spec.probeShard, probeReturnVariant: spec.probeReturnVariant,
+        exceptionRate: mode === 'probe' ? 0 : setup.exceptionRate, exceptionTypes: setup.exceptionTypes
+      };
+      const generated = scriptInstructions
+        ? await generateWithScripts(services, scriptInstructions, generationOptions, options.signal, spec.registerCoverage)
+        : spec.registerCoverage ? generateRegisterCoverageAsmTestCase({ profile: setup.profile, generatedAt })
+          : generateBuiltinAsmTestCase(generationOptions);
       // File names are intentionally opaque. Exact mode/shard provenance belongs in the
       // immutable case manifest, not in the public automatic-test surface.
       const fileName = builtinAsmFileName(generated.profile, generatedAt);
@@ -258,6 +288,7 @@ export async function runGeneratorAndCollectAsms(
 }
 
 function publicBuiltinGeneratorFailure(error: unknown): string {
+  if (error instanceof Error && error.message.startsWith('自定义指令')) return error.message;
   if (error instanceof BuiltinAsmGeneratorError
     && /^Invalid built-in ASM generator instruction set:/i.test(error.message)) {
     const detail = error.message

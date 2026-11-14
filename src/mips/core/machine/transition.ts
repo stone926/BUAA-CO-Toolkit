@@ -40,6 +40,8 @@ import {
   trapCondition
 } from './semantics';
 import { MachineState, PendingBranch } from './state';
+import type { CustomInstructionRegistry } from '../custom/registry';
+import { evaluateCustomInstruction } from '../custom/evaluate';
 
 /**
  * `evaluateInstruction` 只计算 effect，绝不写状态（计划第 5.3 节）：
@@ -53,6 +55,7 @@ import { MachineState, PendingBranch } from './state';
 export type UndefinedBehaviorPolicy = 'fail-closed' | 'deterministic';
 
 export interface TransitionContext {
+  readonly customInstructions?: CustomInstructionRegistry;
   readonly profile: CourseExecutionProfile;
   readonly state: MachineState;
   readonly memory: MemoryBus;
@@ -158,6 +161,8 @@ export function evaluateInstruction(context: TransitionContext): InstructionEffe
     return withFault(base, profile, fetched.fault, 'fetch', pcBefore);
   }
   const word = u32(fetched.word ?? 0);
+  const custom = context.customInstructions?.decode(word, profile.syscallMode === 'services' ? 'mars' : profile.id);
+  if (custom) return evaluateCustomInstruction(context, { ...base, word }, custom.definition, custom.fields);
 
   const extended = context.instructionExtension?.(context, { ...base, word });
   if (extended) { return extended; }
@@ -770,7 +775,7 @@ function isMemoryFault(value: PreparedMemoryAccess | MemoryFault): value is Memo
 }
 
 /** Map a bus fault to an architectural exception (P7) or an out-of-domain classification. */
-function withFault<T extends InstructionEffect>(
+export function withFault<T extends InstructionEffect>(
   effect: T,
   profile: CourseExecutionProfile,
   fault: MemoryFault,

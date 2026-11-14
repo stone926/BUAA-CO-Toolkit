@@ -8,9 +8,10 @@ import type { MarsIoResponse } from '../core/mars/api';
 import { parseMarsProgramImage } from './marsJobs';
 import { parseDebugIoCommand } from './debugProtocol';
 import type { WorkerJobExecutionContext } from './workerJobs';
+import type { CustomInstructionRegistry } from '../core/custom/registry';
 
-export async function executeMarsDebugJob(payload: unknown, context: WorkerJobExecutionContext): Promise<unknown> {
-  const session = new DebugSession(parseDebugRequest(payload));
+export async function executeMarsDebugJob(payload: unknown, context: WorkerJobExecutionContext, customInstructions?: CustomInstructionRegistry): Promise<unknown> {
+  const session = new DebugSession({ ...parseDebugRequest(payload), customInstructions });
   const yieldControl = context.yieldControl ?? (() => new Promise<void>(resolve => setImmediate(resolve)));
   while (!context.signal.aborted) {
     const response = await context.emitProgress([{ kind: 'mars-debug', snapshot: session.snapshot() }]);

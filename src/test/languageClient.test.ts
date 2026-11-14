@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+vi.mock('../scriptInstructionLanguage', () => ({ startScriptInstructionLanguage: vi.fn() }));
 
 const mocks = vi.hoisted(() => {
   const clients: Array<{

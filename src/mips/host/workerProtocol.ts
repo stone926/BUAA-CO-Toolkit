@@ -10,9 +10,10 @@
 export const workerProtocolVersion = 2;
 
 /** Job kinds the production worker can execute. */
-export type WorkerJobKind = 'ping' | 'isa-decode-batch' | 'isa-encode-batch' | 'assembler-assemble' | 'machine-execute' | 'device-cycle-vector' | 'mars-assemble' | 'mars-execute' | 'mars-debug';
+export type WorkerJobKind = 'ping' | 'isa-decode-batch' | 'isa-encode-batch' | 'assembler-assemble' | 'machine-execute' | 'device-cycle-vector' | 'mars-assemble' | 'mars-execute' | 'mars-debug' | 'script-job' | 'script-capture' | 'script-inspect' | 'script-generate';
 
 export type WorkerJob =
+  | { kind: 'script-job' | 'script-capture' | 'script-inspect' | 'script-generate'; payload: unknown }
   | { kind: 'ping'; payload?: unknown }
   | { kind: 'isa-decode-batch'; payload: unknown }
   | { kind: 'isa-encode-batch'; payload: unknown }

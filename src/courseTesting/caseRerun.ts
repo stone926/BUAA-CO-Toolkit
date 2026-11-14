@@ -24,6 +24,7 @@ import { automaticTestEngineMode } from './automaticTestPolicy';
 import { courseRerunWaveformCapture } from './caseRerunWaveform';
 import { manifestP7Of, manifestSourceOf } from './manifestCodec';
 import { defaultCourseTracePipeline, runCourseTraceCase } from './traceRunner';
+import { loadCaseScriptInstructions } from './scriptInstructionSnapshot';
 
 export interface CourseTestCaseRerunOptions {
   waveform?: boolean;
@@ -73,12 +74,14 @@ export async function rerunCourseTestCase(
     }
     rerun = await createAsmCaseFromAsm(original.sourceAsm, {
       resource: cpuResource,
+      engineResource,
       sourceRoot: original.dir,
       stdin,
       source: manifestSourceOf(original.manifest),
       p7: manifestP7Of(original.manifest),
       metadata,
-      enginePlan: resolveCourseEnginePlan(engineMode, profile, { deterministicConsole: stdin !== undefined })
+      enginePlan: { ...resolveCourseEnginePlan(engineMode, profile, { deterministicConsole: stdin !== undefined }),
+        scriptInstructions: await loadCaseScriptInstructions(original.dir.fsPath, original.manifest) }
     });
     // The new manifest records the old case-local stdin as its originalPath.
     item = { asm: rerun.asm, stdin, asmCase: rerun };

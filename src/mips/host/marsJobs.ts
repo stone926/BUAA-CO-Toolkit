@@ -5,10 +5,11 @@ import { isMarsMemoryConfiguration, MarsMemoryConfiguration } from '../core/prof
 import { MarsSession } from '../core/mars/session';
 import type { MarsIoResponse } from '../core/mars/api';
 import type { WorkerJobExecutionContext } from './workerJobs';
+import type { CustomInstructionRegistry } from '../core/custom/registry';
 
-export async function executeMarsJob(payload: unknown, context: WorkerJobExecutionContext): Promise<unknown> {
+export async function executeMarsJob(payload: unknown, context: WorkerJobExecutionContext, customInstructions?: CustomInstructionRegistry): Promise<unknown> {
   const request = parseRequest(payload);
-  const session = new MarsSession(request);
+  const session = new MarsSession({ ...request, customInstructions });
   const yieldControl = context.yieldControl ?? (() => new Promise<void>((resolve) => setImmediate(resolve)));
   while (!context.signal.aborted) {
     let result = session.runSlice(1024);

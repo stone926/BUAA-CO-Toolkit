@@ -43,6 +43,7 @@ export class MarsSession {
     const layout = getMarsMemoryLayout(options.memoryConfiguration);
     this.memoryConfiguration = layout.configuration;
     this.machine = new MachineSession({
+      customInstructions: options.customInstructions,
       image: options.image,
       profile: createMarsProfile(options.memoryConfiguration, options.delayedBranching),
       maxSteps: this.maxSteps,
@@ -78,7 +79,7 @@ export class MarsSession {
     const fetched = this.machine.memory.fetch(this.machine.state.pc);
     const word = fetched.word;
     // A syscall may contain a code field; opcode/funct determine its meaning.
-    if (word === undefined || ((word & 0xfc00003f) >>> 0) !== 0x0000000c) {
+    if (word === undefined || this.machine.customInstruction(word) || ((word & 0xfc00003f) >>> 0) !== 0x0000000c) {
       return this.fromMachine(this.machine.stepInstruction());
     }
     const service = this.machine.state.gpr.read(2);

@@ -189,6 +189,7 @@ export async function runP3LogisimTraceCase(
     // from another workspace folder must not alter assembler semantics.
     resource,
     sourceRoot: options.sourceRoot,
+    engineResource,
     metadata: { 'test.cpuResource': resource.fsPath, 'test.engineResource': engineResource.fsPath },
     enginePlan
   });

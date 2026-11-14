@@ -14,6 +14,7 @@ import {
 } from './resources';
 import { MipsServerState } from './state';
 import type { MipsExecutableAst } from './ast';
+import { customInstructionFor, customInstructionDisplay } from './customInstructionFacts';
 
 export function getMipsSignatureHelp(document: TextDocument, position: Position, settings: CoSettings, state: MipsServerState): SignatureHelp | undefined {
   const parsed = getCachedMipsParse(document, settings, state);
@@ -33,6 +34,8 @@ export function getMipsSignatureHelp(document: TextDocument, position: Position,
   const activeParameter = activeParameterFromOperands(executable, position.character);
 
   const instruction = instructions[name.toLowerCase()];
+  const custom = customInstructionFor(document.uri, settings.project.profile, name);
+  if (custom) return buildInstructionSignatureHelp(customInstructionDisplay(custom, name), activeParameter);
   if (instruction) {
     return buildInstructionSignatureHelp(instruction, activeParameter);
   }

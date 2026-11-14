@@ -1,3 +1,4 @@
+import type { CustomInstructionRegistry } from '../custom/registry';
 // @index mips-core — CLI/Worker 共用的纯汇编服务 DTO：显式 source/include graph 上限与稳定错误投影
 
 import { CourseProfile, InstructionLayer } from '../generated/isaCatalog';
@@ -199,9 +200,10 @@ export function parseMarsAssemblerServiceRequest(value: Record<string, unknown>)
   };
 }
 
-export function assembleProgramForService(request: ParsedAssemblerServiceRequest): AssemblerServiceResult {
+export function assembleProgramForService(request: ParsedAssemblerServiceRequest, customInstructions?: CustomInstructionRegistry): AssemblerServiceResult {
   const graph = serviceSourceGraph(request);
   const result = assembleCourseSource(graph.root, {
+    customInstructions,
     ...serviceAssemblerOptions(request),
     profile: request.profile,
     ...(request.layers ? { layers: request.layers } : {}),
@@ -211,9 +213,10 @@ export function assembleProgramForService(request: ParsedAssemblerServiceRequest
   return serviceAssemblyResult(result);
 }
 
-export function assembleMarsProgramForService(request: ParsedMarsAssemblerServiceRequest): AssemblerServiceResult {
+export function assembleMarsProgramForService(request: ParsedMarsAssemblerServiceRequest, customInstructions?: CustomInstructionRegistry): AssemblerServiceResult {
   const graph = serviceSourceGraph(request);
   const result = assembleMarsSource(graph.root, {
+    customInstructions,
     ...serviceAssemblerOptions(request),
     ...(request.memoryConfiguration ? { memoryConfiguration: request.memoryConfiguration } : {}),
     ...(request.delayedBranching !== undefined ? { delayedBranching: request.delayedBranching } : {}),

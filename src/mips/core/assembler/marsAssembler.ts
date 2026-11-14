@@ -8,7 +8,7 @@ import { encodeMarsIntegerInstruction, marsIntegerWork } from './marsIntegerPseu
 
 export interface MarsAssemblerOptions extends Pick<CourseAssemblerOptions,
   'sourceResolver' | 'sourceLimits' | 'maximumMacroDepth' | 'maximumExpandedInstructions'
-  | 'maximumPseudoInstructionsPerStatement' | 'maximumSegmentBytes'> {
+  | 'maximumPseudoInstructionsPerStatement' | 'maximumSegmentBytes' | 'customInstructions'> {
   readonly memoryConfiguration?: MarsMemoryConfiguration;
   readonly delayedBranching?: boolean;
 }
@@ -19,6 +19,7 @@ export function assembleMarsSource(root: SourceUnit, options: MarsAssemblerOptio
   return assembleCourseSource(root, {
     ...options,
     profile: 'P7',
+    customInstructionMode: 'mars',
     layers: ['required', 'commonExtensions', 'marsCompatibility'],
     sectionLayout: memory.sectionLayout,
     compactAddresses: memory.configuration !== 'Default',

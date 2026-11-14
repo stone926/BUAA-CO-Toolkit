@@ -690,7 +690,7 @@ function legacyExecutionBindingIssue(
   expectedSourceFile: string
 ): string | undefined {
   const binding = assembly.executionBinding;
-  if (!binding) return 'assembler 未返回 source-reassembly executionBinding';
+  if (!binding || binding.kind !== 'source-reassembly') return 'assembler 未返回 source-reassembly executionBinding';
   if (binding.providerId !== LEGACY_MARS_DESCRIPTOR.id) {
     return `executionBinding providerId 错误：${binding.providerId}`;
   }

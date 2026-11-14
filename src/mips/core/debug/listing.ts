@@ -2,6 +2,7 @@
 import type { ProgramImage, ProgramSegment, SourceMapEntry, SourceUnit } from '../api';
 import type { DebugMode } from './api';
 import { disassembleDebugInstruction } from './disassembly';
+import type { CustomInstructionRegistry } from '../custom/registry';
 
 export interface DebugListingSource { readonly id: string; readonly name: string; readonly line: number; readonly text: string; readonly startOffset: number; readonly endOffset?: number }
 export interface DebugListingRow { readonly address: number; readonly word: number; readonly instruction: string; readonly source?: DebugListingSource }
@@ -14,7 +15,7 @@ export class DebugListing {
   private readonly origins = new Map<number, SourceMapEntry>();
   private readonly sources = new Map<string, ListingSource>();
 
-  constructor(image: ProgramImage, sources: readonly SourceUnit[], private readonly mode: DebugMode) {
+  constructor(image: ProgramImage, sources: readonly SourceUnit[], private readonly mode: DebugMode, private readonly customInstructions?: CustomInstructionRegistry) {
     let count = 0;
     this.segments = image.segments.filter(segment => segment.name === 'text' || segment.name === 'ktext')
       .slice().sort((a, b) => a.baseAddress - b.baseAddress).map(segment => {
@@ -44,7 +45,7 @@ export class DebugListing {
       for (let index = from; index < to; index++) {
         const address = item.segment.baseAddress + index * 4, word = item.segment.words[index];
         const source = this.sourceAtAddress(address);
-        result.push({ address, word, instruction: disassembleDebugInstruction(word, address, this.mode), ...(source ? { source } : {}) });
+        result.push({ address, word, instruction: disassembleDebugInstruction(word, address, this.mode, this.customInstructions), ...(source ? { source } : {}) });
       }
     }
     return result;

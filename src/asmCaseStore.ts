@@ -98,6 +98,8 @@ import { commitEventsCanonical } from './mips/core/events/commitEvent';
 import { parseStructuredExecutionEvidence } from './mips/replay/structuredExecutionEvidence';
 import { sourceUnitsUseP7RiInstruction } from './courseTesting/p7RiInstruction';
 import { recordContinuousAsmCaseOutcome } from './courseTesting/continuousCaseRetention';
+import { captureCaseScriptInstructions, loadCaseScriptInstructions } from './courseTesting/scriptInstructionSnapshot';
+import { assertScriptArtifactMatches, scriptInstructionArtifact } from './mips/replay/scriptInstructionArtifact';
 
 export {
   discardContinuousGeneratedAsmCase,
@@ -136,6 +138,8 @@ export interface CreateAsmCaseOptions {
   source?: AsmCaseSource;
   stdin?: vscode.Uri;
   resource?: vscode.Uri;
+  /** Original ASM/ISA workspace, independent of the CPU workspace that owns the case. */
+  engineResource?: vscode.Uri;
   /** Source/include containment root, independent of the CPU workspace that owns the case. */
   sourceRoot?: vscode.Uri;
   createdAt?: Date;
@@ -223,6 +227,10 @@ export async function createAsmCaseFromAsm(
   if (options.metadata) {
     manifest = mergeAsmCaseMetadata(manifest, options.metadata);
   }
+  const instructionResource = options.engineResource ?? asm;
+  const instructionRoot = vscode.workspace.getWorkspaceFolder?.(instructionResource)?.uri.fsPath ?? path.dirname(instructionResource.fsPath);
+  manifest = await captureCaseScriptInstructions(paths.caseDir, manifest, instructionRoot,
+    options.enginePlan?.primaryEngineId === 'custom-mars' ? null : options.enginePlan?.scriptInstructions);
   const manifestUri = vscode.Uri.file(paths.manifest);
   await assertContainedDirectoryPath(root, paths.caseDir);
   await writeManifestAtomic(paths.manifest, manifest);
@@ -298,6 +306,8 @@ export async function createAsmCaseFromText(
   if (options.metadata) {
     manifest = mergeAsmCaseMetadata(manifest, options.metadata);
   }
+  manifest = await captureCaseScriptInstructions(paths.caseDir, manifest, root,
+    options.enginePlan?.primaryEngineId === 'custom-mars' ? null : options.enginePlan?.scriptInstructions);
   const manifestUri = vscode.Uri.file(paths.manifest);
   await assertContainedDirectoryPath(root, paths.caseDir);
   await writeManifestAtomic(paths.manifest, manifest);
@@ -349,6 +359,7 @@ export async function prepareAsmCaseMachineCode(
   );
   const invocation = await assembleWithPreflight(services, {
     sourceUri: asmCase.sourceAsm,
+    scriptInstructions: await loadCaseScriptInstructions(asmCase.dir.fsPath, asmCase.manifest),
     resourceUri: options.engineResource ?? vscode.Uri.file(asmCase.manifest.originalAsmPath),
     expectedEngineArtifact: options.expectedEngineArtifact,
     sourcePaths: graph.units.map((unit) => ({ id: unit.id, path: path.join(asmCase.dir.fsPath, ...unit.materializedPath.split('/')) })),
@@ -1601,7 +1612,13 @@ async function persistBuiltinEngineArtifact(
   const caseRoot = path.resolve(asmCase.dir.fsPath);
   const workspaceRoot = path.dirname(path.dirname(path.dirname(caseRoot)));
   const registered = await registerBuiltinArtifactOnce(workspaceRoot, artifact);
-  return { ...registered.identity };
+  const scripts = await loadCaseScriptInstructions(caseRoot, asmCase.manifest);
+  assertScriptArtifactMatches(reported, scripts ?? undefined);
+  if (!scripts) return { ...registered.identity };
+  const scriptArtifact = scriptInstructionArtifact(scripts);
+  const registry = new ImmutableEngineArtifactRegistry(workspaceEngineRegistryRoot(workspaceRoot), workspaceRoot);
+  const scriptRegistered = await registry.registerBytes(scriptArtifact.identity.role!, scriptArtifact.bytes, scriptArtifact.identity.fileName!);
+  return { ...registered.identity, dependencies: [{ ...scriptRegistered.identity }] };
 }
 
 const maximumBuiltinArtifactRegistrationCacheEntries = 64;

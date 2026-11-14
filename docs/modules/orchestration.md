@@ -1,4 +1,4 @@
-# orchestration | src/ | 64 files
+# orchestration | src/ | 66 files
 
 扩展宿主层：生命周期、命令注册、配置读取、Profile 推断、UI、工具链、MIPS/Verilog/Logisim 操作命令与用例存储。**不含**语言智能逻辑（在 `src/language/` 的 LSP Server 端）。这一层只做 VS Code glue，业务逻辑必须落在下面的领域模块里。
 
@@ -76,3 +76,6 @@
 - `templates/templateRegistry.ts` — `resources/templates` 受控占位替换加载器
 - `legacySemanticColorMigration.ts` — 一次性清理旧的全局 semantic token 规则
 - `workflowInputs.ts` / `types.ts` — 文件选择辅助与 `AppServices`/`RunResult`/`ToolDetection` 等公共类型
+
+- `customInstructionCommands.ts` — 创建 JS/TS 示例、本地编辑器 SDK 声明与 noEmit 配置
+- `scriptInstructionLanguage.ts` — 打开 MIPS 文档后定向发现/监听脚本，取消与去抖发布只读 ISA 元数据

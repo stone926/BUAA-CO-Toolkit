@@ -1,0 +1,17 @@
+[
+  {
+    "name": "zero",
+    "rs": 0,
+    "rt": 0
+  },
+  {
+    "name": "positive",
+    "rs": 1,
+    "rt": 0
+  },
+  {
+    "name": "negative",
+    "rs": 4294967295,
+    "rt": 0
+  }
+]

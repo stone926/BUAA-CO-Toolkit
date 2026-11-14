@@ -186,6 +186,7 @@ async function run() {
 
   await require('./extension-host-mars.cjs').verifyMars({ folder, configure, bounded, waitFor });
   await require('./extension-host-mars-workbench.cjs').verifyMarsWorkbench({ folder, configure, bounded, waitFor });
+  await require('./extension-host-script-instructions.cjs').verifyScriptInstructions({ folder, configure, bounded, waitFor });
   await require('./extension-host-asm-smoke.cjs').verifyBuiltinAsm({ folder, configure, bounded, replaceAndSave });
 
   await configure(folder, {

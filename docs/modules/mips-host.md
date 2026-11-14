@@ -1,4 +1,4 @@
-# mips-host | src/mips/host/ | 16 files
+# mips-host | src/mips/host/ | 23 files
 
 懒启动 Worker 宿主。P2–P7 汇编与 P3–P7 课程执行经 `AppServices.mipsRuntime` 在生产路径运行于 Worker；普通 MARS 控制台执行也使用同一 Worker。激活阶段只构造 manager，首次任务才启动 Worker。direct lane 仅用于定向测试/无 runtime host，**不是**运行中 fallback。
 
@@ -23,3 +23,15 @@
 - `debugProtocol.ts` — 输入 syscall 挂起期间的内存/断点 ACK；重复快照复用同一次 IO，不重复提示、不推进指令
 
 `mars-assemble` 使用与课程相同的两遍汇编器；`mars-execute` 使用 MarsSession，并经 progress/ACK 的 response 返回系统调用结果。输入等待也可取消。P7 课程异常/中断 syscall 不经过普通 MARS I/O 服务。
+
+## JS/TS 自定义指令
+
+- `scriptInstructionBundle.ts` — 源闭包、JS 产物、SDK/Node 版本与 canonical 内容指纹
+- `scriptInstructionsCapture.ts` — 有界目录/静态 import 捕获、原生 TS 类型擦除与缓存
+- `scriptInstructions.ts` — 无脚本快速路径、取消、只读检查缓存和绑定 runtime facade
+- `scriptInstructionWorker.ts` — 独立顶层 Worker 入口，正确定位随包资源
+- `scriptInstructionJobs.ts` — Worker 内 ESM/SDK 加载、元数据与共享核心作业分派
+- `scriptInstructionDeterminism.ts` — 回调重复输入检查、访存读重放、效果分离与诊断
+- `scriptGenerationJob.ts` — 有界随机/GPR 生成 DTO 与纯生成器调用
+
+脚本作业与普通共享 Worker 分开；不捆绑 Node/tsc，不依赖私有 VS Code TypeScript。最低 VS Code 1.101，运行时校验原生 API。

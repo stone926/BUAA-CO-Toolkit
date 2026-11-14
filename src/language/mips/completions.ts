@@ -41,6 +41,7 @@ import {
 import { buildMipsAst, MipsExecutableAst } from './ast';
 import { isCourseProjectProfile } from '../../projectProfile';
 import { canonicalRegister } from './resources';
+import { customInstructionsFor, customInstructionFor, customInstructionDisplay } from './customInstructionFacts';
 
 export function getMipsCompletions(document: TextDocument, position: Position, settings: CoSettings, state: MipsServerState): CompletionItem[] {
   const parsed = getCachedMipsParse(document, settings, state);
@@ -86,6 +87,7 @@ export function getMipsCompletions(document: TextDocument, position: Position, s
   }
 
   for (const instruction of Object.values(instructions)) {
+    if (customInstructionFor(document.uri, settings.project.profile, instruction.mnemonic)) continue;
     if (!instructionAvailable(instruction, settings.project.profile)) continue;
     items.push({
       label: instruction.mnemonic,
@@ -98,6 +100,13 @@ export function getMipsCompletions(document: TextDocument, position: Position, s
     });
   }
 
+  for (const metadata of customInstructionsFor(document.uri, settings.project.profile)) {
+    for (const name of [metadata.mnemonic, ...(metadata.aliases ?? [])]) {
+      const instruction = customInstructionDisplay(metadata, name);
+      items.push({ label: name, kind: CompletionItemKind.Keyword, detail: instruction.summary,
+        documentation: { kind: MarkupKind.Markdown, value: '```mipsasm\n' + instruction.formats[0] + '\n```\n' + instruction.description } });
+    }
+  }
   for (const directive of directives) {
     if (!directiveAvailable(directive, settings.project.profile)) continue;
     const item: CompletionItem = {

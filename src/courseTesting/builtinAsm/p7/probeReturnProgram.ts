@@ -17,7 +17,7 @@ const operandAddress = 0x600;
 const witnessAddress = 0x604;
 
 export function generateP7ReturnProbe(options: BuiltinAsmGeneratorOptions): BuiltinAsmGeneratorResult {
-  const instructionSet = resolveBuiltinInstructionSet(options.profile, options.instructionText);
+  const instructionSet = resolveBuiltinInstructionSet(options.profile, options.instructionText, options.customRegistry);
   if (instructionSet.profile !== 'P7') throw new BuiltinAsmGeneratorError('Return probes require P7.');
   const variant = options.probeReturnVariant ?? 'direct';
   if (!automaticReturnVariants.includes(variant)) throw new BuiltinAsmGeneratorError('Unknown return probe variant.');

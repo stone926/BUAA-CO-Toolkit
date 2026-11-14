@@ -1,4 +1,4 @@
-# test-suite | src/test/ | 302 files | 框架: Vitest
+# test-suite | src/test/ | 312 files | 框架: Vitest
 
 `helpers/testTimeouts.ts` 统一测试时限：Vitest 默认单测 60 秒、准备/清理钩子 120 秒，真实 Icarus 子进程 30 秒，给并发编译和大量文件操作预留调度余量；性能回归及专门验证取消/超时行为的用例保留自身预算，不改变生产工具时限。
 
@@ -15,12 +15,12 @@
 | 目录 | 数量 | 重点 |
 | --- | --- | --- |
 | `test/language/` | 98 | MIPS/Verilog/Logisim/common 的 parser、diagnostic、provider 与真实工程语料回归 |
-| `test/`（根） | 59 | 配置/Profile、工具链、进程、报告、侧边栏、模板、fixture 快照 |
-| `test/courseTesting/` | 50 | 生成器、oracle 差分、manifest v1/v2、probe 场景与 DUT 契约 |
-| `test/mipsCore/` | 26 | ISA golden、汇编器、执行器、devices/events 与架构调试会话 |
+| `test/`（根） | 60 | 配置/Profile、工具链、进程、报告、侧边栏、模板、fixture 快照 |
+| `test/courseTesting/` | 53 | 生成器、oracle 差分、manifest v1/v2、probe 场景与 DUT 契约 |
+| `test/mipsCore/` | 27 | ISA golden、汇编器、执行器、devices/events 与架构调试会话 |
 | `test/verilog/` | 20 | 真实 bundled Icarus：语言语义差分、内置诊断正反例、诊断位置、时间尺度、格式化等价性、DM store 契约、runtime/runner/缓存失效 |
 | `test/waveform/` | 11 | VCD 解析、进制与反汇编、视窗/标记/行模型、宿主与面板、设计 dump |
-| `test/mips{Providers,Host,Replay,Cli,Debug}/` | 26 | engine plan、Worker protocol v2/ACK/cancel、bundle 完整性、JSONL CLI 与工作台会话/Worker 边界 |
+| `test/mips{Providers,Host,Replay,Cli,Debug}/` | 31 | engine plan、Worker protocol v2/ACK/cancel、bundle 完整性、JSONL CLI 与工作台会话/Worker 边界 |
 | `test/mips/` | 4 | 跨模块集成 |
 | `test/{hazardAnalysis,helpers,templates,webview}/` | 5 | 冲突分析解析、模板与 Webview 回归 |
 
@@ -104,3 +104,16 @@ MIPS 的 `language/mips/formatting.test.ts` 同时验证格式化前后实际汇
 - **可移植性**：`processCore` 的 stdout/stderr raw-byte cap、UTF-8 chunk 边界、timeout/abort 与子孙进程树；Windows UTF-8 code page manifest；macOS/Linux 的 bundled `-B <lib/ivl>`
 
 - `scripts/verify-internal-mars.mjs` — 源文件/include → 真实 Worker → syscall IO 的独立端到端门禁，另验证 P7 syscall 仍进入 0x4180 内核。运行 `npm run verify:internal-mars`。
+
+## JS/TS 自定义指令门禁
+
+- `src/test/mipsCore/customInstructions.test.ts` — 真实课程语义、编码/别名、annul、BD/EPC 和事务回滚
+- `src/test/mipsHost/scriptInstructions.test.ts` / `src/test/mipsHost/scriptInstructionDeterminism.test.ts` — 原生 JS/TS、中文导入、隔离取消及回调一致性
+- `src/test/mipsProviders/scriptInstructionProviders.test.ts` — 持久快照 → 生产 provider → 结构化写回对拍和预检取消
+- `src/test/courseTesting/scriptInstructionSnapshot.test.ts` — canonical 保存/重读、篡改、引擎依赖与空注册表
+- `src/test/customInstructionLanguage.test.ts` — 工作区隔离、诊断缓存、补全/hover/签名
+- `src/test/courseTesting/scriptRandomGenerator.test.ts` — 混合生成、动态目的、反事实冒险、缩放分支、原生覆盖约束和 RI
+- `src/test/mipsProviders/scriptExerciseIntegration.test.ts` / `src/test/fixtures/customInstructions/README.md` — 全部23份练习、116个边界向量与真实 class 差分；BOMEZ 错误附件显式记录
+- `src/test/mipsProviders/scriptRealCpuIntegration.test.ts` — `CO_CUSTOM_CPU_ROOT` 启用真实 P5 BLZTAL/BONALL 与隔离故障注入
+- `src/test/courseTesting/scriptCustomP7ProbeIntegration.test.ts` — `CO_P7_CPU_ROOT` 启用 JS/TS × Timer/MMIO/返回真实黑盒测试
+- `scripts/extension-host-script-instructions.cjs` — 真实 VS Code 的创建模板、SDK、原生类型擦除、编辑器和运行/导出命令

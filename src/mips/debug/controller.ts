@@ -11,12 +11,14 @@ import type { MarsRuntimeHost } from '../host/marsService';
 import type { captureAssemblyInput } from '../host/sourceInput';
 import type { WorkbenchRequest, WorkbenchState } from './protocol';
 import { initialWorkbenchState, projectSnapshot } from './state';
+import { createCustomInstructionMetadataRegistry } from '../core/custom/registry';
 
 export interface WorkbenchControllerOptions {
   sourcePath: string;
   mode: DebugMode;
   ordinaryMode: Extract<DebugMode, { kind: 'mars' }>;
   runtime: MarsRuntimeHost;
+  captureRuntime?(signal: AbortSignal): Promise<MarsRuntimeHost>;
   capture(): ReturnType<typeof captureAssemblyInput>;
   sourcesCurrent?(sources: readonly SourceUnit[]): Promise<boolean>;
   changed(state: WorkbenchState): void;
@@ -36,8 +38,10 @@ export class MarsWorkbenchController {
   private pendingInput?: (value: string | undefined) => void;
   private closed = false;
   private staleRevision = 0;
+  private runtime: MarsRuntimeHost;
 
   constructor(private readonly options: WorkbenchControllerOptions) {
+    this.runtime = options.runtime;
     this.mode = options.mode;
     this.state = initialWorkbenchState(path.basename(options.sourcePath), this.mode);
   }
@@ -112,7 +116,8 @@ export class MarsWorkbenchController {
       const input = await this.options.capture();
       if (generation !== this.generation || this.closed) return;
       this.sources = input.sources;
-      const result = await this.options.runtime.runJob(this.mode.kind === 'mars'
+      this.runtime = this.options.captureRuntime ? await this.options.captureRuntime(abort.signal) : this.options.runtime;
+      const result = await this.runtime.runJob(this.mode.kind === 'mars'
         ? { kind: 'mars-assemble', payload: { ...input, memoryConfiguration: this.mode.memoryConfiguration, delayedBranching: this.mode.delayedBranching } }
         : { kind: 'assembler-assemble', payload: { ...input, profile: this.mode.profile } }, { signal: abort.signal });
       if (generation !== this.generation || this.closed) return;
@@ -124,7 +129,8 @@ export class MarsWorkbenchController {
       const sourcesCurrent = this.options.sourcesCurrent ? await this.options.sourcesCurrent(this.sources) : revision === this.staleRevision;
       if (generation !== this.generation || this.closed) return;
       this.image = assembly.image;
-      this.listing = new DebugListing(this.image, this.sources, this.mode);
+      this.listing = new DebugListing(this.image, this.sources, this.mode,
+        this.runtime.instructionMetadata ? createCustomInstructionMetadataRegistry(this.runtime.instructionMetadata) : undefined);
       this.state = { ...this.state, sourceChanged: !sourcesCurrent || validationRevision !== this.staleRevision, instructionCount: this.listing.count,
         symbols: this.image.symbols.filter(item => item.value !== undefined).slice(0, 4096)
           .map(item => ({ name: item.name, value: item.value!, segment: item.segment, kind: item.kind })) };
@@ -142,7 +148,7 @@ export class MarsWorkbenchController {
     this.snapshot = undefined;
     this.state = { ...this.state, console: '', inputPrompt: undefined, steps: 0, status: 'assembling', memoryAvailable: false, message: '正在载入调试会话…' };
     this.publish();
-    const client = this.client = new MarsDebugClient(this.options.runtime, this.options.sourcePath, {
+    const client = this.client = new MarsDebugClient(this.runtime, this.options.sourcePath, {
       snapshot: snapshot => {
         if (generation !== this.generation || this.closed) return;
         const previousPc = this.snapshot?.pc;

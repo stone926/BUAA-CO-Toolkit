@@ -7,7 +7,7 @@
   "icon": "icons/logo.png",
   "license": "SEE LICENSE IN LICENSE",
   "engines": {
-    "vscode": "^1.90.0"
+    "vscode": "^1.101.0"
   },
   "categories": [
     "Programming Languages",
@@ -369,6 +369,10 @@
     },
     "commands": [
       {
+        "command": "co.mips.createCustomInstruction",
+        "title": "CO: 创建 JS/TS 自定义指令"
+      },
+      {
         "command": "co.checkToolchain",
         "title": "CO: 检查工具链"
       },
@@ -598,6 +602,9 @@
         }
       ],
       "commandPalette": [
+        {
+          "command": "co.mips.createCustomInstruction"
+        },
         {
           "command": "co.test.runAsmTests"
         },
@@ -1074,8 +1081,8 @@
     "generate:syntaxes": "node scripts/generate-syntaxes.mjs",
     "check:syntaxes": "node scripts/generate-syntaxes.mjs --check",
     "sync:syntaxes": "npm run generate:syntaxes && npm run check:syntaxes",
-    "sync:generated": "npm run generate:project-profiles && npm run sync:isa-catalog && npm run sync:manifest-config && npm run generate:languages && npm run sync:syntaxes && npm run generate:diagnostic-catalog && npm run check:mars-bridge",
-    "check:generated": "npm run check:project-profiles && npm run check:isa-catalog && npm run check:manifest-config && npm run check:languages && npm run check:syntaxes && npm run check:diagnostic-catalog && npm run check:mars-bridge",
+    "sync:generated": "npm run generate:project-profiles && npm run sync:isa-catalog && npm run sync:manifest-config && npm run generate:languages && npm run sync:syntaxes && npm run generate:diagnostic-catalog && node scripts/generate-custom-instruction-sdk.mjs && npm run check:mars-bridge",
+    "check:generated": "npm run check:project-profiles && npm run check:isa-catalog && npm run check:manifest-config && npm run check:languages && npm run check:syntaxes && npm run check:diagnostic-catalog && node scripts/generate-custom-instruction-sdk.mjs --check && npm run check:mars-bridge",
     "verify:generated-tree-clean": "node scripts/verify-generated-tree-clean.mjs",
     "clean:compile": "node scripts/clean-compile-output.mjs",
     "generate:diagnostic-catalog": "node scripts/generate-diagnostic-catalog.mjs",

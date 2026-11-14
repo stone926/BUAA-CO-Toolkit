@@ -1,3 +1,4 @@
+import type { CustomInstructionRegistry } from '../custom/registry';
 // @index mips-core — CLI/Worker 共用的执行与设备周期服务 DTO（固定字宽输出，无宿主依赖）
 import { ProgramImage, ProgramSegment } from '../api';
 import { CourseDeviceBus } from '../devices/deviceBus';
@@ -100,7 +101,7 @@ export interface PreparedCourseExecution {
 }
 
 /** Build the bounded session/image pair shared by the sync, worker and CLI boundaries. */
-export function prepareCourseExecution(request: ExecuteServiceRequest): PreparedCourseExecution {
+export function prepareCourseExecution(request: ExecuteServiceRequest, customInstructions?: CustomInstructionRegistry): PreparedCourseExecution {
   const profile = resolveCourseProfile(request.profile);
   const segments: ProgramSegment[] = request.segments.map((segment) => {
     if (segment.words.length > maximumExecuteSegmentWords) {
@@ -119,6 +120,7 @@ export function prepareCourseExecution(request: ExecuteServiceRequest): Prepared
   });
   const maxSteps = Math.min(request.maxSteps ?? 65_536, maximumExecuteSteps);
   const session = new CourseSystemSession({
+    customInstructions,
     profile,
     image,
     maxSteps,
@@ -194,8 +196,8 @@ export function projectCourseExecutionOutcome(
 }
 
 /** Execute one ProgramImage built from raw segments and project the result. */
-export function executeProgramForService(request: ExecuteServiceRequest): ExecuteServiceResult {
-  const prepared = prepareCourseExecution(request);
+export function executeProgramForService(request: ExecuteServiceRequest, customInstructions?: CustomInstructionRegistry): ExecuteServiceResult {
+  const prepared = prepareCourseExecution(request, customInstructions);
   const outcome = runCourseProgram(prepared.session, {
     ...(request.collectTrace ? { collectTrace: true } : {}),
     ...(request.collectCoverage ? { collectCoverage: true } : {}),
@@ -228,9 +230,10 @@ export interface ExecuteServiceAsyncResult extends ExecuteServiceResult {
  */
 export async function executeProgramForServiceAsync(
   request: ExecuteServiceRequest,
-  hooks: ExecuteServiceAsyncHooks = {}
+  hooks: ExecuteServiceAsyncHooks = {},
+  customInstructions?: CustomInstructionRegistry
 ): Promise<ExecuteServiceAsyncResult> {
-  const prepared = prepareCourseExecution(request);
+  const prepared = prepareCourseExecution(request, customInstructions);
   const session = prepared.session;
   const coverage = request.collectCoverage
     ? new ExecutionCoverageCollector(session.profile)

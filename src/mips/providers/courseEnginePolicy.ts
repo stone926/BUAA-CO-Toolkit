@@ -1,6 +1,7 @@
 // @index mips-providers — phase-6 course engine selection: pure, atomic and fail-closed
 
 import type { MipsEngineMode } from '../../config';
+import type { ScriptInstructionBundle } from '../host/scriptInstructionBundle';
 
 /** Stable provider ids shared by policy, descriptors and replay evidence. */
 export const LEGACY_MARS_ENGINE_ID = 'legacy-mars-configured' as const;
@@ -28,6 +29,8 @@ export interface CourseEnginePlan {
   readonly mode: MipsEngineMode;
   readonly profile?: string;
   readonly primaryEngineId: CourseProviderEngineId;
+  /** Captured once; null records an intentionally empty registry for replay. */
+  readonly scriptInstructions?: ScriptInstructionBundle | null;
   /** Historical plan field; current policy never schedules fork verification. */
   readonly verificationEngineId?: typeof LEGACY_MARS_ENGINE_ID;
 }

@@ -17,6 +17,7 @@ import {
 import { assembleProgramForService, parseAssemblerServiceRequest, assembleMarsProgramForService, parseMarsAssemblerServiceRequest } from '../core/assembler/assemblyService';
 import { executeMarsJob } from './marsJobs';
 import { executeMarsDebugJob } from './debugJob';
+import type { CustomInstructionRegistry } from '../core/custom/registry';
 
 export const mipsWorkerSliceSize = 128;
 export const mipsWorkerMaximumBatch = 65_536;
@@ -36,7 +37,8 @@ export interface WorkerJobExecutionContext {
 export async function executeProductionWorkerJob(
   kind: string,
   payload: unknown,
-  context: WorkerJobExecutionContext
+  context: WorkerJobExecutionContext,
+  customInstructions?: CustomInstructionRegistry
 ): Promise<unknown> {
   switch (kind) {
     case 'ping':
@@ -48,17 +50,17 @@ export async function executeProductionWorkerJob(
     case 'assembler-assemble':
       // Bounded DTO validation shared with the CLI; pure layout runs quickly but
       // keeps the same request shape as the process boundary.
-      return assembleProgramForService(parseAssemblerServiceRequest(payload as Record<string, unknown>));
+      return assembleProgramForService(parseAssemblerServiceRequest(payload as Record<string, unknown>), customInstructions);
     case 'mars-assemble':
-      return assembleMarsProgramForService(parseMarsAssemblerServiceRequest(payload as Record<string, unknown>));
+      return assembleMarsProgramForService(parseMarsAssemblerServiceRequest(payload as Record<string, unknown>), customInstructions);
     case 'mars-execute':
-      return await executeMarsJob(payload, context);
+      return await executeMarsJob(payload, context, customInstructions);
     case 'mars-debug':
-      return await executeMarsDebugJob(payload, context);
+      return await executeMarsDebugJob(payload, context, customInstructions);
     case 'machine-execute':
       // Bounded DTO validation is shared with the CLI; execution then streams
       // CommitEvent slices under worker protocol ACK/backpressure.
-      return await executeMachineJob(payload, context);
+      return await executeMachineJob(payload, context, customInstructions);
     case 'device-cycle-vector':
       return runDeviceCycleVectorForService(parseDeviceVectorSteps(payload));
     default:
@@ -68,7 +70,8 @@ export async function executeProductionWorkerJob(
 
 async function executeMachineJob(
   payload: unknown,
-  context: WorkerJobExecutionContext
+  context: WorkerJobExecutionContext,
+  customInstructions?: CustomInstructionRegistry
 ): Promise<unknown> {
   const request = parseExecuteServiceRequest(payload);
   return await executeProgramForServiceAsync(request, {
@@ -77,7 +80,7 @@ async function executeMachineJob(
       await context.emitProgress([...events]);
     },
     retainEvents: false
-  });
+  }, customInstructions);
 }
 
 async function executeDecodeBatch(payload: unknown, context: WorkerJobExecutionContext): Promise<unknown> {

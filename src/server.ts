@@ -78,6 +78,7 @@ import {
   MipsServerState
 } from './language/mips/service';
 import { mipsSemanticTokenTypes } from './language/mips/resources';
+import { setCustomInstructionFacts } from './language/mips/customInstructionFacts';
 import {
   getVerilogCodeActions,
   getVerilogCompletions,
@@ -372,6 +373,14 @@ connection.onDidChangeConfiguration((change) => {
     verilogIndex.configureProjects(state.workspaceFolders?.map((folder) => folder.uri) ?? [], settings.verilog.projects);
     return validateAllDocuments();
   });
+});
+
+connection.onNotification('co/customInstructions', (params: { rootUri: string; instructions: import('./mips/core/custom/api').CustomInstructionMetadata[] }) => {
+  try {
+    setCustomInstructionFacts(params.rootUri, params.instructions);
+    clearMipsParseCache(); clearMipsSemanticTokenCache(); refreshSemanticTokens();
+    void validateDocuments(document => document.languageId === languageIds.mips);
+  } catch (error) { connection.console.error(`自定义指令元数据无效：${String(error)}`); }
 });
 
 connection.onDidChangeWatchedFiles((params) => {

@@ -137,7 +137,10 @@ describe('course machine-code validation', () => {
 
     expect(validateCourseMachineCode('P7', 'fc000000\n0000003f\n', asm, true)).toEqual([]);
     expect(validateCourseMachineCode('P7', 'fc000000\n0000003f\n', asm, false)).toHaveLength(2);
-    expect(validateCourseMachineCode('P7', '0000003e\n', '.text\n.word 0x0000003e\n', true)).toHaveLength(1);
+    expect(validateCourseMachineCode('P7', '0001003e\n', '.text\n.word 0x0001003e\n', true)).toHaveLength(1);
+    expect(validateCourseMachineCode('P7', '0000003e\n', '.text\n.word 0x0000003e\n', true)).toEqual([]);
+    expect(validateCourseMachineCode('P7', '0000003e\n', '.text\n.word 0x0000003e\n', false)).toHaveLength(1);
+    expect(validateCourseMachineCode('P7', '0000003e\n', '.text\n.word 0x0000003f\n', true)).toHaveLength(1);
     expect(validateCourseMachineCode('P7', 'fc000000\n', '.data\n.word 0xfc000000\n', true)).toHaveLength(1);
     expect(validateCourseMachineCode('P7', 'fc000000\n', '.text\n.word 0x0000003f\n', true)).toHaveLength(1);
   });

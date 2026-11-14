@@ -6,6 +6,8 @@ import {
 } from './randomBody';
 import { generateP7ProbeAsmTestCase } from './p7/probeEmitter';
 import { generateP7ReturnProbe } from './p7/probeReturnProgram';
+import { avoidCustomP7RiCollisions } from '../p7RiWords';
+import { assertCustomGeneratorNativeDependencies, generatedSourceMnemonics } from './customGeneratorCompatibility';
 
 export {
   BuiltinAsmGeneratorError,
@@ -34,6 +36,15 @@ export type {
 } from './types';
 
 export function generateBuiltinAsmTestCase(options: BuiltinAsmGeneratorOptions): BuiltinAsmGeneratorResult {
+  const result = generateBuiltinAsmProgram(options);
+  if (options.p7StressMode === 'probe' && options.profile === 'P7') {
+    assertCustomGeneratorNativeDependencies(options.customRegistry, 'P7', generatedSourceMnemonics(result.text));
+  }
+  return options.profile === 'P7' && options.customRegistry
+    ? { ...result, text: avoidCustomP7RiCollisions(result.text, options.customRegistry) } : result;
+}
+
+function generateBuiltinAsmProgram(options: BuiltinAsmGeneratorOptions): BuiltinAsmGeneratorResult {
   const mode = options.profile === 'P7' ? (options.p7StressMode ?? 'anchor') : 'off';
   if (mode === 'probe') {
     if (options.probeShard === 'return') return generateP7ReturnProbe(options);

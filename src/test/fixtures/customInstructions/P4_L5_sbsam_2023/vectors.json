@@ -1,0 +1,57 @@
+[
+  {
+    "name": "byte-0",
+    "rs": 0,
+    "rt": 2,
+    "memory": 2163255893,
+    "immediate": 0
+  },
+  {
+    "name": "byte-1",
+    "rs": 0,
+    "rt": 2,
+    "memory": 2163255893,
+    "immediate": 1
+  },
+  {
+    "name": "byte-2",
+    "rs": 0,
+    "rt": 2,
+    "memory": 2163255893,
+    "immediate": 2
+  },
+  {
+    "name": "byte-3",
+    "rs": 0,
+    "rt": 2,
+    "memory": 2163255893,
+    "immediate": 3
+  },
+  {
+    "name": "nonzero-mask",
+    "rs": 4294965248,
+    "rt": 2,
+    "memory": 2163255893,
+    "immediate": 2048,
+    "destinationValue": 2,
+    "expectedMemory": 2163255810
+  },
+  {
+    "name": "rotated-nonzero-mask",
+    "rs": 4294967281,
+    "rt": 2,
+    "memory": 2163255893,
+    "immediate": 15,
+    "destinationValue": 32768,
+    "expectedMemory": 2163255809
+  },
+  {
+    "name": "wrapping-mask-upper-byte",
+    "rs": 32770,
+    "rt": 2,
+    "memory": 2163255893,
+    "immediate": -32768,
+    "destinationValue": 287454020,
+    "expectedMemory": 2156440149
+  }
+]

@@ -1,0 +1,46 @@
+[
+  {
+    "name": "byte-0",
+    "rs": 0,
+    "rt": 2,
+    "memory": 2163255893,
+    "immediate": 0
+  },
+  {
+    "name": "byte-1",
+    "rs": 0,
+    "rt": 2,
+    "memory": 2163255893,
+    "immediate": 1
+  },
+  {
+    "name": "byte-2",
+    "rs": 0,
+    "rt": 2,
+    "memory": 2163255893,
+    "immediate": 2
+  },
+  {
+    "name": "byte-3",
+    "rs": 0,
+    "rt": 2,
+    "memory": 2163255893,
+    "immediate": 3
+  },
+  {
+    "name": "zero-destination",
+    "rs": 0,
+    "rt": 2,
+    "memory": 2163255893,
+    "immediate": 3,
+    "destinationValue": 11
+  },
+  {
+    "name": "last-even-destination",
+    "rs": 0,
+    "rt": 2,
+    "memory": 4294967295,
+    "immediate": 0,
+    "destinationValue": 31
+  }
+]

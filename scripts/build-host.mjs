@@ -11,6 +11,7 @@ const entryPoints = {
   extension: 'src/extension.ts',
   server: 'src/server.ts',
   'mips/host/workerMain': 'src/mips/host/workerMain.ts',
+  scriptInstructionWorker: 'src/mips/host/scriptInstructionWorker.ts',
   'mips/cli/main': 'src/mips/cli/main.ts',
   // Public helper exports exercised against the unpacked VSIX by the Icarus gate.
   moduleUtils: 'src/language/verilog/moduleUtils.ts',

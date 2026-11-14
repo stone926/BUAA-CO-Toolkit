@@ -1,3 +1,4 @@
+import type { CustomInstructionRegistry } from '../custom/registry';
 // @index mips-core — Pure interactive debugger commands, snapshots and memory pages
 import type { ProgramImage } from '../api';
 import type { CourseProfile } from '../generated/isaCatalog';
@@ -10,6 +11,7 @@ export type DebugMode =
   | { readonly kind: 'course'; readonly profile: CourseProfile };
 export interface DebugMemoryRequest { readonly address: number; readonly words?: number }
 export interface DebugSessionOptions {
+  readonly customInstructions?: CustomInstructionRegistry;
   readonly image: ProgramImage;
   readonly mode: DebugMode;
   readonly maxSteps?: number;

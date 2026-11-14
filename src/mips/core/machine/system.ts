@@ -1,3 +1,4 @@
+import type { CustomInstructionRegistry } from '../custom/registry';
 // @index mips-core — CourseSystemSession：组合架构 step 与显式设备周期推进（不伪造时间映射）
 import { ProgramImage } from '../api';
 import {
@@ -44,6 +45,7 @@ export type DeviceSchedule =
   | { readonly kind: 'timeline'; readonly entries: readonly DeviceTimelineEntry[] };
 
 export interface CourseSystemSessionOptions {
+  readonly customInstructions?: CustomInstructionRegistry;
   readonly profile: CourseExecutionProfile;
   readonly image: ProgramImage;
   readonly layers?: readonly InstructionLayer[];
@@ -76,6 +78,7 @@ export class CourseSystemSession {
       })
       : undefined;
     this.machine = new MachineSession({
+      customInstructions: options.customInstructions,
       profile,
       image: options.image,
       ...(options.layers ? { layers: options.layers } : {}),

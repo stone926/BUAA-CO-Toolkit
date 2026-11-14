@@ -1,4 +1,4 @@
-# mips-core | src/mips/core/ | 65 files
+# mips-core | src/mips/core/ | 72 files
 
 纯 TypeScript MIPS 引擎核心：ISA 编解码、两遍课程汇编器、架构执行器与设备模型。**零** VS Code / LSP / 文件系统 / Worker 依赖（边界由 `scripts/check-module-boundaries.mjs` 检查）。汇编器与执行器通过不可变 `ProgramImage` 连接，因此可各自独立验证。
 
@@ -97,3 +97,13 @@
 - `debug/listing.ts` / `debug/disassembly.ts` — 分页指令列表、源码位置映射与反汇编，复用汇编器/ISA/COP1 指令事实
 
 工作台调试观察架构状态，不提供反向单步或状态编辑，也不推演 Timer 周期或外部中断。P3–P6 课程模式不调用普通 MARS syscall 服务；P7 的 `syscall` 仍按课程异常进入 `0x4180`，普通 MARS 模式才会按 `$v0` 处理系统服务。
+
+## 自定义脚本 ISA
+
+- `custom/api.ts` — JS/TS 公共 SDK、操作数/效果与 generation/timing 契约
+- `custom/registry.ts` — 不可变分模式注册表、编码冲突/别名与仅元数据视图
+- `custom/metadataValidation.ts` — 字段、访问集合、生成配方和冒险阶段校验
+- `custom/bits.ts` — SDK 固定位宽运算与扩展
+- `custom/assembler.ts` — 复用两遍汇编的自定义操作数、标签/数字位移与编码
+- `custom/effects.ts` — 执行器/生成器共用的效果结构校验
+- `custom/evaluate.ts` — 只读求值、事务访存、条件写/动态目的、annul 与异常阶段归一化

@@ -1,0 +1,44 @@
+[
+  {
+    "name": "byte-0",
+    "rs": 0,
+    "rt": 2,
+    "memory": 2163255893,
+    "immediate": 0
+  },
+  {
+    "name": "byte-1",
+    "rs": 0,
+    "rt": 2,
+    "memory": 2163255893,
+    "immediate": 1
+  },
+  {
+    "name": "byte-2",
+    "rs": 0,
+    "rt": 2,
+    "memory": 2163255893,
+    "immediate": 2
+  },
+  {
+    "name": "byte-3",
+    "rs": 0,
+    "rt": 2,
+    "memory": 2163255893,
+    "immediate": 3
+  },
+  {
+    "name": "ones-threshold",
+    "rs": 0,
+    "rt": 2,
+    "memory": 16711935,
+    "immediate": 0
+  },
+  {
+    "name": "zero-fallback-link",
+    "rs": 0,
+    "rt": 2,
+    "memory": 0,
+    "immediate": 0
+  }
+]

@@ -1,0 +1,26 @@
+[
+  {
+    "name": "immediate-0",
+    "rs": 2271560481,
+    "rt": 2,
+    "immediate": 0
+  },
+  {
+    "name": "immediate-1",
+    "rs": 2271560481,
+    "rt": 2,
+    "immediate": 1
+  },
+  {
+    "name": "immediate-16",
+    "rs": 2271560481,
+    "rt": 2,
+    "immediate": 16
+  },
+  {
+    "name": "immediate-31",
+    "rs": 2271560481,
+    "rt": 2,
+    "immediate": 31
+  }
+]

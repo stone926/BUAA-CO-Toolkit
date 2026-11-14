@@ -188,6 +188,11 @@ export function handleWorkerInboundMessageForTest(raw: unknown): void {
 
 /** Install/remove a bounded test handler without exposing production registration. */
 export function setWorkerJobHandlerForTest(kind: string, handler: WorkerJobHandler | undefined): void {
+  registerWorkerJobHandler(kind, handler);
+}
+
+/** Dedicated entry points install additional handlers before receiving requests. */
+export function registerWorkerJobHandler(kind: string, handler: WorkerJobHandler | undefined): void {
   if (handler) {
     jobHandlers.set(kind, handler);
   } else {

@@ -1,0 +1,26 @@
+[
+  {
+    "name": "normal",
+    "rs": 1,
+    "rt": 2,
+    "immediate": 2
+  },
+  {
+    "name": "negative-overflow",
+    "rs": 2147483648,
+    "rt": 2,
+    "immediate": 0
+  },
+  {
+    "name": "high-immediate",
+    "rs": 2147483647,
+    "rt": 2,
+    "immediate": 65535
+  },
+  {
+    "name": "zero-destination",
+    "rs": 0,
+    "rt": 2,
+    "immediate": 32768
+  }
+]

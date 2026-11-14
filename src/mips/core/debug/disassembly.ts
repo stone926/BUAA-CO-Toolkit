@@ -5,9 +5,27 @@ import { marsFpArithmetic, marsFpComparison, marsFpMemoryOpcodes, marsFpRounding
 import { matchExactInstruction } from '../isa/decoder';
 import { hex8Address, signExtend16, u32 } from '../values';
 import type { DebugMode } from './api';
+import type { CustomInstructionRegistry } from '../custom/registry';
 const gprName = (number: number): string => gprNames[number].names[0];
 
-export function disassembleDebugInstruction(word: number, address: number, mode: DebugMode): string {
+export function disassembleDebugInstruction(word: number, address: number, mode: DebugMode, customInstructions?: CustomInstructionRegistry): string {
+  const customMode = mode.kind === 'mars' ? 'mars' : mode.profile;
+  const custom = customInstructions?.decode(word, customMode);
+  if (custom) {
+    const signed = (field: string, value: number): number => {
+      const width = customInstructions!.fields(custom.definition.mnemonic, customMode).find(item => item.name === field)!.width;
+      return value >= 2 ** (width - 1) ? value - 2 ** width : value;
+    };
+    const operands = custom.definition.operands.map(operand => {
+      if (operand.kind === 'register') return gprName(custom.fields[operand.field]);
+      if (operand.kind === 'memory') return `${operand.signed === false ? custom.fields[operand.offsetField] : signed(operand.offsetField, custom.fields[operand.offsetField])}(${gprName(custom.fields[operand.baseField])})`;
+      const value = custom.fields[operand.field];
+      if (operand.relocation === 'branch') return String(signed(operand.field, value));
+      if (operand.relocation === 'jump') return hex8Address(u32(((address + 4) & 0xf0000000) | (value * 4)));
+      return String(operand.signed ? signed(operand.field, value) : value);
+    });
+    return `${custom.definition.mnemonic}${operands.length ? ` ${operands.join(', ')}` : ''}`;
+  }
   const rs = (word >>> 21) & 31, rt = (word >>> 16) & 31, rd = (word >>> 11) & 31;
   const signedImmediate = signExtend16(word), target = hex8Address(u32(address + 4 + signedImmediate * 4));
   if (mode.kind === 'mars') {

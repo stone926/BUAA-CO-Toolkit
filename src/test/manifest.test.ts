@@ -146,6 +146,7 @@ describe('package manifest', () => {
       .map((item) => item.command);
 
     expect(visible).toEqual([
+      'co.mips.createCustomInstruction',
       'co.test.runAsmTests',
       'co.mips.openWorkbench',
       'co.projectWizard',

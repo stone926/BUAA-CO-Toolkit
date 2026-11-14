@@ -9,8 +9,11 @@ import { MarsConsole, MarsHostIo } from './marsIo';
 import type { WorkerJob, WorkerOutboundMessage } from './workerProtocol';
 import type { RunResult } from '../../types';
 import type { AssemblerDiagnostic } from '../core/assembler/diagnostics';
+import type { ScriptInstructionBundle } from './scriptInstructionBundle';
+import { captureScriptInstructions, createScriptRuntime } from './scriptInstructions';
 
 export interface MarsRuntimeHost {
+  readonly instructionMetadata?: readonly import('../core/custom/api').CustomInstructionMetadata[];
   runJob(job: WorkerJob, options?: {
     signal?: AbortSignal; onProgress?: (batch: unknown[]) => unknown | Promise<unknown>;
   }): Promise<WorkerOutboundMessage>;
@@ -27,11 +30,12 @@ export interface MarsOperationOptions {
   signal?: AbortSignal;
   console?: MarsConsole;
   runtime?: MarsRuntimeHost;
+  scriptInstructions?: ScriptInstructionBundle | null;
 }
 
 /** This mode is ordinary MARS console execution, never the P7 CPU exception oracle. */
 export async function runInternalMars(options: MarsOperationOptions, execute: boolean): Promise<{
-  result: RunResult; image?: ProgramImage; assemblyDiagnostics?: readonly AssemblerDiagnostic[];
+  result: RunResult; image?: ProgramImage; assemblyDiagnostics?: readonly AssemblerDiagnostic[]; scriptInstructions?: ScriptInstructionBundle;
 }> {
   const controller = new AbortController();
   const forwardAbort = () => controller.abort();
@@ -40,6 +44,8 @@ export async function runInternalMars(options: MarsOperationOptions, execute: bo
   let timedOut = false;
   const timer = setTimeout(() => { timedOut = true; controller.abort(); }, options.timeoutMs);
   const output: string[] = [];
+  let runtime = options.runtime;
+  let scripts: ScriptInstructionBundle | undefined;
   const io = new MarsHostIo({
     cwd: path.dirname(options.sourcePath), stdin: options.stdin, signal: controller.signal,
     console: {
@@ -59,11 +65,11 @@ export async function runInternalMars(options: MarsOperationOptions, execute: bo
   };
   const job = async (request: WorkerJob): Promise<unknown> => {
     if (controller.signal.aborted) throw new Error('cancelled');
-    if (!options.runtime) {
+    if (!runtime) {
       const { executeProductionWorkerJob } = await import('./workerJobs');
       return executeProductionWorkerJob(request.kind, request.payload, { signal: controller.signal, emitProgress: progress });
     }
-    const result = await options.runtime.runJob(request, { signal: controller.signal, onProgress: progress });
+    const result = await runtime.runJob(request, { signal: controller.signal, onProgress: progress });
     if (result.kind !== 'result' || !result.ok) {
       throw new Error(result.kind === 'result' ? result.error : 'Invalid MARS Worker result');
     }
@@ -71,22 +77,26 @@ export async function runInternalMars(options: MarsOperationOptions, execute: bo
   };
   try {
     if (controller.signal.aborted) throw new Error('cancelled');
+    scripts = options.scriptInstructions === undefined
+      ? await captureScriptInstructions(options.allowedRoot, { signal: controller.signal })
+      : options.scriptInstructions ?? undefined;
+    if (scripts) runtime = createScriptRuntime(scripts, options.runtime);
     const input = await captureAssemblyInput(options.sourcePath, options.allowedRoot);
     const assembly = await job({ kind: 'mars-assemble', payload: {
       ...input, memoryConfiguration: options.memoryConfiguration, delayedBranching: options.delayedBranching
     } }) as AssemblerServiceResult;
     if (!assembly.ok || !assembly.image) {
-      return { assemblyDiagnostics: assembly.diagnostics,
+      return { assemblyDiagnostics: assembly.diagnostics, scriptInstructions: scripts,
         result: { ...base, stderr: assembly.diagnostics.map((item) => `[${item.code}] ${item.message}`).join('\n') } };
     }
-    if (!execute) return { result: { ...base, ok: true, exitCode: 0 }, image: assembly.image };
+    if (!execute) return { result: { ...base, ok: true, exitCode: 0 }, image: assembly.image, scriptInstructions: scripts };
     const execution = await job({ kind: 'mars-execute', payload: {
       image: assembly.image, memoryConfiguration: options.memoryConfiguration,
       delayedBranching: options.delayedBranching, maxSteps: options.maxSteps ?? 10_000_000
     } }) as { status: string; exitCode?: number; diagnostic?: string };
     await io.finishOutput();
     const ok = execution.status === 'exited';
-    return { image: assembly.image, result: {
+    return { image: assembly.image, scriptInstructions: scripts, result: {
       ...base, ok, stdout: output.join(''), exitCode: execution.exitCode ?? (ok ? 0 : null),
       stderr: execution.diagnostic ?? '', stopReason: execution.status
     } };

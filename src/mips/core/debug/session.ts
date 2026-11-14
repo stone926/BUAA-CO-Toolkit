@@ -32,10 +32,10 @@ export class DebugSession {
     this.memoryPage = parseDebugMemory(options.memory ?? { address: options.mode.kind === 'mars'
       ? getMarsMemoryLayout(options.mode.memoryConfiguration).sectionLayout.data.base : 0 });
     if (options.mode.kind === 'mars') {
-      this.mars = new MarsSession({ image: options.image, ...options.mode, maxSteps });
+      this.mars = new MarsSession({ image: options.image, ...options.mode, maxSteps, customInstructions: options.customInstructions });
       this.machine = this.mars.machine;
     } else {
-      this.machine = new MachineSession({ image: options.image, profile: this.profile, maxSteps });
+      this.machine = new MachineSession({ image: options.image, profile: this.profile, maxSteps, customInstructions: options.customInstructions });
     }
   }
   get done(): boolean { return !['paused', 'running'].includes(this.status); }

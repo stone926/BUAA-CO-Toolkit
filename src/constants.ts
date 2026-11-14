@@ -78,6 +78,7 @@ export const Commands = {
   ToolsOpenAdvanced: 'co.tools.openAdvanced',
 
   Mips: {
+    CreateCustomInstruction: 'co.mips.createCustomInstruction',
     OpenWorkbench: 'co.mips.openWorkbench',
     DisablePseudoWarnings: 'co.mips.disablePseudoWarnings',
     RunCurrentFile: 'co.mips.runCurrentFile',

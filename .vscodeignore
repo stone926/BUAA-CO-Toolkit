@@ -44,6 +44,7 @@ out/**
 !out/extension.js
 !out/server.js
 !out/mips/host/workerMain.js
+!out/scriptInstructionWorker.js
 !out/mips/cli/main.js
 !out/moduleUtils.js
 !out/traceParser.js

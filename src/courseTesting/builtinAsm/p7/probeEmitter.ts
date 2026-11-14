@@ -115,7 +115,7 @@ export function generateP7ProbeAsmTestCase(options: BuiltinAsmGeneratorOptions):
   if (options.profile !== 'P7' as ProjectProfile) {
     throw new BuiltinAsmGeneratorError('P7 probe tests can only be generated for the P7 profile.');
   }
-  const instructionSet = resolveBuiltinInstructionSet(options.profile, options.instructionText);
+  const instructionSet = resolveBuiltinInstructionSet(options.profile, options.instructionText, options.customRegistry);
   if (instructionSet.profile !== 'P7') {
     throw new BuiltinAsmGeneratorError('P7 probe tests can only be generated for the P7 profile.');
   }

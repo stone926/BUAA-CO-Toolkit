@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { URI } from 'vscode-uri';
+import { captureScriptInstructions } from '../../mips/host/scriptInstructions';
+import type { ScriptInstructionBundle } from '../../mips/host/scriptInstructionBundle';
+import type { MipsRuntimeManager } from '../../mips/host/runtimeManager';
 import { createTestServices as services } from '../helpers/appServices';
 import {
   resolveGeneratorRunSetup,
@@ -36,6 +39,7 @@ vi.mock('../../config', () => ({
 vi.mock('../../process', () => ({
   revealOutputChannel: vi.fn()
 }));
+vi.mock('../../mips/host/scriptInstructions', () => ({ captureScriptInstructions: vi.fn(async () => undefined) }));
 
 vi.mock('../../asmCaseStore', () => ({
   createAsmCaseFromText: vi.fn()
@@ -74,6 +78,7 @@ function setup(overrides: Partial<BuiltinGeneratorRunSetup> = {}): BuiltinGenera
 describe('builtin generator workflow', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(captureScriptInstructions).mockResolvedValue(undefined);
     vi.mocked(generateRegisterCoverageAsmTestCase).mockReturnValue({
       profile: 'P7', mode: 'off', text: 'gpr coverage', instructionCount: 127,
       instructionSet: ['add', 'ori', 'sw'], usedInstructions: ['add', 'ori', 'sw'],
@@ -90,6 +95,40 @@ describe('builtin generator workflow', () => {
       probe: undefined
     } as never);
     vi.mocked(createAsmCaseFromText).mockImplementation(async (fileName: string) => mockAsmCase('case-1', fileName));
+  });
+
+  it('captures one script snapshot per session and binds all random/probe cases to the Worker bundle', async () => {
+    const bundle = Object.freeze({ digest: 'frozen-session-bundle' }) as ScriptInstructionBundle;
+    vi.mocked(captureScriptInstructions).mockResolvedValue(bundle);
+    const runScriptJob = vi.fn(async () => ({ kind: 'result', ok: true, payload: {
+      profile: 'P7', text: 'worker generated', instructionCount: 20, instructionSet: ['custom'], usedInstructions: ['custom'],
+      seed: 'worker-seed', interruptSchedule: [], mode: 'anchor'
+    } }));
+    const currentServices = { ...services(), mipsRuntime: { runScriptJob } as unknown as MipsRuntimeManager };
+    const currentSetup = setup({ p7StressMode: 'hybrid', timerInterrupt: true });
+    await runGeneratorAndCollectAsms(currentServices, currentSetup, { revealOutput: false,
+      continuous: { sessionId: 'script-session', iteration: 1 } });
+    await runGeneratorAndCollectAsms(currentServices, currentSetup, { revealOutput: false,
+      continuous: { sessionId: 'script-session', iteration: 2 } });
+    expect(captureScriptInstructions).toHaveBeenCalledTimes(1);
+    expect(generateBuiltinAsmTestCase).not.toHaveBeenCalled();
+    expect(runScriptJob).toHaveBeenCalled();
+    const modes = runScriptJob.mock.calls.map((call) => (call as unknown as [unknown, { payload: { p7StressMode: string } }])[1].payload.p7StressMode);
+    expect(modes).toContain('anchor'); expect(modes).toContain('probe');
+    for (const call of runScriptJob.mock.calls) expect((call as unknown as [unknown])[0]).toBe(bundle);
+    for (const call of vi.mocked(createAsmCaseFromText).mock.calls) {
+      expect(call[2]?.enginePlan?.scriptInstructions).toBe(bundle);
+      expect(Object.isFrozen(call[2]?.enginePlan)).toBe(true);
+    }
+    expect(vi.mocked(createAsmCaseFromText).mock.calls.some((call) => call[2]?.metadata?.['source.seed'] === 'worker-seed')).toBe(true);
+  });
+
+  it('freezes an empty registry in the engine plan for the entire generation session', async () => {
+    const currentSetup = setup();
+    await runGeneratorAndCollectAsms(services(), currentSetup, { revealOutput: false });
+    await runGeneratorAndCollectAsms(services(), currentSetup, { revealOutput: false });
+    expect(captureScriptInstructions).toHaveBeenCalledTimes(1);
+    for (const call of vi.mocked(createAsmCaseFromText).mock.calls) expect(call[2]?.enginePlan?.scriptInstructions).toBeNull();
   });
 
   it('always resolves the strongest builtin policy even when the workspace rollback is mars', async () => {

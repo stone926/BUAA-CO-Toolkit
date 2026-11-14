@@ -11,6 +11,7 @@ import { isMarsMemoryConfiguration } from '../core/profiles/marsMemoryLayout';
 import type { DebugMode } from '../core/debug/api';
 import { imageSegmentWords, wordsToHexText } from '../core/assembler/artifacts';
 import { writeFileAtomicReplace } from '../replay/atomicFile';
+import { captureScriptInstructions, createScriptRuntime, inspectScriptInstructions } from '../host/scriptInstructions';
 import { buildMarsWorkbenchHtml } from './html';
 import { parseWorkbenchRequest } from './messages';
 import { captureWorkbenchSource, showAssemblyDiagnostics, workbenchSourcesCurrent } from './source';
@@ -46,6 +47,10 @@ export function registerMarsWorkbench(context: vscode.ExtensionContext, services
     const controller = new MarsWorkbenchController({
       sourcePath: uri.fsPath, mode: isCourseProfile(profile) ? { kind: 'course', profile } : ordinaryMode,
       ordinaryMode, runtime: services.mipsRuntime,
+      captureRuntime: async signal => {
+        const bundle = await captureScriptInstructions(folder?.uri.fsPath ?? path.dirname(uri.fsPath), { signal });
+        return bundle ? { ...createScriptRuntime(bundle, services.mipsRuntime), instructionMetadata: await inspectScriptInstructions(bundle, services.mipsRuntime, undefined, { signal }) } : services.mipsRuntime!;
+      },
       capture: () => captureWorkbenchSource(uri, folder?.uri.fsPath ?? path.dirname(uri.fsPath)),
       sourcesCurrent: workbenchSourcesCurrent,
       changed: state => {
@@ -60,7 +65,8 @@ export function registerMarsWorkbench(context: vscode.ExtensionContext, services
     let disposed = false;
     let exportBusy = false;
     const resources: vscode.Disposable[] = [diagnostics];
-    const affectsSource = (candidate: vscode.Uri) => candidate.toString() === uri.toString()
+    const affectsSource = (candidate: vscode.Uri) => candidate.toString().startsWith(vscode.Uri.joinPath(folder?.uri ?? vscode.Uri.file(path.dirname(uri.fsPath)), '.co/custom-instructions').toString() + '/')
+      || candidate.toString() === uri.toString()
       || controller.sources.some(source => source.uri && vscode.Uri.parse(source.uri).toString() === candidate.toString());
     const capturedSource = (candidate: vscode.Uri) => controller.sources.find(source => source.uri && vscode.Uri.parse(source.uri).toString() === candidate.toString());
     resources.push(vscode.workspace.onDidChangeTextDocument(event => {
@@ -69,6 +75,7 @@ export function registerMarsWorkbench(context: vscode.ExtensionContext, services
     // Includes may use arbitrary extensions; filter notifications against the captured closure.
     const watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(folder?.uri ?? vscode.Uri.file(path.dirname(uri.fsPath)), '**/*'));
     resources.push(watcher, watcher.onDidChange(changed => {
+      if (affectsSource(changed) && !capturedSource(changed)) { controller.markSourceChanged(); return; }
       const source = capturedSource(changed);
       if (!source) return;
       void readBoundedRegularFile(changed.fsPath, { maximumBytes: 8 * 1024 * 1024, label: 'MARS source update' }).then(bytes => {

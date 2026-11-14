@@ -35,6 +35,7 @@ import {
 import { MipsServerState } from './state';
 import { getMipsWordRange } from './text';
 import { isCourseProjectProfile } from '../../projectProfile';
+import { customInstructionFor, customInstructionDisplay } from './customInstructionFacts';
 
 export function getMipsHover(document: TextDocument, position: Position, settings: CoSettings, state: MipsServerState): Hover | undefined {
   const parsed = getCachedMipsParse(document, settings, state);
@@ -63,6 +64,11 @@ export function getMipsHover(document: TextDocument, position: Position, setting
   }
 
   const instruction = instructions[word.toLowerCase()];
+  const custom = customInstructionFor(document.uri, settings.project.profile, word);
+  if (custom) {
+    const display = customInstructionDisplay(custom, word);
+    return { range: wordRange, contents: { kind: MarkupKind.Markdown, value: '```mipsasm\n' + display.formats[0] + '\n```\n' + display.description } };
+  }
   if (instruction) {
     const parsedInstruction = parsed.instructions.find((line) => rangesEqual(line.range, wordRange));
     const details = instructionHoverMarkdown(instruction, parsedInstruction);

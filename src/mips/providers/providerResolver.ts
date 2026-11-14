@@ -13,6 +13,7 @@ import {
 } from './contracts';
 import { BuiltinTsExecutionProvider } from './builtinExecutionProvider';
 import { BuiltinTsAssemblerProvider } from './builtinAssemblerProvider';
+import { ScriptAwareAssemblerProvider, ScriptAwareExecutionProvider } from './scriptInstructionProviders';
 import { CustomMarsAssemblerProvider, type CustomMarsSessions } from './customMarsAssemblerProvider';
 import { CustomMarsExecutionProvider } from './customMarsExecutionProvider';
 import { needsCustomMars } from './customMarsCommon';
@@ -53,8 +54,8 @@ export function registerDefaultProviders(services: AppServices): ProviderRegistr
     return existing;
   }
   // Resolution follows the immutable plan's id and never relies on array order.
-  const builtinAssemblerProvider = new BuiltinTsAssemblerProvider(services.mipsRuntime);
-  const builtinExecutionProvider = new BuiltinTsExecutionProvider(services.mipsRuntime);
+  const builtinAssemblerProvider = new ScriptAwareAssemblerProvider(services.mipsRuntime);
+  const builtinExecutionProvider = new ScriptAwareExecutionProvider(services.mipsRuntime);
   const customSessions: CustomMarsSessions = new WeakMap();
   const registry = {
     assemblerProviders: [builtinAssemblerProvider, new CustomMarsAssemblerProvider(customSessions)],
@@ -76,7 +77,8 @@ export function setProviderRegistry(registry: ProviderRegistry | undefined): voi
 export function resolveAssemblerProvider(
   services: AppServices,
   request: AssembleRequest,
-  selection?: CourseEnginePlan
+  selection?: CourseEnginePlan,
+  context?: ProviderRunContext
 ): Promise<{
   provider: MipsAssemblerProvider;
   preflight: ProviderPreflight;
@@ -93,14 +95,16 @@ export function resolveAssemblerProvider(
     effectiveSelection.primaryEngineId,
     request,
     'assembler',
-    effectiveSelection
+    effectiveSelection,
+    context
   );
 }
 
 export function resolveExecutionProvider(
   services: AppServices,
   request: ExecuteRequest,
-  selection?: CourseEnginePlan
+  selection?: CourseEnginePlan,
+  context?: ProviderRunContext
 ): Promise<{
   provider: MipsExecutionProvider;
   preflight: ProviderPreflight;
@@ -126,7 +130,8 @@ export function resolveExecutionProvider(
     effectiveSelection.primaryEngineId,
     request,
     'execution',
-    effectiveSelection
+    effectiveSelection,
+    context
   );
 }
 /** Resolve a specific assembler engine for explicit phase-5/full-stack runs. */
@@ -194,28 +199,29 @@ async function resolveFirstCapable<R, T extends { preflight(request: R): Provide
 
 async function resolveExactProvider<
   R,
-  T extends { preflight(request: R): ProviderPreflight | Promise<ProviderPreflight> }
->(provider: T, request: R): Promise<{ provider: T; preflight: ProviderPreflight }> {
-  return { provider, preflight: await provider.preflight(request) };
+  T extends { preflight(request: R, context?: ProviderRunContext): ProviderPreflight | Promise<ProviderPreflight> }
+>(provider: T, request: R, context?: ProviderRunContext): Promise<{ provider: T; preflight: ProviderPreflight }> {
+  return { provider, preflight: await provider.preflight(request, context) };
 }
 
 async function resolvePlannedProvider<
   R,
   T extends {
     readonly descriptor: { readonly id: string };
-    preflight(request: R): ProviderPreflight | Promise<ProviderPreflight>;
+    preflight(request: R, context?: ProviderRunContext): ProviderPreflight | Promise<ProviderPreflight>;
   }
 >(
   providers: readonly T[],
   engineId: CourseProviderEngineId,
   request: R,
   kind: 'assembler' | 'execution',
-  selection: CourseEnginePlan
+  selection: CourseEnginePlan,
+  context?: ProviderRunContext
 ): Promise<{ provider: T; preflight: ProviderPreflight; selection: CourseEnginePlan }> {
   const provider = providers.find((candidate) => candidate.descriptor.id === engineId);
   if (provider) {
     return {
-      ...await resolveExactProvider(provider, request),
+      ...await resolveExactProvider(provider, request, context),
       selection
     };
   }
@@ -249,24 +255,30 @@ export async function assembleWithPreflight(
   result?: AssembleResult;
   preflight: ProviderPreflight;
 }> {
+  if (selection?.scriptInstructions !== undefined && request.scriptInstructions === undefined) {
+    request = { ...request, scriptInstructions: selection.scriptInstructions };
+  }
   const { provider, preflight, selection: initialSelection } = await resolveAssemblerProvider(
     services,
     request,
-    selection
+    selection,
+    context
   );
   if (!preflight.ok) {
     return { ok: false, preflight };
   }
   let result = await provider.assemble(request, context);
   if (initialSelection.mode === 'auto' && provider.descriptor.id === BUILTIN_TS_ENGINE_ID
+    && !request.scriptInstructions && !result.scriptInstructions
     && !context?.signal?.aborted && needsCustomMars(result.status, result.assemblyDiagnostics)) {
     const selected = resolveCourseEnginePlan('mars', request.requirements?.profile ?? getProfile(request.sourceUri));
-    const custom = await resolveAssemblerProvider(services, request, selected);
+    const custom = await resolveAssemblerProvider(services, request, selected, context);
     if (!custom.preflight.ok) return { ok: false, preflight: custom.preflight };
     result = await custom.provider.assemble(request, context);
     return { ok: result.ok, result: { ...result, enginePlan: selected }, preflight: custom.preflight };
   }
-  return { ok: result.ok, result, preflight };
+  return { ok: result.ok, result: { ...result, enginePlan: result.executionBinding?.kind === 'script-instructions'
+    ? Object.freeze({ ...initialSelection, scriptInstructions: result.executionBinding.bundle }) : initialSelection }, preflight };
 }
 
 /** Convenience: run preflight, fail closed with a structured result when unsupported. */
@@ -283,7 +295,8 @@ export async function executeWithPreflight(
   const { provider, preflight } = await resolveExecutionProvider(
     services,
     request,
-    selection
+    selection,
+    context
   );
   if (!preflight.ok) {
     return { ok: false, preflight };

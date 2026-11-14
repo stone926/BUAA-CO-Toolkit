@@ -51,7 +51,7 @@
 | mips | `missing-label` | `src/language/mips/parser.ts` |
 | mips | `missing-syscall` | `src/language/mips/parser.ts` |
 | mips | `nested-macro` | `src/language/mips/parser.ts` |
-| mips | `operand-count` | `src/language/mips/instructionValidation.ts` |
+| mips | `operand-count` | `src/language/mips/instructionValidation.ts`, `src/language/mips/parser.ts` |
 | mips | `operand-type` | `src/language/mips/instructionValidation.ts` |
 | mips | `project-instruction` | `src/language/mips/instructionValidation.ts` |
 | mips | `pseudo-instruction:<mnemonic>` | `src/language/mips/instructionValidation.ts` |

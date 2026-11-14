@@ -18,6 +18,7 @@ import {
 import { startLanguageServer, stopLanguageServer } from './languageClient';
 import { registerLogisim } from './logisim';
 import { registerMips } from './mips';
+import { registerCustomInstructionCommands } from './customInstructionCommands';
 import { registerMipsAssemblyCommands } from './mipsCommands';
 import { registerMarsWorkbench } from './mips/debug/workbench';
 import { MipsRuntimeManager } from './mips/host/runtimeManager';
@@ -164,6 +165,7 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 
   registerMips(context, services);
+  registerCustomInstructionCommands(context);
   registerMipsAssemblyCommands(context, services);
   registerMarsWorkbench(context, services);
   // Lazy worker host: construction only; the worker starts on first builtin
