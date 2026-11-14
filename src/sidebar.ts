@@ -9,8 +9,7 @@ import {
   getMachineCode,
   getSimTime,
   getJava,
-  getLogisimJar,
-  getMipsEngine
+  getLogisimJar
 } from './config';
 import {
   buildSidebarModel,
@@ -124,7 +123,7 @@ export class CoSidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
   private createToolModels(profile: ProjectProfile, resource?: vscode.Uri): SidebarToolModel[] {
     const tools: SidebarToolModel[] = [];
     const requiredTools = new Set(
-      getEffectiveRequiredTools(profile, getMipsEngine(resource)).map((tool) => tool.toLowerCase())
+      getEffectiveRequiredTools(profile, 'auto').map((tool) => tool.toLowerCase())
     );
     const showAllTools = profile !== 'auto' && profile !== 'P2' && requiredTools.size === 0;
     if (showAllTools || requiredTools.has('java')) {

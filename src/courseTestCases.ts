@@ -47,10 +47,13 @@ export function asmCaseSourceFromBatchSource(source: CourseTraceBatchSource): As
   return { kind: 'selected' };
 }
 
-export function caseResultFields(asmCase: AsmCase): Pick<NeutralCourseTraceCaseResult, 'caseId' | 'caseManifest' | 'asmSnapshot'> {
+export function caseResultFields(asmCase: AsmCase): Pick<NeutralCourseTraceCaseResult, 'caseId' | 'caseManifest' | 'asmSnapshot' | 'referenceEngine' | 'referenceNote'> {
   return {
     caseId: asmCase.id,
     caseManifest: asmCase.manifestUri.fsPath,
-    asmSnapshot: asmCase.asm.fsPath
+    asmSnapshot: asmCase.asm.fsPath,
+    ...(asmCase.manifest.version === 2 ? { referenceEngine: asmCase.manifest.program.assembler.id,
+      ...(asmCase.manifest.metadata?.['reference.timing'] === 'p7-timer-observed'
+        ? { referenceNote: '本次比较架构写回；Timer 时序由 P7 黑盒 probe 独立检查' } : {}) } : {})
   };
 }

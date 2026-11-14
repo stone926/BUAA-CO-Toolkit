@@ -16,7 +16,19 @@ export function wordsToHexText(words: readonly number[]): string {
 }
 
 export function imageSegmentWords(image: ProgramImage, name: string): readonly number[] {
-  return image.segments.find((segment) => segment.name === name)?.words ?? [];
+  const segments = image.segments.filter((segment) => segmentNameMatches(segment.name, name) && segment.words.length > 0)
+    .sort((left, right) => left.baseAddress - right.baseAddress);
+  if (segments.length < 2) return segments[0]?.words ?? [];
+  const base = segments[0].baseAddress;
+  const end = Math.max(...segments.map((segment) => segment.baseAddress + segment.words.length * 4));
+  if ((end - base) % 4 !== 0 || end - base > 16 * 1024 * 1024) throw new Error('instruction segment layout is unaligned or too large');
+  const words: Array<number | undefined> = new Array((end - base) / 4);
+  for (const segment of segments) for (let index = 0; index < segment.words.length; index++) {
+    const offset = (segment.baseAddress - base) / 4 + index;
+    if (!Number.isInteger(offset) || words[offset] !== undefined) throw new Error('instruction segments overlap or are unaligned');
+    words[offset] = segment.words[index];
+  }
+  return Array.from(words, (word) => word ?? 0);
 }
 
 /**
@@ -91,7 +103,7 @@ export function courseInstructionImageWordsWithOrdinaryHalt(
   }
 
   const textSegments = image.segments.filter((segment) =>
-    segment.name === 'text' && segment.words.length > 0);
+    segmentNameMatches(segment.name, 'text') && segment.words.length > 0);
   if (!textSegments.length && profile !== 'P7') {
     return projected;
   }
@@ -114,7 +126,7 @@ export function courseInstructionImageWordsWithOrdinaryHalt(
     throw new Error('ordinary course dump has no instruction-memory room for the halt loop');
   }
   for (const segment of image.segments) {
-    if (segment.name === 'data' || segment.name === 'text' || segment.words.length === 0) continue;
+    if (segment.name === 'data' || segmentNameMatches(segment.name, 'text') || segment.words.length === 0) continue;
     const segmentStart = (segment.baseAddress - courseInstructionImageBaseAddress) / 4;
     const segmentEnd = segmentStart + segment.words.length;
     if (textEndIndex < segmentEnd && haltEndIndex > segmentStart) {
@@ -142,16 +154,22 @@ export function courseInstructionImageHexText(image: ProgramImage): string {
  * the user text segment; the executor independently enforces the same policy.
  */
 export function findCourseHaltPc(image: ProgramImage, profile: CourseProfile): number | undefined {
-  const segment = image.segments.find((entry) => entry.name === 'text');
-  if (!segment) return undefined;
   const policy = courseExecutionProfiles[profile].halt;
-  const words = segment.words;
   let haltPc: number | undefined;
-  for (let index = words.length - 1; index >= 0; index--) {
-    if ((words[index] >>> 0) !== policy.selfBranchWord) continue;
-    if (policy.requireDelaySlotCommit && (words[index + 1] ?? 0xffff_ffff) !== policy.delaySlotWord) continue;
-    haltPc = (segment.baseAddress + index * 4) >>> 0;
-    break;
+  for (const segment of image.segments) {
+    if (!segmentNameMatches(segment.name, 'text')) continue;
+    const words = segment.words;
+    for (let index = words.length - 1; index >= 0; index--) {
+      if ((words[index] >>> 0) !== policy.selfBranchWord) continue;
+      if (policy.requireDelaySlotCommit && (words[index + 1] ?? 0xffff_ffff) !== policy.delaySlotWord) continue;
+      const pc = (segment.baseAddress + index * 4) >>> 0;
+      haltPc = Math.max(haltPc ?? 0, pc);
+      break;
+    }
   }
   return haltPc;
+}
+
+function segmentNameMatches(actual: string, name: string): boolean {
+  return actual === name || ((name === 'text' || name === 'ktext') && actual.startsWith(`${name}@`));
 }

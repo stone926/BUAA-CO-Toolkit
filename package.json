@@ -489,6 +489,11 @@
         "title": "CO: 打开冲突报告"
       },
       {
+        "command": "co.test.runAsmTests",
+        "title": "CO: 测试用户汇编文件 / 目录",
+        "icon": "$(beaker)"
+      },
+      {
         "command": "co.test.startContinuousGeneratedTraceTests",
         "title": "CO: 启动持续测试",
         "icon": "$(rocket)"
@@ -555,6 +560,11 @@
       ],
       "editor/context": [
         {
+          "command": "co.test.runAsmTests",
+          "when": "resourceLangId == mipsasm",
+          "group": "co@9"
+        },
+        {
           "command": "co.logisim.injectRomIntoCircuit",
           "when": "resourceExtname == .circ || resourceLangId == mipsasm",
           "group": "co@10"
@@ -580,7 +590,17 @@
           "group": "co@12"
         }
       ],
+      "explorer/context": [
+        {
+          "command": "co.waveform.openFile",
+          "when": "resourceExtname == .vcd",
+          "group": "navigation@20"
+        }
+      ],
       "commandPalette": [
+        {
+          "command": "co.test.runAsmTests"
+        },
         {
           "command": "co.mips.openWorkbench",
           "when": "resourceLangId == mipsasm"
@@ -692,13 +712,6 @@
         },
         {
           "command": "co.hazard.openReport"
-        }
-      ],
-      "explorer/context": [
-        {
-          "command": "co.waveform.openFile",
-          "when": "resourceExtname == .vcd",
-          "group": "navigation@20"
         }
       ]
     },
@@ -825,11 +838,18 @@
             "order": 10,
             "default": "java"
           },
+          "co.toolchain.mars": {
+            "type": "string",
+            "description": "仅当 ASM 使用未知或自定义指令时，运行该程序所需的 modded Mars jar 路径。留空时不启用此工具。",
+            "scope": "machine-overridable",
+            "order": 20,
+            "default": ""
+          },
           "co.toolchain.logisim": {
             "type": "string",
             "description": "P0 和 P3 使用的 Logisim jar 路径",
             "scope": "machine-overridable",
-            "order": 20,
+            "order": 30,
             "default": ""
           }
         }
@@ -968,59 +988,6 @@
         "title": "兼容设置（仅已配置用户可见）",
         "order": 100,
         "properties": {
-          "co.toolchain.marsP7": {
-            "type": "string",
-            "description": "旧版本配置的 P7 MARS jar 路径",
-            "deprecationMessage": "MIPS 汇编和运行现由内置引擎提供，此历史路径设置已忽略。请删除此项。",
-            "scope": "machine-overridable",
-            "order": 10
-          },
-          "co.toolchain.mars": {
-            "type": "string",
-            "description": "旧版本配置的外部 MARS jar 路径",
-            "deprecationMessage": "MIPS 汇编和运行现由内置引擎提供，此历史路径设置已忽略。请删除此项。",
-            "scope": "machine-overridable",
-            "order": 20
-          },
-          "co.mips.engine": {
-            "type": "string",
-            "enum": [
-              "auto",
-              "builtin"
-            ],
-            "enumDescriptions": [
-              "自动使用内置课程引擎",
-              "使用内置 TypeScript 汇编器和执行器"
-            ],
-            "description": "P3-P7 课程 MIPS 引擎兼容设置",
-            "deprecationMessage": "P3-P7 课程流程统一使用内置引擎。旧 mars 和 verify-both 值自动按 auto 处理；建议删除此项。",
-            "scope": "resource",
-            "order": 30
-          },
-          "co.mips.delayedBranching": {
-            "type": "string",
-            "enum": [
-              "profile",
-              "on",
-              "off"
-            ],
-            "description": "普通内置 MARS 的延迟槽设置；profile 按项目阶段选择，课程 CPU 测试固定采用课程契约",
-            "deprecationMessage": "兼容普通 MARS 程序的运行偏好；通常使用 profile 默认值。此项不改变课程 CPU 测试语义。",
-            "scope": "resource",
-            "order": 40
-          },
-          "co.mips.memoryConfiguration": {
-            "type": "string",
-            "enum": [
-              "Default",
-              "CompactDataAtZero",
-              "CompactTextAtZero"
-            ],
-            "description": "普通内置 MARS 的内存布局；P3-P7 CPU 测试固定采用课程内存布局",
-            "deprecationMessage": "普通 MARS 默认使用 Default；已有 Compact 程序可以保留对应布局。此项不改变课程 CPU 测试布局。",
-            "scope": "resource",
-            "order": 50
-          },
           "co.run.showCommandBeforeRun": {
             "type": "boolean",
             "description": "手动运行外部工具前显示完整命令",
@@ -1035,16 +1002,6 @@
             "deprecationMessage": "仅为兼容已有超时配置保留。插件会为不同操作使用安全预算；建议删除该设置。",
             "scope": "resource",
             "order": 70
-          },
-          "co.mips.extraArgs": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "旧版本 MARS 命令追加的参数列表",
-            "deprecationMessage": "内置 MIPS 引擎不读取外部 MARS 参数，此历史设置已忽略。请删除此项。",
-            "scope": "resource",
-            "order": 80
           },
           "co.verilog.syntax.external.timeoutMs": {
             "type": "number",
@@ -1105,6 +1062,8 @@
   "scripts": {
     "compile": "npm run sync:generated && npm run clean:compile && tsc -p ./ && npm run build:webview && node scripts/build-host.mjs",
     "build:host": "node scripts/build-host.mjs",
+    "build:mars-bridge": "node scripts/build-mars-bridge.mjs",
+    "check:mars-bridge": "node scripts/check-mars-bridge.mjs",
     "build:webview": "node scripts/build-webview.mjs",
     "vscode:prepublish": "npm run compile -- --production",
     "package:vsix": "npm run sync:generated && node scripts/package-vsix.mjs --target win32-x64",
@@ -1115,8 +1074,8 @@
     "generate:syntaxes": "node scripts/generate-syntaxes.mjs",
     "check:syntaxes": "node scripts/generate-syntaxes.mjs --check",
     "sync:syntaxes": "npm run generate:syntaxes && npm run check:syntaxes",
-    "sync:generated": "npm run generate:project-profiles && npm run sync:isa-catalog && npm run sync:manifest-config && npm run generate:languages && npm run sync:syntaxes && npm run generate:diagnostic-catalog",
-    "check:generated": "npm run check:project-profiles && npm run check:isa-catalog && npm run check:manifest-config && npm run check:languages && npm run check:syntaxes && npm run check:diagnostic-catalog",
+    "sync:generated": "npm run generate:project-profiles && npm run sync:isa-catalog && npm run sync:manifest-config && npm run generate:languages && npm run sync:syntaxes && npm run generate:diagnostic-catalog && npm run check:mars-bridge",
+    "check:generated": "npm run check:project-profiles && npm run check:isa-catalog && npm run check:manifest-config && npm run check:languages && npm run check:syntaxes && npm run check:diagnostic-catalog && npm run check:mars-bridge",
     "verify:generated-tree-clean": "node scripts/verify-generated-tree-clean.mjs",
     "clean:compile": "node scripts/clean-compile-output.mjs",
     "generate:diagnostic-catalog": "node scripts/generate-diagnostic-catalog.mjs",

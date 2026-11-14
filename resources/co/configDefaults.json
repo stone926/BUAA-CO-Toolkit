@@ -1,11 +1,7 @@
 {
   "diagnostics.disabledCodes": [],
   "diagnostics.disabledFileCodes": [],
-  "mips.delayedBranching": "profile",
-  "mips.engine": "auto",
-  "mips.extraArgs": [],
   "mips.instructionTokenMode": "realVsPseudo",
-  "mips.memoryConfiguration": "Default",
   "mips.warnMissingExitSyscall": true,
   "mips.warnPseudoInstruction": true,
   "project.machineCode": "code.txt",
@@ -23,7 +19,6 @@
   "toolchain.java": "java",
   "toolchain.logisim": "",
   "toolchain.mars": "",
-  "toolchain.marsP7": "",
   "toolchain.python": "",
   "verilog.implicitNet.diagnostic": "warning",
   "verilog.implicitNet.ignorePatterns": [

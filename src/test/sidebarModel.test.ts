@@ -238,18 +238,20 @@ describe('sidebar model', () => {
     expect(project.children?.find((item) => item.id === 'project.profile')?.description).toBe('未推断');
   });
 
-  it('exposes exactly the continuous-test start, stop, and history facade without internal details', () => {
+  it('exposes generated tests, user ASM tests, stop, and history without internal details', () => {
     const model = buildSidebarModel(baseContext({ profile: 'P7' }));
     const actions = section(model, '操作');
     const testActions = actions.children?.filter((item) => item.command?.command.startsWith('co.test.')) ?? [];
 
     expect(testActions.map((item) => item.command?.command)).toEqual([
       'co.test.startContinuousGeneratedTraceTests',
+      'co.test.runAsmTests',
       'co.test.stopContinuousTests',
       'co.test.openAsmCaseIndex'
     ]);
     expect(testActions.map((item) => item.label)).toEqual([
       '启动持续测试',
+      '测试用户汇编文件 / 目录',
       '停止持续测试',
       '测试历史 / 失败用例'
     ]);

@@ -33,6 +33,10 @@ isim.log
 
 # Generated source inputs with a compiled runtime equivalent.
 resources/mars/_co_internal_unknown_instruction.java
+resources/mars/bridge/src/**
+resources/mars/bridge/verify.mjs
+resources/mars/bridge/vendor/*.jar
+resources/mars/bridge/vendor/*.pom
 resources/mips/isa.json
 
 # Ship only self-contained entry points; per-file tsc output is for local verification.

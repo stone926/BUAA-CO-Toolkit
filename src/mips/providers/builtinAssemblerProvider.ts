@@ -99,6 +99,7 @@ function isAssemblyProfile(profile: string): profile is CourseProfile | 'P2' {
 }
 
 interface BuiltinAssembleSnapshot {
+  readonly writeOutput: boolean;
   readonly requestFingerprint: string;
   readonly sourceUri: vscode.Uri;
   readonly targetKind: 'userText' | 'kernelText';
@@ -262,11 +263,11 @@ export class BuiltinTsAssemblerProvider implements MipsAssemblerProvider {
       const result = await this.runAssembly(snapshot, units, includes);
 
       if (!result.ok || !result.image) {
-        return this.failureResult(
+        return { ...this.failureResult(
           started,
           snapshot,
           result.diagnostics.map((diagnostic) => `[${diagnostic.code}] ${diagnostic.message}`).join('\n')
-        );
+        ), assemblyDiagnostics: result.diagnostics };
       }
 
       const words = snapshot.targetKind === 'kernelText'
@@ -284,7 +285,7 @@ export class BuiltinTsAssemblerProvider implements MipsAssemblerProvider {
       }
       const outputFile = snapshot.outputFile
         ?? this.defaultOutputFile(snapshot.sourceUri, snapshot.targetKind);
-      await writeFileAtomicReplace(outputFile.fsPath, Buffer.from(wordsToHexText(words), 'utf8'));
+      if (snapshot.writeOutput) await writeFileAtomicReplace(outputFile.fsPath, Buffer.from(wordsToHexText(words), 'utf8'));
 
       const resolvedRun: ResolvedEngineRun = {
         profile: snapshot.profile,
@@ -420,6 +421,7 @@ function snapshotAssembleRequest(
   signal: AbortSignal | undefined
 ): BuiltinAssembleSnapshot {
   return {
+    writeOutput: request.writeOutput !== false,
     requestFingerprint: builtinAssembleRequestFingerprint(request),
     sourceUri: request.sourceUri,
     targetKind: request.target.kind,
@@ -443,6 +445,7 @@ function snapshotAssembleRequest(
 function builtinAssembleRequestFingerprint(request: AssembleRequest): string {
   const profile = request.requirements?.profile ?? getProfile(request.sourceUri);
   return JSON.stringify({
+    writeOutput: request.writeOutput !== false,
     sourceUri: request.sourceUri.toString(),
     target: {
       kind: request.target.kind,

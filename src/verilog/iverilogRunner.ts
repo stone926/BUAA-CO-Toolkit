@@ -103,6 +103,8 @@ export interface IverilogRunOptions {
   simOutputUri?: vscode.Uri;
   interruptSchedule?: number[];
   p7Probe?: P7ProbeMetadata;
+  /** Registered encodings own lane semantics; unmatched words retain native store checks. */
+  customInstructionEncodings?: TestbenchResolutionOptions['customInstructionEncodings'];
   signal?: AbortSignal;
   /** Extension installation root. Production callers normally provide it through AppServices. */
   extensionRoot?: string;
@@ -629,6 +631,7 @@ async function resolveSimulationTestbench(
 ): Promise<TestbenchResolution | undefined> {
   const resolutionOptions: TestbenchResolutionOptions = {
     nonInteractive: options.nonInteractive,
+    customInstructionEncodings: options.customInstructionEncodings,
     ...(options.nonInteractive ? { runtimeDirectory } : {}),
     ...(!options.nonInteractive ? { beforeCreateUserCpuTestbench } : {})
   };

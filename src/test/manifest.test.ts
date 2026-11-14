@@ -59,6 +59,7 @@ const publicConfigurationGroups = [
     scope: 'machine-overridable',
     keys: [
       'co.toolchain.java',
+      'co.toolchain.mars',
       'co.toolchain.logisim'
     ]
   },
@@ -91,14 +92,8 @@ const publicConfigurationGroups = [
 ] as const;
 
 const compatibilityConfigurationKeys = [
-  'co.toolchain.marsP7',
-  'co.toolchain.mars',
-  'co.mips.engine',
-  'co.mips.delayedBranching',
-  'co.mips.memoryConfiguration',
   'co.run.showCommandBeforeRun',
   'co.run.timeoutMs',
-  'co.mips.extraArgs',
   'co.verilog.syntax.external.timeoutMs',
   'co.verilog.implicitNet.ignorePatterns',
   'co.diagnostics.disabledCodes',
@@ -151,6 +146,7 @@ describe('package manifest', () => {
       .map((item) => item.command);
 
     expect(visible).toEqual([
+      'co.test.runAsmTests',
       'co.mips.openWorkbench',
       'co.projectWizard',
       'co.selectProjectProfile',
@@ -226,7 +222,7 @@ describe('package manifest', () => {
     expect(activationEvents.has('onCommand:co.test.openAsmCaseIndex')).toBe(false);
   });
 
-  it('contributes only the continuous-test start, stop, and history facade commands', () => {
+  it('contributes user ASM tests, continuous tests, stop, and history commands', () => {
     const pkg = readPackage();
     const commandEntries = (pkg.contributes?.commands ?? [])
       .filter((command) => command.command.startsWith('co.test.'));
@@ -236,12 +232,14 @@ describe('package manifest', () => {
       .filter((command) => command.startsWith('co.test.'));
 
     expect(commands).toEqual([
+      'co.test.runAsmTests',
       'co.test.startContinuousGeneratedTraceTests',
       'co.test.stopContinuousTests',
       'co.test.openAsmCaseIndex'
     ]);
     expect(palette).toEqual(commands);
     expect(commandEntries.map((command) => command.title)).toEqual([
+      'CO: 测试用户汇编文件 / 目录',
       'CO: 启动持续测试',
       'CO: 停止持续测试',
       'CO: 测试历史 / 失败用例'
@@ -269,7 +267,7 @@ describe('package manifest', () => {
       publicConfigurationGroups.map((group) => ({ title: group.title, order: group.order }))
     );
     expect(Object.keys(publicProperties)).toEqual(expectedPublicKeys);
-    expect(expectedPublicKeys).toHaveLength(18);
+    expect(expectedPublicKeys).toHaveLength(19);
 
     for (const expectedGroup of publicConfigurationGroups) {
       const actualGroup = publicGroups.find((group) => group.title === expectedGroup.title);
@@ -323,7 +321,7 @@ describe('package manifest', () => {
       const property = compatibilityGroup?.properties?.[key];
       expect(property?.default, key).toBeUndefined();
       expect(property?.deprecationMessage?.trim().length, key).toBeGreaterThan(0);
-      expect(property?.scope, key).toBe(['co.toolchain.marsP7', 'co.toolchain.mars', 'co.toolchain.python', 'co.toolchain.hazardCalculator'].includes(key)
+      expect(property?.scope, key).toBe(['co.toolchain.python', 'co.toolchain.hazardCalculator'].includes(key)
         ? 'machine-overridable'
         : 'resource');
       if (index > 0) {
@@ -333,16 +331,16 @@ describe('package manifest', () => {
     });
   });
 
-  it('keeps legacy MIPS settings deprecated and out of the public settings surface', () => {
+  it('removes retired Mars settings and exposes the configured modded Mars path', () => {
     const properties = Object.assign({}, ...(readPackage().contributes?.configuration ?? []).map((group) => group.properties ?? {}));
-    expect(properties['co.mips.engine']?.enum).toEqual(['auto', 'builtin']);
-    expect(properties['co.mips.engine']?.deprecationMessage).toContain('mars 和 verify-both');
-    expect(properties['co.mips.memoryConfiguration']?.enum).toEqual(['Default', 'CompactDataAtZero', 'CompactTextAtZero']);
-    expect(getConfigDefaults()['mips.memoryConfiguration']).toBe('Default');
-    expect(properties['co.toolchain.marsP7']?.deprecationMessage).toContain('已忽略');
-    expect(properties['co.toolchain.mars']?.deprecationMessage).toContain('已忽略');
-    expect(properties['co.mips.extraArgs']?.deprecationMessage).toContain('已忽略');
-    expect(publicConfigurationGroups.flatMap((group) => [...group.keys])).not.toContain('co.toolchain.mars');
+    for (const key of ['co.toolchain.marsP7', 'co.mips.engine', 'co.mips.delayedBranching', 'co.mips.memoryConfiguration', 'co.mips.extraArgs']) {
+      expect(properties).not.toHaveProperty(key);
+      expect(getConfigDefaults()).not.toHaveProperty(key.replace(/^co\./, ''));
+    }
+    expect(properties['co.toolchain.mars']?.default).toBe('');
+    expect(properties['co.toolchain.mars']?.scope).toBe('machine-overridable');
+    expect(properties['co.toolchain.mars']?.description).toContain('未知或自定义指令');
+    expect(publicConfigurationGroups.flatMap((group) => [...group.keys])).toContain('co.toolchain.mars');
   });
 
   it('removes retired Verilog formatting settings from the schema and runtime defaults', () => {

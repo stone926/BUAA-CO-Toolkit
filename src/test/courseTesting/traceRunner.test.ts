@@ -6,7 +6,7 @@ import type { AsmCaseManifestV2 } from '../../courseTesting/manifestCodec';
 import type { EngineDescriptor } from '../../mips/core/api';
 import { createTestRunResult } from '../helpers/appServices';
 import { runCourseTraceCase } from '../../courseTesting/traceRunner';
-import { getMipsEngine, getProfile } from '../../config';
+import { getProfile } from '../../config';
 import { runP3LogisimTraceCase } from '../../courseTestLogisim';
 import {
   asmCaseSourceSnapshotIssue,
@@ -26,6 +26,7 @@ import { checkP7Probe } from '../../courseTesting/p7ProbeCheck';
 import { createLegacyProgramImage } from '../../mips/replay/programImage';
 import { verifyConfiguredFixedMarsReference } from '../../mips/providers/fixedMarsReference';
 import { runFullStackShadow } from '../../courseTesting/fullStackShadowRunner';
+import { resolveCourseEnginePlan } from '../../mips/providers/courseEnginePolicy';
 
 vi.mock('vscode', async () => {
   const { createVscodeMockState, createVscodeModuleMock } = await import('../helpers/vscodeMock');
@@ -34,7 +35,6 @@ vi.mock('vscode', async () => {
 
 vi.mock('../../config', () => ({
   getProfile: vi.fn(() => 'P5'),
-  getMipsEngine: vi.fn(() => 'auto'),
   getMemoryConfiguration: vi.fn(() => 'Default')
 }));
 
@@ -146,7 +146,6 @@ describe('course trace runner orchestration', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(recordAsmCaseOracleResult).mockResolvedValue(undefined);
-    vi.mocked(getMipsEngine).mockReturnValue('auto');
     vi.mocked(readAsmCaseStdinSnapshot).mockResolvedValue(undefined);
     vi.mocked(asmCaseSourceSnapshotIssue).mockResolvedValue(undefined);
     callOrder.splice(0);
@@ -272,6 +271,51 @@ describe('course trace runner orchestration', () => {
     expect(capturedPlan).toMatchObject({ mode: 'auto', primaryEngineId: 'builtin-ts', profile: 'P5' });
     expect(vi.mocked(prepareAsmCaseMachineCode).mock.calls[0][2]?.enginePlan).toBe(capturedPlan);
     expect(vi.mocked(executeWithPreflight).mock.calls[0][3]).toBe(capturedPlan);
+  });
+
+  it.each([true, false])('keeps Timer observable comparison available and avoids a timing-model CPU verdict (matched=%s)', async (matched) => {
+    const execute = vi.mocked(executeWithPreflight).getMockImplementation()!;
+    vi.mocked(executeWithPreflight).mockImplementationOnce(async (...args) => {
+      const invocation = await execute(...args);
+      invocation.result!.referenceTiming = 'p7-timer-observed';
+      return invocation;
+    });
+    const compare = vi.mocked(compareTraceIterables).getMockImplementation()!;
+    vi.mocked(compareTraceIterables).mockImplementationOnce((...args) => ({ ...compare(...args), matched }));
+    const result = await runCourseTraceCase(services(), { asm: URI.file('E:/work/src/test.asm') });
+    expect(runVerilogSimulation).toHaveBeenCalled();
+    expect(result.status).toBe(matched ? 'passed' : 'error');
+    if (!matched) {
+      expect(result.stage).toBe('oracle');
+      expect(result.message).toContain('无法据此判定');
+    }
+  });
+
+  it('tests selected external ASM with its CPU private testbench and the assembler-selected custom oracle', async () => {
+    const asm = URI.file('D:/外部 汇编/custom.asm');
+    const cpu = URI.file('E:/CPU project/rtl/mips.v');
+    const sourceRoot = URI.file('D:/外部 汇编');
+    const customPlan = resolveCourseEnginePlan('mars', 'P5');
+    const prepare = vi.mocked(prepareAsmCaseMachineCode).getMockImplementation()!;
+    let selectedBinding: unknown;
+    vi.mocked(prepareAsmCaseMachineCode).mockImplementationOnce(async (...args) => {
+      const assembled = await prepare(...args);
+      if (!assembled) throw new Error('fixture assembler did not return a result');
+      selectedBinding = { ...assembled.executionBinding!, providerId: 'custom-mars' };
+      return { ...assembled, enginePlan: customPlan, executionBinding: selectedBinding } as typeof assembled;
+    });
+    const result = await runCourseTraceCase(services(), { asm }, {
+      cpuResource: cpu, sourceRoot, source: { kind: 'selected', asmFiles: [asm.fsPath] }, artifactOutputMode: 'case'
+    });
+    expect(result.status).toBe('passed');
+    expect(getProfile).toHaveBeenCalledWith(cpu);
+    expect(createAsmCaseFromAsm).toHaveBeenCalledWith(asm, expect.objectContaining({
+      resource: cpu, sourceRoot, metadata: expect.objectContaining({ 'test.cpuResource': cpu.fsPath })
+    }));
+    expect(vi.mocked(prepareAsmCaseMachineCode).mock.calls[0][2]?.resource).toBe(cpu);
+    expect(vi.mocked(executeWithPreflight).mock.calls[0][3]).toBe(customPlan);
+    expect(vi.mocked(executeWithPreflight).mock.calls[0][1].executionBinding).toBe(selectedBinding);
+    expect(runVerilogSimulation).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ resource: cpu, nonInteractive: true }));
   });
 
   it('fails a P6 raw byte-enable mismatch even when architectural word traces match', async () => {
@@ -682,17 +726,16 @@ describe('course trace runner orchestration', () => {
   });
 
   it.each(['mars', 'verify-both'] as const)(
-    'runs an automatic P7 probe as builtin/DUT-only when the workspace engine is %s',
+    'runs an automatic P7 probe as builtin/DUT-only despite an explicit %s engine override',
     async (configuredEngine) => {
       vi.mocked(getProfile).mockReturnValue('P7');
-      vi.mocked(getMipsEngine).mockReturnValue(configuredEngine);
       const probe = { version: 1, logBase: 0x2800, recordWords: 8, scenarios: [{ id: 1, kind: 'ri' }] };
       const currentCase = makeAsmCase({ p7: { probe } as never });
 
       const result = await runCourseTraceCase(
         services(),
         { asm: URI.file('E:/work/src/test.asm'), asmCase: currentCase },
-        { source: { kind: 'generator' } }
+        { source: { kind: 'generator' }, engineMode: configuredEngine }
       );
 
       expect(result.stage).toBe('probe');
@@ -771,14 +814,13 @@ describe('course trace runner orchestration', () => {
   });
 
   it.each(['mars', 'verify-both'] as const)(
-    'keeps every generated case on the private builtin stack when the workspace engine is %s',
+    'keeps every generated case on the private builtin stack despite an explicit %s engine override',
     async (configuredEngine) => {
-      vi.mocked(getMipsEngine).mockReturnValue(configuredEngine);
 
       const result = await runCourseTraceCase(
         services(),
         { asm: URI.file('E:/work/src/test.asm') },
-        { source: { kind: 'generator' } }
+        { source: { kind: 'generator' }, engineMode: configuredEngine }
       );
 
       expect(result.status).toBe('passed');
@@ -801,8 +843,7 @@ describe('course trace runner orchestration', () => {
     }
   );
 
-  it('migrates a manual verify-both setting without starting the fork reference', async () => {
-    vi.mocked(getMipsEngine).mockReturnValue('verify-both');
+  it('uses the default auto plan for manual cases without starting historical fork verification', async () => {
     vi.mocked(verifyConfiguredFixedMarsReference).mockResolvedValueOnce({
       ok: true,
       identity: { sha256: 'a'.repeat(64) }

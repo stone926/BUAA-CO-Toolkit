@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   getProfile: vi.fn(),
-  getMipsEngine: vi.fn(),
   getMarsJar: vi.fn(),
   runMarsFile: vi.fn(),
   resolveLegacyMarsLaunch: vi.fn(),
@@ -24,7 +23,6 @@ vi.mock('vscode', async () => {
 
 vi.mock('../../config', () => ({
   getProfile: mocks.getProfile,
-  getMipsEngine: mocks.getMipsEngine,
   getMarsJar: mocks.getMarsJar
 }));
 
@@ -61,6 +59,7 @@ import {
 } from '../../mips/providers/contracts';
 import {
   BUILTIN_TS_ENGINE_ID,
+  CUSTOM_MARS_ENGINE_ID,
   LEGACY_MARS_ENGINE_ID,
   resolveCourseEnginePlan
 } from '../../mips/providers/courseEnginePolicy';
@@ -107,14 +106,12 @@ describe('provider resolver preflight boundary', () => {
   beforeEach(() => {
     setProviderRegistry(undefined);
     mocks.getProfile.mockReset();
-    mocks.getMipsEngine.mockReset();
     mocks.getMarsJar.mockReset();
     mocks.runMarsFile.mockReset();
     mocks.resolveLegacyMarsLaunch.mockReset();
     mocks.captureSourceGraph.mockReset();
     mocks.readBoundedRegularFile.mockReset();
     mocks.getProfile.mockReturnValue('P6');
-    mocks.getMipsEngine.mockReturnValue('auto');
     mocks.getMarsJar.mockReturnValue('E:/tools/Mars.jar');
     mocks.resolveLegacyMarsLaunch.mockImplementation(async (uri, mode) => ({
       diagnostics: [],
@@ -219,9 +216,9 @@ describe('provider resolver preflight boundary', () => {
       expected: BUILTIN_TS_ENGINE_ID
     },
     {
-      name: 'explicit mars rollback',
+      name: 'explicit custom Mars',
       selection: resolveCourseEnginePlan('mars', 'P6'),
-      expected: BUILTIN_TS_ENGINE_ID
+      expected: CUSTOM_MARS_ENGINE_ID
     },
     {
       name: 'explicit builtin',
@@ -236,11 +233,13 @@ describe('provider resolver preflight boundary', () => {
   ])('uses one atomic assembler/executor engine for $name', async ({ selection, expected }) => {
     const builtinAssembler = assemblerProvider(BUILTIN_TS_ENGINE_ID, true);
     const legacyAssembler = assemblerProvider(LEGACY_MARS_ENGINE_ID, true);
+    const customAssembler = assemblerProvider(CUSTOM_MARS_ENGINE_ID, true);
     const builtinExecution = executionProvider(BUILTIN_TS_ENGINE_ID, true);
     const legacyExecution = executionProvider(LEGACY_MARS_ENGINE_ID, true);
+    const customExecution = executionProvider(CUSTOM_MARS_ENGINE_ID, true);
     setProviderRegistry({
-      assemblerProviders: [legacyAssembler, builtinAssembler],
-      executionProviders: [legacyExecution, builtinExecution]
+      assemblerProviders: [legacyAssembler, builtinAssembler, customAssembler],
+      executionProviders: [legacyExecution, builtinExecution, customExecution]
     });
 
     const [assembler, executor] = await Promise.all([

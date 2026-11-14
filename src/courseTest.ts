@@ -29,10 +29,14 @@ import {
   findStdinCandidatesForAsm
 } from './courseTestStdin';
 import { normalizePathKey } from './pathUtils';
+import { requestUserAsmTestsStop, runUserAsmTests } from './courseTestUserAsm';
+import type { UserAsmReferenceMode } from './courseTesting/userAsmBatch';
 
 export function registerCourseTest(context: vscode.ExtensionContext, services: AppServices): void {
   const continuousTraceDependencies = createContinuousTraceDependencies();
   context.subscriptions.push(
+    vscode.commands.registerCommand(Commands.Test.RunAsmTests, (input?: vscode.Uri, cpuResource?: vscode.Uri | readonly vscode.Uri[], referenceMode?: UserAsmReferenceMode) =>
+      runUserAsmTests(services, input, cpuResource && 'fsPath' in cpuResource ? cpuResource : undefined, referenceMode)),
     vscode.commands.registerCommand(Commands.Test.StartContinuousGeneratedTraceTests, () => startContinuousGeneratedTraceTests(services, continuousTraceDependencies)),
     vscode.commands.registerCommand(Commands.Test.StopContinuousTests, () => stopAutomaticTests()),
     vscode.commands.registerCommand(Commands.Test.OpenAsmCaseIndex, (resource?: vscode.Uri) => openAsmCaseIndex(resource, async (directory, caseId) => {
@@ -55,6 +59,10 @@ function createContinuousTraceDependencies(): ContinuousGeneratedTraceDependenci
 }
 
 function stopAutomaticTests(): void {
+  if (requestUserAsmTestsStop()) {
+    void vscode.window.showInformationMessage('已请求停止用户汇编测试');
+    return;
+  }
   const continuous = requestContinuousTestsStop();
   if (continuous === 'none') {
     vscode.window.showInformationMessage('当前没有正在运行的持续测试');

@@ -2,8 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   runTool: vi.fn(),
-  profile: 'P2',
-  mode: 'auto'
+  profile: 'P2'
 }));
 
 vi.mock('vscode', () => ({ workspace: { workspaceFolders: [] }, window: {} }));
@@ -11,7 +10,6 @@ vi.mock('../config', () => ({
   ensureConcreteProfile: vi.fn(),
   getJava: () => 'java',
   getLogisimJar: () => 'Logisim.jar',
-  getMipsEngine: () => mocks.mode,
   getProfile: () => mocks.profile
 }));
 vi.mock('../process', () => ({ runTool: mocks.runTool }));
@@ -48,15 +46,12 @@ describe('toolchain checks', () => {
     expect(mocks.runTool.mock.calls[0][1]).toEqual(['-version']);
   });
 
-  it.each(['auto', 'builtin', 'mars', 'verify-both'])(
-    'never launches an external MIPS tool for P7 with %s engine setting', async (mode) => {
+  it('never launches an external MIPS tool for P7', async () => {
       mocks.profile = 'P7';
-      mocks.mode = mode;
       mocks.runTool.mockReset();
 
       const checks = await checkToolchain(output);
       expect(mocks.runTool).not.toHaveBeenCalled();
       expect(checks.map((check) => check.name)).toEqual(['Verilog simulator']);
-    }
-  );
+  });
 });

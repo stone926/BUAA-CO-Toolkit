@@ -15,6 +15,8 @@
 
 ## 课程与语言事实
 
+- `mars/bridge/mars-bridge.jar` — 随包 Java 8 适配桥；只调用用户配置的 Mars 和课程 class，不包含 MARS 引擎副本。`npm run build:mars-bridge` 重建并生成 `artifact-manifest.json`；`npm run check:mars-bridge` 仅用 Node 校验源码/依赖/产物一致，已接入生成物门禁。用户和普通编译不需要 javac。
+
 - `mips/isa.json` — 真实指令唯一 catalog：encoding / runtime / canonical / effects / control / profile 与 generator 稳定顺序
 - `mips/instructions.json` — 展示元数据（助记符、类型、格式、操作数、描述）
 - `mips/instructionMeta.json` — 伪指令、非 catalog 指令与 parser directive 的附加元数据

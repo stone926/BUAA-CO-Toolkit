@@ -105,6 +105,7 @@ export const Commands = {
   },
 
   Test: {
+    RunAsmTests: 'co.test.runAsmTests',
     StartContinuousGeneratedTraceTests: 'co.test.startContinuousGeneratedTraceTests',
     StopContinuousTests: 'co.test.stopContinuousTests',
     OpenAsmCaseIndex: 'co.test.openAsmCaseIndex'

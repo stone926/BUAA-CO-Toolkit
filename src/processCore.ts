@@ -7,7 +7,9 @@ export interface RunProcessCoreOptions {
   cwd: string;
   env?: NodeJS.ProcessEnv;
   timeoutMs?: number;
-  stdin?: string;
+  stdin?: string | Uint8Array;
+  /** Optional interactive input. The signal ends a pending read when the process closes. */
+  readStdin?: (signal: AbortSignal) => Promise<string | undefined>;
   commandLine?: string;
   /**
    * External cancellation (plan section 1.6): on abort the child is first
@@ -83,6 +85,7 @@ export function runProcessCore(
     let childClosed = false;
     let treeTerminationComplete = true;
     let timer: NodeJS.Timeout | undefined;
+    const inputController = new AbortController();
 
     const child = spawn(command, args, {
       cwd: options.cwd,
@@ -129,6 +132,7 @@ export function runProcessCore(
         clearTimeout(timer);
       }
       options.signal?.removeEventListener('abort', onAbort);
+      inputController.abort();
       child.stdout.destroy();
       child.stderr.destroy();
       finishDecoders();
@@ -154,6 +158,7 @@ export function runProcessCore(
         return;
       }
       stopped = true;
+      inputController.abort();
       stopReason = reason;
       treeTerminationComplete = false;
       if (rootPid === undefined) {
@@ -253,10 +258,28 @@ export function runProcessCore(
       }
     }
 
-    if (!stopped && options.stdin !== undefined) {
-      child.stdin.write(options.stdin);
-    }
-    child.stdin.end();
+    void (async () => {
+      try {
+        if (!stopped && options.stdin !== undefined) child.stdin.write(options.stdin);
+        while (!inputController.signal.aborted && options.readStdin) {
+          const line = await options.readStdin(inputController.signal);
+          if (line === undefined || inputController.signal.aborted) break;
+          if (!child.stdin.write(line)) {
+            await new Promise<void>((done) => {
+              const finish = () => { child.stdin.off('drain', finish); inputController.signal.removeEventListener('abort', finish); done(); };
+              child.stdin.once('drain', finish);
+              inputController.signal.addEventListener('abort', finish, { once: true });
+              if (inputController.signal.aborted) finish();
+            });
+          }
+        }
+      } catch (error) {
+        if (!inputController.signal.aborted) {
+          appendStderr(`stdin: ${error instanceof Error ? error.message : String(error)}`);
+          gracefulStop('stdin-error');
+        }
+      } finally { child.stdin.end(); }
+    })();
   });
 }
 

@@ -47,6 +47,8 @@ import { WorkInstruction, WorkOperand, workOriginFor } from './work';
 import type { ParsedInstructionOperand } from './operands';
 import { immediateSignedKind, realInstructionForms } from './instructionForms';
 import { isAssemblerDirective } from './directives';
+import { marsIntegerExtensionMnemonics } from './marsIntegerInstructionFacts';
+import { marsInstructionByMnemonic } from './marsInstructionFacts';
 
 export const courseAssemblerSemanticsRevision = 6 as const;
 export const builtinAssemblerCapabilitiesRevision = 2 as const;
@@ -1034,7 +1036,8 @@ function statementWork(statement: ParsedStatement, state: AssemblyState): WorkRe
       return {
         ok: false,
         diagnostic: assemblerDiagnostic(
-          /不支持的 pseudo/.test(expansion.error ?? '') ? 'asm.pseudo.unsupported' : 'asm.instruction.unknown',
+          /不支持的 pseudo/.test(expansion.error ?? '') && !marsIntegerExtensionMnemonics.includes(mnemonic)
+            && !marsInstructionByMnemonic.has(mnemonic) ? 'asm.instruction.unknown' : 'asm.pseudo.unsupported',
           expansion.error ?? `未知指令 ${mnemonic}`,
           statement.mnemonicSpan,
           statement.expansionStack

@@ -9,6 +9,7 @@ import type { AsmCase } from '../asmCaseStore';
 import {
   asmCaseSourceSnapshotIssue,
   copyAsmCaseArtifact,
+  createAsmCaseFromAsm,
   listAsmCaseManifests,
   machineCodeValidationOutputMessage,
   maximumAsmCaseIndexEntries,
@@ -98,6 +99,35 @@ function createCase(): AsmCase {
 }
 
 describe('ASM case manifest v2 artifact storage', () => {
+  it('captures external ASM includes within their source root while the CPU workspace owns the case', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'co-external-source-'));
+    temporaryRoots.push(root);
+    const cpuRoot = path.join(root, 'CPU 工程');
+    const sourceRoot = path.join(root, '汇编 inputs');
+    fs.mkdirSync(cpuRoot);
+    fs.mkdirSync(sourceRoot);
+    const cpu = URI.file(path.join(cpuRoot, 'mips.v'));
+    const source = URI.file(path.join(sourceRoot, 'main.asm'));
+    fs.writeFileSync(cpu.fsPath, 'module mips; endmodule');
+    fs.writeFileSync(source.fsPath, '.include "body.s"\n_end: beq $0, $0, _end\nnop\n');
+    fs.writeFileSync(path.join(sourceRoot, 'body.s'), 'ori $1, $0, 42\n');
+    vscodeState.state!.workspaceFolders.push({ uri: URI.file(cpuRoot), name: 'CPU 工程' });
+    vscodeState.state!.config.set('co.project.profile', 'P5');
+    vi.mocked(vscode.workspace.fs.writeFile).mockImplementationOnce(async (uri, bytes) => { await fs.promises.writeFile(uri.fsPath, bytes); });
+    try {
+      const captured = await createAsmCaseFromAsm(source, {
+        resource: cpu, sourceRoot: URI.file(sourceRoot), source: { kind: 'selected' }, enginePlan: resolveCourseEnginePlan('builtin', 'P5')
+      });
+      expect(path.relative(cpuRoot, captured.dir.fsPath)).toMatch(/^\.co[\\/]cases[\\/]/);
+      expect(captured.manifest.profile).toBe('P5');
+      expect(captured.manifest.originalAsmPath).toBe(source.fsPath);
+      expect(await asmCaseSourceSnapshotIssue(captured)).toBeUndefined();
+      fs.writeFileSync(path.join(sourceRoot, 'body.s'), 'ori $1, $0, 99\n');
+      expect(await asmCaseSourceSnapshotIssue(captured)).toBeUndefined();
+      expect(fs.readFileSync(captured.sourceAsm.fsPath, 'utf8')).toContain('source-0001.s');
+    } finally { vscodeState.state!.config.delete('co.project.profile'); }
+  });
+
   it('hides word, address and mnemonic diagnostics from automatic output', () => {
     const detail = '0x00004180 word=ffffffff mnemonic=unknown SECRET_INTERNAL';
     expect(machineCodeValidationOutputMessage(detail, true)).toBe('自动测试点校验失败');

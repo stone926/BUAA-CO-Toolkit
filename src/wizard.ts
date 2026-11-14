@@ -4,7 +4,7 @@ import * as vscode from 'vscode';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { CONCRETE_PROFILES } from './constants';
 import { ProjectProfile } from './types';
-import { getLogisimJar, getJava, getMipsEngine, getProjectScopes, setProjectProfile } from './config';
+import { getLogisimJar, getJava, getProjectScopes, setProjectProfile } from './config';
 import { activeProjectResource } from './configurationResource';
 import {
   getProfileDefaults,
@@ -124,7 +124,7 @@ export async function runProjectWizard(): Promise<void> {
 
 export async function configureToolchainPaths(profile: ProjectProfile, resource: vscode.Uri): Promise<WizardToolchainSettings> {
   const toolchain: WizardToolchainSettings = {};
-  const requiredTools = new Set(getEffectiveRequiredTools(profile, getMipsEngine(resource)));
+  const requiredTools = new Set(getEffectiveRequiredTools(profile, 'auto'));
 
   if (requiredTools.has('java')) {
     const javaPath = await vscode.window.showInputBox({

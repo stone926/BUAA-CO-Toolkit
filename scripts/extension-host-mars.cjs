@@ -49,8 +49,6 @@ async function verifyMars({ folder, configure, bounded, waitFor }) {
   await configure(folder, {
     'toolchain.java': path.join(root, '不存在 Java 工具.exe'),
     'toolchain.mars': path.join(root, '不存在 MARS.jar'),
-    'toolchain.marsP7': path.join(root, '不存在 P7 MARS.jar'),
-    'mips.extraArgs': ['--must-not-be-used'],
     'run.timeoutMs': 120000,
     'run.revealOutput': false
   });

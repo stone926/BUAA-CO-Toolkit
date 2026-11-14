@@ -17,7 +17,11 @@ await mkdir(logRoot, { recursive: true });
 const sessionRoot = await mkdtemp(join(logRoot, 'run-'));
 const workspace = join(sessionRoot, '课程 workspace');
 // VS Code's IPC socket must fit macOS's Unix socket path limit.
-const userData = await mkdtemp(join(tmpdir(), 'co-vscode-'));
+const userDataRoot = process.env.CO_VSCODE_USER_DATA_ROOT ? resolve(process.env.CO_VSCODE_USER_DATA_ROOT) : tmpdir();
+await mkdir(userDataRoot, { recursive: true });
+const userData = await mkdtemp(join(userDataRoot, 'co-vscode-'));
+const toolTemp = join(userData, 'tool-temp');
+await mkdir(toolTemp);
 await mkdir(workspace);
 await mkdir(join(userData, 'User'), { recursive: true });
 await writeFile(join(userData, 'User', 'settings.json'), JSON.stringify({
@@ -37,14 +41,18 @@ try {
     extensionTestsPath: fileURLToPath(new URL(formattingOnly ? './extension-host-formatting.cjs' : './extension-host-smoke.cjs', import.meta.url)),
     extensionTestsEnv: {
       CO_EXTENSION_ROOT: extensionRoot,
-      ELECTRON_RUN_AS_NODE: undefined
+      ELECTRON_RUN_AS_NODE: undefined,
+      ...(process.env.CO_VSCODE_USER_DATA_ROOT ? { TMP: toolTemp, TEMP: toolTemp, TMPDIR: toolTemp } : {})
     },
     launchArgs: [
       workspace,
       '--user-data-dir', userData,
       '--extensions-dir', join(sessionRoot, 'extensions'),
       '--disable-extensions',
-      '--disable-gpu'
+      '--disable-gpu',
+      // Isolated local smoke only: some Windows CI AppContainer profiles cannot
+      // access the temporary user-data directory. Normal launches keep the sandbox.
+      ...(process.env.CO_VSCODE_NO_SANDBOX === '1' ? ['--no-sandbox', '--disable-gpu-sandbox'] : [])
     ]
   });
 } catch (error) {

@@ -10,6 +10,9 @@ import {
   SourceUnitFingerprint
 } from '../core/api';
 import type { CommitEvent } from '../core/events/commitEvent';
+import type { AssemblerDiagnostic } from '../core/assembler/diagnostics';
+import type { CustomInstructionEncoding } from '../host/customMarsBridge';
+import type { CourseEnginePlan } from './courseEnginePolicy';
 import type { CoverageBin } from '../core/events/coverage';
 import type { CpuTraceEvent } from '../../language/mips/traceParser';
 import { isaInstructions } from '../core/generated/isaCatalog';
@@ -105,6 +108,13 @@ export interface AssembleTarget {
 
 export interface AssembleRequest {
   sourceUri: vscode.Uri;
+  /** Original project configuration context; sourceUri can be an immutable case snapshot. */
+  resourceUri?: vscode.Uri;
+  /** Commands validate/project the image before atomically publishing the final artifact. */
+  writeOutput?: boolean;
+  expectedEngineArtifact?: EngineArtifactIdentity;
+  /** Verified materialized file → SourceUnit mapping, including captured includes. */
+  sourcePaths?: readonly { readonly id: string; readonly path: string }[];
   /** Host-verified complete source graph identity when the caller already captured one. */
   inputGraph?: readonly SourceUnitFingerprint[];
   /** Verified original blobs/edges; builtin assemblers consume this instead of rewritten files. */
@@ -127,6 +137,10 @@ export interface AssembleRequest {
 
 export interface AssembleResult {
   ok: boolean;
+  assemblyDiagnostics?: readonly AssemblerDiagnostic[];
+  customInstructionEncodings?: readonly CustomInstructionEncoding[];
+  /** Final, immutable full-stack selection, resolved before any program execution. */
+  enginePlan?: CourseEnginePlan;
   outputFile?: vscode.Uri;
   /** PC of the validated final user-text self-branch (course-trace dumps only). */
   courseHaltPc?: number;
@@ -210,6 +224,8 @@ export type EngineStopKind =
 
 export interface ExecuteResult {
   ok: boolean;
+  /** MARS Timer is instruction-timed; differing clock-sensitive traces cannot establish a DUT fault. */
+  referenceTiming?: 'p7-timer-observed';
   outputFile?: vscode.Uri;
   status: EngineRunStatus;
   descriptor: EngineDescriptor;
@@ -244,6 +260,7 @@ export interface ResolvedEngineRun {
   runtime: { kind: 'java'; command: string } | { kind: 'builtin-ts' };
   wallClockMs: number;
   p7RiInstruction: boolean;
+  javaVersion?: string;
 }
 
 export interface MipsExecutionProvider {

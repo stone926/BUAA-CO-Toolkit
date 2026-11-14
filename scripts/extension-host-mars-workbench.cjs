@@ -5,7 +5,7 @@ const path = require('node:path');
 const vscode = require('./extension-host-api.cjs');
 
 async function verifyMarsWorkbench({ folder, configure, bounded, waitFor }) {
-  await configure(folder, { 'project.profile': 'P2', 'mips.delayedBranching': 'off' });
+  await configure(folder, { 'project.profile': 'P2' });
   const uri = vscode.Uri.file(path.join(folder.uri.fsPath, '调试 程序.asm'));
   await fs.writeFile(uri.fsPath, '\ufeff.data\nvalue: .word 0\n.text\nli $v0, 5\nsyscall\nsw $v0, value\nmove $a0, $v0\nli $v0, 1\nsyscall\nli $v0, 10\nsyscall\n');
   const document = await vscode.workspace.openTextDocument(uri);
@@ -147,7 +147,6 @@ async function verifyMarsWorkbench({ folder, configure, bounded, waitFor }) {
   } finally {
     panel?.dispose();
     vscode.window.createWebviewPanel = createPanel;
-    await configure(folder, { 'mips.delayedBranching': 'auto' });
   }
 }
 

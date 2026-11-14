@@ -10,7 +10,6 @@ import {
 } from './config';
 import { Commands } from './constants';
 import { isCourseProjectProfile } from './projectProfile';
-import { ensureDirectory, writeTextFile } from './fsUtil';
 import {
   courseInstructionImageWordsWithOrdinaryHalt,
   imageSegmentWords,
@@ -23,6 +22,7 @@ import {
 } from './mips/providers/providerResolver';
 import type { CourseProfile } from './mips/core/generated/isaCatalog';
 import type { AppServices } from './types';
+import { writeFileAtomicReplace } from './mips/replay/atomicFile';
 
 type AssemblyDumpTarget = 'userText' | 'kernelText';
 
@@ -60,7 +60,7 @@ async function dumpCurrentMipsFile(
 }
 
 /**
- * Export one section with the shared internal assembler. P2 preserves ordinary
+ * Export one section with the selected assembler. P2 preserves ordinary
  * MARS bytes; course profiles additionally project the DUT image and halt tail.
  */
 export async function dumpMipsFile(
@@ -80,10 +80,12 @@ export async function dumpMipsFile(
   }
 
   const outputFile = assemblyDumpOutput(sourceUri, target);
-  const plan = resolveCourseEnginePlan(profile === 'P2' ? 'auto' : 'builtin', profile);
+  const plan = resolveCourseEnginePlan('auto', profile);
   try {
     const invocation = await assembleWithPreflight(services, {
       sourceUri,
+      resourceUri: sourceUri,
+      writeOutput: false,
       target: { kind: target, outputFile },
       revealOutput: shouldRevealOutput(sourceUri),
       requirements: {
@@ -96,23 +98,18 @@ export async function dumpMipsFile(
     if (!result?.ok || !result.outputFile) {
       const detail = result?.status.stderr.trim() || preflightFailureMessage(invocation.preflight);
       if (detail) services.output.appendLine(detail);
-      vscode.window.showErrorMessage(`${target === 'kernelText' ? '内核文本段' : '文本段'}导出失败，请查看插件输出面板`);
+      vscode.window.showErrorMessage(`${target === 'kernelText' ? '内核文本段' : '文本段'}导出失败${result?.descriptor.id === 'custom-mars' && detail ? `：${detail}` : '，请查看插件输出面板'}`);
       return false;
     }
 
-    if (result.descriptor.id === BUILTIN_TS_ENGINE_ID) {
-      if (!result.image) {
-        throw new Error('内置汇编器未返回可验证的 ProgramImage');
-      }
-      const words = target === 'kernelText'
-        ? imageSegmentWords(result.image, 'ktext')
-        : profile === 'P2' ? imageSegmentWords(result.image, 'text')
-          : courseInstructionImageWordsWithOrdinaryHalt(result.image, profile as CourseProfile);
-      await ensureDirectory(vscode.Uri.file(path.dirname(outputFile.fsPath)));
-      await writeTextFile(outputFile, wordsToHexText(words));
-    }
+    if (!result.image) throw new Error('汇编器未返回可验证的 ProgramImage');
+    const words = target === 'kernelText'
+      ? imageSegmentWords(result.image, 'ktext')
+      : profile === 'P2' ? imageSegmentWords(result.image, 'text')
+        : courseInstructionImageWordsWithOrdinaryHalt(result.image, profile as CourseProfile);
+    await writeFileAtomicReplace(outputFile.fsPath, Buffer.from(wordsToHexText(words)));
 
-    const assembler = result.descriptor.id === BUILTIN_TS_ENGINE_ID ? '内置汇编器' : 'MARS';
+    const assembler = result.descriptor.id === BUILTIN_TS_ENGINE_ID ? '内置汇编器' : '自定义 Mars';
     vscode.window.showInformationMessage(`${assembler} 已导出 ${outputFile.fsPath}`);
     return true;
   } catch (error) {

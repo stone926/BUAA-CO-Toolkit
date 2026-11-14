@@ -1,7 +1,5 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { URI } from 'vscode-uri';
-
-const mocks = vi.hoisted(() => ({ engineMode: 'auto' }));
 
 vi.mock('vscode', () => ({
   Uri: URI,
@@ -9,9 +7,7 @@ vi.mock('vscode', () => ({
     getWorkspaceFolder: () => undefined,
     getConfiguration: () => ({
       get: (_key: string, defaultValue?: unknown) => defaultValue,
-      inspect: (key: string) => ({
-        workspaceFolderValue: key === 'mips.engine' ? mocks.engineMode : undefined
-      }),
+      inspect: () => ({}),
       update: vi.fn()
     })
   }
@@ -29,6 +25,8 @@ import type { AppServices } from '../../types';
 import type { AssembleRequest } from '../../mips/providers/contracts';
 import {
   BUILTIN_TS_ENGINE_ID,
+  CUSTOM_MARS_ENGINE_ID,
+  resolveCourseEnginePlan
 } from '../../mips/providers/courseEnginePolicy';
 
 const services = {
@@ -36,13 +34,12 @@ const services = {
   statusBar: {}
 } as unknown as AppServices;
 
-afterEach(() => { mocks.engineMode = 'auto'; });
-
 describe('phase-5 assembler provider registration', () => {
-  it('registers only the internal assembler', () => {
+  it('registers the internal and optional custom Mars assemblers', () => {
     const registry = registerDefaultProviders(services);
     expect(registry.assemblerProviders.map((provider) => provider.descriptor.id)).toEqual([
-      'builtin-ts'
+      BUILTIN_TS_ENGINE_ID,
+      CUSTOM_MARS_ENGINE_ID
     ]);
   });
 
@@ -67,10 +64,9 @@ describe('phase-5 assembler provider registration', () => {
     }
   });
 
-  it('migrates a resource-scoped mars rollback to the builtin course assembler', async () => {
+  it('selects the custom Mars assembler only for an explicit internal Mars plan', async () => {
     const directory = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'co-phase5-resolver-'));
     try {
-      mocks.engineMode = 'mars';
       const sourceUri = URI.file(path.join(directory, 'main.asm'));
       await fs.promises.writeFile(sourceUri.fsPath, '.text\n    nop\n', 'utf8');
 
@@ -78,10 +74,10 @@ describe('phase-5 assembler provider registration', () => {
         sourceUri,
         target: { kind: 'userText' },
         requirements: { profile: 'P6' }
-      });
+      }, resolveCourseEnginePlan('mars', 'P6'));
 
-      expect(resolved.provider.descriptor.id).toBe(BUILTIN_TS_ENGINE_ID);
-      expect(resolved.selection.mode).toBe('auto');
+      expect(resolved.provider.descriptor.id).toBe(CUSTOM_MARS_ENGINE_ID);
+      expect(resolved.selection.mode).toBe('mars');
     } finally {
       await fs.promises.rm(directory, { recursive: true, force: true }).catch(() => undefined);
     }

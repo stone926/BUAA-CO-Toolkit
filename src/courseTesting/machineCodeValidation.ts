@@ -5,6 +5,7 @@ import { p7ExceptionHandlerAddress } from './p7Hardware';
 import { decodeCourseInstructionWord } from '../mips/core/isa/decoder';
 import { sourceUnitsUseP7RiInstruction } from './p7RiInstruction';
 import { isP7RiWord, p7RiWordsUsedInInstructionSegments } from './p7RiWords';
+import type { CustomInstructionEncoding } from '../mips/host/customMarsBridge';
 
 export interface CourseMachineCodeViolation {
   index: number;
@@ -25,7 +26,8 @@ export function validateCourseMachineCode(
   profile: ProjectProfile,
   machineCodeText: string,
   asmText = '',
-  trustedBuiltinSource = false
+  trustedBuiltinSource = false,
+  customInstructions: readonly CustomInstructionEncoding[] = []
 ): CourseMachineCodeViolation[] {
   if (!(profile in defaultInstructionSets)) {
     return [];
@@ -52,7 +54,8 @@ export function validateCourseMachineCode(
     const placementReason = profile === 'P7' && mnemonic === 'eret' && address < p7ExceptionHandlerAddress
       ? `教程规定 eret 只会出现在 0x${p7ExceptionHandlerAddress.toString(16)} 起的异常处理程序中`
       : undefined;
-    if (placementReason || (!allowedInternalRi && (!mnemonic || !allowed.has(mnemonic)))) {
+    const custom = customInstructions.some((instruction) => ((value & instruction.mask) >>> 0) === instruction.value);
+    if ((!custom && placementReason) || (!custom && !allowedInternalRi && (!mnemonic || !allowed.has(mnemonic)))) {
       violations.push({
         index,
         address,
@@ -70,7 +73,8 @@ export function courseMachineCodeValidationError(
   machineCodeText: string,
   asmText = '',
   trustedBuiltinSource = false,
-  capacityPolicy: CourseMachineCodeCapacityPolicy = courseHardwareMachineCodeCapacityPolicy
+  capacityPolicy: CourseMachineCodeCapacityPolicy = courseHardwareMachineCodeCapacityPolicy,
+  customInstructions: readonly CustomInstructionEncoding[] = []
 ): string | undefined {
   const capacityError = courseMachineCodeCapacityError(
     profile,
@@ -80,7 +84,7 @@ export function courseMachineCodeValidationError(
   if (capacityError) {
     return capacityError;
   }
-  const violations = validateCourseMachineCode(profile, machineCodeText, asmText, trustedBuiltinSource);
+  const violations = validateCourseMachineCode(profile, machineCodeText, asmText, trustedBuiltinSource, customInstructions);
   if (!violations.length) {
     return undefined;
   }

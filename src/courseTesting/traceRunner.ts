@@ -3,7 +3,6 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import {
   getMemoryConfiguration,
-  getMipsEngine,
   getProfile,
   type MipsEngineMode
 } from '../config';
@@ -77,17 +76,22 @@ import { runFullStackShadow, type FullStackShadowOutcome } from './fullStackShad
 import { runP3LogisimTraceCase } from '../courseTestLogisim';
 import type { P3LogisimTraceSetup } from '../courseTestLogisim';
 import { automaticTestEngineMode } from './automaticTestPolicy';
+import type { EngineArtifactIdentity } from '../mips/providers/contracts';
 
 const batchTraceCompareRetainedEntries = 1;
 
 export interface CourseTraceRunOptions {
+  cpuResource?: vscode.Uri;
+  sourceRoot?: vscode.Uri;
+  engineResource?: vscode.Uri;
+  expectedEngineArtifact?: EngineArtifactIdentity;
   revealOutput?: boolean;
   source?: CourseTraceBatchSource;
   logisim?: P3LogisimTraceSetup;
   artifactOutputMode?: 'workspace' | 'case';
   /** Fixed isolated simulator slot owned by the continuous scheduler. */
   automaticRunSlot?: number;
-  /** Snapshot override used by explicit developer lanes; normal runs read co.mips.engine once. */
+  /** Explicit per-run reference choice; auto tests resolve unknown instructions before execution. */
   engineMode?: MipsEngineMode;
   /** Phase-4 executor shadow: run legacy + builtin and adjudicate the difference. */
   oracleMode?: 'verify-both';
@@ -105,16 +109,18 @@ export async function runCourseTraceCase(
   options: CourseTraceRunOptions = {}
 ): Promise<NeutralCourseTraceCaseResult> {
   const asm = item.asm;
-  const profile = getProfile(asm);
+  const resource = options.cpuResource ?? asm;
+  const engineResource = options.engineResource ?? asm;
+  const profile = getProfile(resource);
   if (profile === 'P3') {
     return await runP3LogisimTraceCase(services, item, options);
   }
   const automatic = options.source?.kind === 'generator';
-  const enginePlan = resolveCourseEnginePlan(
+  let enginePlan = resolveCourseEnginePlan(
     // Every generated case shares the private automatic stack. Besides keeping rollback modes
     // out of the public workflow, this is required for raw `.word` RI cases that course MARS
     // intentionally rejects in text/ktext. Manual and replay cases still honor their engine plan.
-    automatic ? automaticTestEngineMode : options.engineMode ?? getMipsEngine(asm),
+    automatic ? automaticTestEngineMode : options.engineMode ?? 'auto',
     profile,
     { deterministicConsole: item.stdin !== undefined }
   );
@@ -148,7 +154,9 @@ export async function runCourseTraceCase(
   const asmCase = item.asmCase ?? await pipeline.createCase(asm, {
     source: asmCaseSourceFromBatchSource(options.source ?? { kind: 'selected', asmFiles: [asm.fsPath] }),
     stdin: item.stdin,
-    resource: asm,
+    resource,
+    sourceRoot: options.sourceRoot,
+    metadata: { 'test.cpuResource': resource.fsPath, 'test.engineResource': engineResource.fsPath },
     enginePlan,
     p7: await p7MetadataFromManifest(asm)
   });
@@ -176,6 +184,9 @@ export async function runCourseTraceCase(
       revealOutput: options.revealOutput,
       nonInteractive: automatic ? true : undefined,
       courseTrace: true,
+      resource,
+      engineResource,
+      expectedEngineArtifact: options.expectedEngineArtifact,
       enginePlan,
       signal: options.signal
     });
@@ -200,6 +211,7 @@ export async function runCourseTraceCase(
       engineRunWasCancelled(dump?.status, options.signal)
     );
   }
+  enginePlan = dump.enginePlan ?? enginePlan;
   if (!automatic) {
     services.output.appendLine(`机器码: ${asmCase.machineCode.fsPath}`);
   }
@@ -224,7 +236,7 @@ export async function runCourseTraceCase(
       services.output.appendLine(`P7 定向检查场景： ${probe.scenarios.map((scenario) => `${scenario.id}:${p7ProbeKindLabel(scenario.kind)}`).join(', ')}`);
     }
     const dut = await pipeline.runDut(services, {
-      resource: asm,
+      resource,
       showMessages: false,
       revealOutput: options.revealOutput,
       asmCase,
@@ -232,7 +244,7 @@ export async function runCourseTraceCase(
       simOutputUri: caseOutputMode ? asmCaseArtifactUri(asmCase, 'verilog', simOutputFileNameForCase(item)) : undefined,
       p7Probe: probe,
       simTime: courseTraceSimulationTime(p7ProbeExecutionInstructionBudget),
-      nonInteractive: automatic,
+      nonInteractive: true,
       automaticRunSlot: options.automaticRunSlot,
       signal: options.signal
     });
@@ -455,7 +467,8 @@ export async function runCourseTraceCase(
   }
 
   const dut = await pipeline.runDut(services, {
-    resource: asm,
+    resource,
+    customInstructionEncodings: dump.customInstructionEncodings,
     showMessages: false,
     revealOutput: options.revealOutput,
     asmCase,
@@ -463,7 +476,7 @@ export async function runCourseTraceCase(
     simOutputUri: caseOutputMode ? asmCaseArtifactUri(asmCase, 'verilog', simOutputFileNameForCase(item)) : undefined,
     interruptSchedule,
     simTime: courseTraceSimulationTime(maxSteps),
-    nonInteractive: automatic,
+    nonInteractive: true,
     automaticRunSlot: options.automaticRunSlot,
     signal: options.signal
   });
@@ -479,6 +492,12 @@ export async function runCourseTraceCase(
   const storeDifference = diff.matched && oracle.events && (profile === 'P6' || profile === 'P7')
     ? firstDmStoreDifference(oracle.events, simText)
     : undefined;
+
+  if (!diff.matched && oracle.referenceTiming === 'p7-timer-observed') {
+    return failedCase(item, 'oracle',
+      '写回记录存在差异，但参考 Mars 的 Timer 按指令推进，无法据此判定时钟级 CPU 错误；请结合 P7 Timer/MMIO/中断黑盒 probe 的结果定位',
+      asmCase.machineCode, oracle.outputFile, asmCase);
+  }
 
   if (!diff.summary.oracleEvents || !diff.summary.dutEvents) {
     const emptyTraceMessage = !diff.summary.oracleEvents && !diff.summary.dutEvents

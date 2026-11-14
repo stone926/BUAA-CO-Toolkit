@@ -1,0 +1,17 @@
+{
+  "dependencies": [
+    {
+      "name": "org.ow2.asm:asm",
+      "version": "9.11.1",
+      "url": "https://repo.maven.apache.org/maven2/org/ow2/asm/asm/9.11.1/asm-9.11.1.jar",
+      "pom": "https://repo.maven.apache.org/maven2/org/ow2/asm/asm/9.11.1/asm-9.11.1.pom",
+      "sha256": "ae4e6e10d59d0a1500317764b21881ad883f8550e33c66e6142f7032c6fb566c",
+      "license": "BSD-3-Clause",
+      "licenseUrl": "https://asm.ow2.io/license.html",
+      "releaseNotes": "https://asm.ow2.io/versions.html",
+      "classReaderBytecodeMajor": 49,
+      "bundledPackages": ["org/objectweb/asm/**"],
+      "notes": "Fixed maintained upstream release; core classes run on Java 8. module-info.class is excluded from the fat jar."
+    }
+  ]
+}

@@ -14,6 +14,7 @@ import type { AppServices } from '../../types';
 import type { ExecuteRequest } from '../../mips/providers/contracts';
 import {
   BUILTIN_TS_ENGINE_ID,
+  CUSTOM_MARS_ENGINE_ID,
   resolveCourseEnginePlan
 } from '../../mips/providers/courseEnginePolicy';
 
@@ -38,10 +39,11 @@ const request: ExecuteRequest = {
 };
 
 describe('phase-4 provider resolver registration', () => {
-  it('registers only the internal course executor', async () => {
+  it('registers the internal and optional custom Mars course executors', async () => {
     const registry = registerDefaultProviders(services);
     expect(registry.executionProviders.map((provider) => provider.descriptor.id)).toEqual([
-      'builtin-ts'
+      BUILTIN_TS_ENGINE_ID,
+      CUSTOM_MARS_ENGINE_ID
     ]);
     const selected = await resolveExecutionProvider(services, request);
     expect(selected.provider.descriptor.id).toBe(BUILTIN_TS_ENGINE_ID);
@@ -69,7 +71,7 @@ describe('phase-4 provider resolver registration', () => {
 
   it.each([
     ['builtin', BUILTIN_TS_ENGINE_ID],
-    ['mars', BUILTIN_TS_ENGINE_ID],
+    ['mars', CUSTOM_MARS_ENGINE_ID],
     ['verify-both', BUILTIN_TS_ENGINE_ID]
   ] as const)('preserves explicit %s execution selection', async (mode, engineId) => {
     const plan = resolveCourseEnginePlan(mode, 'P5');

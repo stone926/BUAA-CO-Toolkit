@@ -53,11 +53,18 @@
         "order": 10,
         "runtimeDefault": "java"
       },
+      "co.toolchain.mars": {
+        "type": "string",
+        "description": "仅当 ASM 使用未知或自定义指令时，运行该程序所需的 modded Mars jar 路径。留空时不启用此工具。",
+        "scope": "machine-overridable",
+        "order": 20,
+        "runtimeDefault": ""
+      },
       "co.toolchain.logisim": {
         "type": "string",
         "description": "P0 和 P3 使用的 Logisim jar 路径",
         "scope": "machine-overridable",
-        "order": 20,
+        "order": 30,
         "runtimeDefault": ""
       }
     }
@@ -195,64 +202,6 @@
     "title": "兼容设置（仅已配置用户可见）",
     "order": 100,
     "properties": {
-      "co.toolchain.marsP7": {
-        "type": "string",
-        "description": "旧版本配置的 P7 MARS jar 路径",
-        "deprecationMessage": "MIPS 汇编和运行现由内置引擎提供，此历史路径设置已忽略。请删除此项。",
-        "scope": "machine-overridable",
-        "order": 10,
-        "runtimeDefault": ""
-      },
-      "co.toolchain.mars": {
-        "type": "string",
-        "description": "旧版本配置的外部 MARS jar 路径",
-        "deprecationMessage": "MIPS 汇编和运行现由内置引擎提供，此历史路径设置已忽略。请删除此项。",
-        "scope": "machine-overridable",
-        "order": 20,
-        "runtimeDefault": ""
-      },
-      "co.mips.engine": {
-        "type": "string",
-        "enum": [
-          "auto",
-          "builtin"
-        ],
-        "enumDescriptions": [
-          "自动使用内置课程引擎",
-          "使用内置 TypeScript 汇编器和执行器"
-        ],
-        "description": "P3-P7 课程 MIPS 引擎兼容设置",
-        "deprecationMessage": "P3-P7 课程流程统一使用内置引擎。旧 mars 和 verify-both 值自动按 auto 处理；建议删除此项。",
-        "scope": "resource",
-        "order": 30,
-        "runtimeDefault": "auto"
-      },
-      "co.mips.delayedBranching": {
-        "type": "string",
-        "enum": [
-          "profile",
-          "on",
-          "off"
-        ],
-        "description": "普通内置 MARS 的延迟槽设置；profile 按项目阶段选择，课程 CPU 测试固定采用课程契约",
-        "deprecationMessage": "兼容普通 MARS 程序的运行偏好；通常使用 profile 默认值。此项不改变课程 CPU 测试语义。",
-        "scope": "resource",
-        "order": 40,
-        "runtimeDefault": "profile"
-      },
-      "co.mips.memoryConfiguration": {
-        "type": "string",
-        "enum": [
-          "Default",
-          "CompactDataAtZero",
-          "CompactTextAtZero"
-        ],
-        "description": "普通内置 MARS 的内存布局；P3-P7 CPU 测试固定采用课程内存布局",
-        "deprecationMessage": "普通 MARS 默认使用 Default；已有 Compact 程序可以保留对应布局。此项不改变课程 CPU 测试布局。",
-        "scope": "resource",
-        "order": 50,
-        "runtimeDefault": "Default"
-      },
       "co.run.showCommandBeforeRun": {
         "type": "boolean",
         "description": "手动运行外部工具前显示完整命令",
@@ -269,17 +218,6 @@
         "scope": "resource",
         "order": 70,
         "runtimeDefault": 120000
-      },
-      "co.mips.extraArgs": {
-        "type": "array",
-        "items": {
-          "type": "string"
-        },
-        "description": "旧版本 MARS 命令追加的参数列表",
-        "deprecationMessage": "内置 MIPS 引擎不读取外部 MARS 参数，此历史设置已忽略。请删除此项。",
-        "scope": "resource",
-        "order": 80,
-        "runtimeDefault": []
       },
       "co.verilog.syntax.external.timeoutMs": {
         "type": "number",

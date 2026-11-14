@@ -1,6 +1,6 @@
 // @index toolchain — bundled Icarus 与可选 Java/Logisim 检测
 import * as vscode from 'vscode';
-import { ensureConcreteProfile, getJava, getLogisimJar, getMipsEngine, getProfile, type MipsEngineMode } from './config';
+import { ensureConcreteProfile, getJava, getLogisimJar, getProfile, type MipsEngineMode } from './config';
 import { isFile } from './fsUtil';
 import { runTool } from './process';
 import { ToolDetection } from './types';
@@ -35,7 +35,7 @@ export async function checkToolchain(
     }];
   }
   const requiredTools = new Set([
-    ...getEffectiveRequiredTools(profile, options.engineMode ?? getMipsEngine(resource)).map(normalizeToolName),
+    ...getEffectiveRequiredTools(profile, options.engineMode ?? 'auto').map(normalizeToolName),
     ...(options.tools ?? []).map(normalizeToolName)
   ]);
 

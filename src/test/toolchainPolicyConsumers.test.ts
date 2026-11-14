@@ -10,7 +10,10 @@ describe('mode-aware toolchain policy consumers', () => {
   it.each(['toolchain.ts', 'sidebar.ts', 'wizard.ts'])('%s uses the shared resource-scoped policy', (file) => {
     const text = source(file);
     expect(text).toContain('getEffectiveRequiredTools');
-    expect(text).toContain('getMipsEngine(resource)');
+    expect(text).toContain(file === 'toolchain.ts'
+      ? "options.engineMode ?? 'auto'"
+      : "getEffectiveRequiredTools(profile, 'auto')");
+    expect(text).not.toContain('getMipsEngine');
     expect(text).not.toContain('getProfileRequiredTools(');
   });
 
@@ -23,10 +26,11 @@ describe('mode-aware toolchain policy consumers', () => {
     expect(text).not.toContain('getMipsEngine(resource)');
   });
 
-  it('keeps manual P3 engine selection while pinning generated Logisim work to builtin', () => {
+  it('uses the default internal engine for manual and generated Logisim work', () => {
     const text = source('courseTestLogisim.ts');
     expect(text).toContain("const automatic = options.source?.kind === 'generator'");
-    expect(text).toContain('automatic ? automaticTestEngineMode : options.engineMode ?? getMipsEngine(asm)');
+    expect(text).toContain("automatic ? automaticTestEngineMode : options.engineMode ?? 'auto'");
+    expect(text).not.toContain('getMipsEngine');
     expect(text).toContain('nonInteractive: automatic');
     expect(text).toContain('engineMode: options.nonInteractive ? automaticTestEngineMode : undefined');
     expect(text).not.toMatch(/tools:\s*\[\s*['"]java['"]\s*,\s*['"]mars['"]/);

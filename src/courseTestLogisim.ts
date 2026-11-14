@@ -6,7 +6,6 @@ import {
   getLogisimTraceColumns,
   getLogisimTraceMainCircuit,
   getMemoryConfiguration,
-  getMipsEngine,
   getProfile,
   getRunTimeout,
   showCommandBeforeRun,
@@ -108,6 +107,7 @@ export interface P3LogisimTraceSetup {
 }
 
 export interface P3LogisimTraceSetupOptions {
+  circuit?: vscode.Uri;
   /** Internal automatic-test setup: keep tool details out of the normal user surface. */
   nonInteractive?: boolean;
 }
@@ -122,6 +122,10 @@ export interface LogisimCliTraceRun {
 }
 
 export interface P3LogisimTraceRunOptions {
+  cpuResource?: vscode.Uri;
+  sourceRoot?: vscode.Uri;
+  engineResource?: vscode.Uri;
+  expectedEngineArtifact?: import('./mips/providers/contracts').EngineArtifactIdentity;
   revealOutput?: boolean;
   source?: CourseTraceBatchSource;
   logisim?: P3LogisimTraceSetup;
@@ -139,6 +143,8 @@ export async function runP3LogisimTraceCase(
   options: P3LogisimTraceRunOptions = {}
 ): Promise<NeutralCourseTraceCaseResult> {
   const asm = item.asm;
+  const resource = options.cpuResource ?? asm;
+  const engineResource = options.engineResource ?? asm;
   const pipeline = options.pipeline ?? defaultP3TracePipeline();
   const automatic = options.source?.kind === 'generator';
   services.output.appendLine(automatic ? '正在运行自动测试点' : 'P3 Logisim 写回记录测试');
@@ -154,8 +160,8 @@ export async function runP3LogisimTraceCase(
       message: 'P3 Logisim 写回记录对拍不支持标准输入用例'
     };
   }
-  const enginePlan = resolveCourseEnginePlan(
-    automatic ? automaticTestEngineMode : options.engineMode ?? getMipsEngine(asm),
+  let enginePlan = resolveCourseEnginePlan(
+    automatic ? automaticTestEngineMode : options.engineMode ?? 'auto',
     'P3'
   );
   const fixedMars = enginePlan.mode === 'verify-both'
@@ -165,7 +171,7 @@ export async function runP3LogisimTraceCase(
     return failedCase(item, 'oracle', `[${fixedMars.diagnostic.code}] ${fixedMars.diagnostic.message}`);
   }
 
-  const setup = options.logisim ?? await resolveP3LogisimTraceSetup(services, asm, {
+  const setup = options.logisim ?? await resolveP3LogisimTraceSetup(services, resource, {
     nonInteractive: automatic
   });
   if (!setup) {
@@ -181,7 +187,9 @@ export async function runP3LogisimTraceCase(
     source: asmCaseSourceFromBatchSource(options.source ?? { kind: 'selected', asmFiles: [asm.fsPath] }),
     // The ASM owns the course profile and engine snapshot. A circuit selected
     // from another workspace folder must not alter assembler semantics.
-    resource: asm,
+    resource,
+    sourceRoot: options.sourceRoot,
+    metadata: { 'test.cpuResource': resource.fsPath, 'test.engineResource': engineResource.fsPath },
     enginePlan
   });
   const caseOutputMode = options.artifactOutputMode === 'case';
@@ -197,6 +205,9 @@ export async function runP3LogisimTraceCase(
     revealOutput: options.revealOutput,
     nonInteractive: automatic ? true : undefined,
     courseTrace: true,
+    resource,
+    engineResource,
+    expectedEngineArtifact: options.expectedEngineArtifact,
     enginePlan,
     signal: options.signal
   });
@@ -211,6 +222,7 @@ export async function runP3LogisimTraceCase(
       engineRunWasCancelled(dump?.status, options.signal)
     );
   }
+  enginePlan = dump.enginePlan ?? enginePlan;
   if (!automatic) {
     services.output.appendLine(`机器码：${asmCase.machineCode.fsPath}`);
   }
@@ -662,7 +674,7 @@ export async function resolveP3LogisimTraceSetup(
     return undefined;
   }
 
-  const circuit = await resolveLogisimCircuitInput();
+  const circuit = options.circuit ?? await resolveLogisimCircuitInput();
   if (!circuit) {
     return undefined;
   }
@@ -869,7 +881,7 @@ async function ensureP3LogisimTraceToolchainReady(
   services.output.appendLine('');
   services.output.appendLine(options.nonInteractive ? '正在检查自动测试工具链' : '正在检查 P3 Logisim 写回记录对拍工具链');
 
-  const engineMode = options.nonInteractive ? automaticTestEngineMode : getMipsEngine(resource);
+  const engineMode = options.nonInteractive ? automaticTestEngineMode : 'auto';
   const memoryConfiguration = getMemoryConfiguration(resource);
   const configurationError = courseTraceMemoryConfigurationErrorForEngine('P3', engineMode, memoryConfiguration);
   if (configurationError) {

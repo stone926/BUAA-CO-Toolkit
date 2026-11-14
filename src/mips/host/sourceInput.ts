@@ -19,15 +19,26 @@ export async function loadCapturedSourceUnits(stageDir: string, graph: SourceGra
 export async function captureAssemblyInput(sourcePath: string, allowedRoot: string): Promise<{
   sources: readonly SourceUnit[]; includes: readonly AssemblerServiceInclude[];
 }> {
+  return withCapturedAssemblySource(sourcePath, allowedRoot, async ({ sources, includes }) => ({ sources, includes }));
+}
+
+/** Keep rewritten includes and root alive until an external assembler has finished reading them. */
+export async function withCapturedAssemblySource<T>(sourcePath: string, allowedRoot: string, run: (input: {
+  sourcePath: string; sources: readonly SourceUnit[]; includes: readonly AssemblerServiceInclude[];
+  sourcePaths: readonly { id: string; path: string }[];
+}) => Promise<T>): Promise<T> {
   const stage = await fs.mkdtemp(path.join(os.tmpdir(), 'co-mars-source-'));
   try {
     const { graph } = await captureSourceGraph(sourcePath, stage, undefined, { ...defaultSourceCaptureLimits }, { allowedRoot });
     const units = await loadCapturedSourceUnits(stage, graph);
     const root = units.find((unit) => unit.id === graph.rootId)!;
-    return {
+    const rootUnit = graph.units.find((unit) => unit.id === graph.rootId)!;
+    return await run({
+      sourcePath: path.join(stage, ...rootUnit.materializedPath.split('/')),
+      sourcePaths: graph.units.map((unit) => ({ id: unit.id, path: path.join(stage, ...unit.materializedPath.split('/')) })),
       sources: [root, ...units.filter((unit) => unit !== root)],
       includes: graph.edges.map((edge) => ({ fromId: edge.from, specifier: edge.requestedPath, toId: edge.to }))
-    };
+    });
   } finally {
     const target = path.resolve(stage);
     if (path.dirname(target) !== path.resolve(os.tmpdir()) || !path.basename(target).startsWith('co-mars-source-')) {

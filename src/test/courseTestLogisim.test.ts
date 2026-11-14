@@ -263,37 +263,17 @@ describe('course test Logisim helpers', () => {
     }
   );
 
-  it('migrates a manual P3 verify-both setting without starting the fork reference', async () => {
+  it('uses the default auto engine for a manual P3 run without legacy settings', async () => {
     const fixture = automaticP3Fixture();
     const runOracle = vi.fn(async () => ({
       ok: false,
       preflight: { ok: false, diagnostics: [{ code: 'builtin.error', message: 'stop after engine assertion' }], descriptor: { id: 'builtin-ts' } }
     }));
     const pipeline = automaticP3Pipeline(fixture, runOracle);
-    vi.mocked(verifyConfiguredFixedMarsReference).mockResolvedValueOnce({
-      ok: true,
-      identity: { sha256: 'a'.repeat(64) }
-    } as never);
-    vi.mocked(runFullStackShadow).mockResolvedValueOnce({
-      evidenceKind: 'full-stack',
-      status: 'inconclusive',
-      message: 'stop after quiet-context assertion',
-      bundleDir: 'E:/workspace/shadow',
-      resultFile: 'E:/workspace/shadow/full-stack-result.json',
-      assembly: {
-        matched: false,
-        builtinWords: 2,
-        legacyWords: 2,
-        disposition: 'inconclusive',
-        message: 'stop after quiet-context assertion'
-      }
-    } as never);
-
     const result = await runP3LogisimTraceCase(
       fixture.services,
       { asm: fixture.asm as never, asmCase: fixture.asmCase as never },
       {
-        engineMode: 'verify-both',
         artifactOutputMode: 'case',
         pipeline: pipeline as never,
         logisim: fixture.logisim as never

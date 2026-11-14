@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   BUILTIN_TS_ENGINE_ID,
+  CUSTOM_MARS_ENGINE_ID,
   courseEnginePlanProfileError,
   resolveCourseEnginePlan
 } from '../../mips/providers/courseEnginePolicy';
@@ -37,20 +38,18 @@ describe('phase-6 course engine policy', () => {
       .toBe(BUILTIN_TS_ENGINE_ID);
   });
 
-  it('migrates fork modes without starting a verification lane', () => {
+  it('supports internal builtin and custom Mars selections without verification', () => {
     expect(resolveCourseEnginePlan('builtin', 'P2', { interactiveConsole: true }))
       .toMatchObject({ primaryEngineId: BUILTIN_TS_ENGINE_ID });
     expect(resolveCourseEnginePlan('mars', 'P7'))
-      .toMatchObject({ mode: 'auto', primaryEngineId: BUILTIN_TS_ENGINE_ID });
-    expect(resolveCourseEnginePlan('verify-both', 'P2', { deterministicConsole: true }))
-      .toMatchObject({
-        mode: 'auto', primaryEngineId: BUILTIN_TS_ENGINE_ID
-      });
-    for (const mode of ['mars', 'verify-both'] as const) {
-      for (const profile of ['P3', 'P4', 'P5', 'P6', 'P7']) {
-        expect(resolveCourseEnginePlan(mode, profile)).toMatchObject({ mode: 'auto', primaryEngineId: BUILTIN_TS_ENGINE_ID });
-        expect(resolveCourseEnginePlan(mode, profile).verificationEngineId).toBeUndefined();
-      }
+      .toMatchObject({ mode: 'mars', primaryEngineId: CUSTOM_MARS_ENGINE_ID });
+    for (const profile of ['P2', 'P3', 'P4', 'P5', 'P6', 'P7']) {
+      const custom = resolveCourseEnginePlan('mars', profile);
+      expect(custom).toMatchObject({ mode: 'mars', primaryEngineId: CUSTOM_MARS_ENGINE_ID });
+      expect(custom.verificationEngineId).toBeUndefined();
+      const automatic = resolveCourseEnginePlan('auto', profile);
+      expect(automatic).toMatchObject({ mode: 'auto', primaryEngineId: BUILTIN_TS_ENGINE_ID });
+      expect(automatic.verificationEngineId).toBeUndefined();
     }
   });
 });

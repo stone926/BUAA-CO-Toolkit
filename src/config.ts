@@ -6,7 +6,6 @@ import { normalizePathKey } from './pathUtils';
 import { activeProjectResource } from './configurationResource';
 import { DELAYED_BRANCHING_PROFILES } from './constants';
 import { configDefault } from './configDefaults';
-import { OFFICIAL_MARS_MEMORY_CONFIGURATIONS } from './language/mips/legacyMarsPolicy';
 import {
   ConcreteProjectProfile,
   ProjectProfile,
@@ -240,29 +239,9 @@ function configuredProfileDefault(
 
 export type MipsEngineMode = 'auto' | 'builtin' | 'mars' | 'verify-both';
 
-const mipsEngineModes = new Set<MipsEngineMode>(['auto', 'builtin']);
-
-/**
- * P3-P7 课程汇编器与架构 Oracle 的引擎选择。
- *
- * 配置按 resource 读取，以正确支持 multi-root workspace；旧版或手写 settings
- * 中的旧 mars/verify-both 和非法值统一回退到 auto。
- */
-export function getMipsEngine(resource?: vscode.Uri): MipsEngineMode {
-  const configured = inspectedValue<unknown>('mips.engine', resource);
-  const normalized = typeof configured === 'string' ? configured.trim().toLowerCase() : '';
-  if (mipsEngineModes.has(normalized as MipsEngineMode)) {
-    return normalized as MipsEngineMode;
-  }
-  return configDefault<MipsEngineMode>('mips.engine');
-}
-
+/** Delay-slot behavior follows the course Profile; there is no legacy setting override. */
 export function useDelayedBranching(resource?: vscode.Uri): boolean {
-  const mode = config<string>('mips.delayedBranching', configDefault<string>('mips.delayedBranching'), resource);
-  if (mode === 'on') { return true; }
-  if (mode === 'off') { return false; }
-  const profile = getProfile(resource);
-  return DELAYED_BRANCHING_PROFILES.has(profile);
+  return DELAYED_BRANCHING_PROFILES.has(getProfile(resource));
 }
 
 export function getJava(resource?: vscode.Uri): string {
@@ -270,16 +249,7 @@ export function getJava(resource?: vscode.Uri): string {
 }
 
 export function getMarsJar(resource?: vscode.Uri): string {
-  // Kept as a migration shim for historical replay/settings readers. Runtime
-  // MIPS work no longer consumes a user-configured MARS jar.
-  void resource;
-  return '';
-}
-
-/** Historical setting reader; execution never uses this retired P7 override. */
-export function getMarsP7Jar(resource?: vscode.Uri): string {
-  void resource;
-  return '';
+  return layeredGetString('toolchain.mars', configDefault<string>('toolchain.mars'), resource);
 }
 
 export function getLogisimJar(resource?: vscode.Uri): string {
@@ -308,14 +278,8 @@ export function shouldRevealOutput(resource?: vscode.Uri): boolean {
 }
 
 export function getMemoryConfiguration(resource?: vscode.Uri): string {
-  const configured = inspectedValue<unknown>('mips.memoryConfiguration', resource);
-  const normalized = typeof configured === 'string' ? configured.trim().toLowerCase() : '';
-  return OFFICIAL_MARS_MEMORY_CONFIGURATIONS.find((value) => value.toLowerCase() === normalized) ?? 'Default';
-}
-
-export function getMipsExtraArgs(resource?: vscode.Uri): string[] {
   void resource;
-  return [];
+  return 'Default';
 }
 
 /** The sole public automatic-test customization. The old key is migration-only. */

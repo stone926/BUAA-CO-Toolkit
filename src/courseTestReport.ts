@@ -51,6 +51,9 @@ export type LegacyCourseTraceStage = 'dump' | 'mars' | 'isim' | 'logisim';
 export type CourseTraceStage = NeutralCourseTraceStage | LegacyCourseTraceStage;
 
 export interface CourseTraceCaseResult {
+  /** Actual reference selected for this point, distinct from the batch's auto policy. */
+  referenceEngine?: string;
+  referenceNote?: string;
   asm: string;
   /** Original zero-based ordinal, independent of concurrent completion order. */
   caseIndex?: number;
@@ -216,6 +219,21 @@ export function neutralCourseTraceCaseResult(item: CourseTraceCaseResult): Neutr
     ...(dutEvents === undefined ? {} : { dutEvents }),
     ...(firstDiff ? { firstDiff: neutralTraceDiffSnapshot(firstDiff) } : {})
   };
+}
+
+/** Hide artifact actions after the workspace-wide passing-case retention removed this case. */
+export function markCourseTraceArtifactsPruned(result: CourseTraceCaseResult): void {
+  result.artifactsPruned = true;
+  delete result.caseManifest;
+  delete result.asmSnapshot;
+  delete result.machineCode;
+  delete result.oracleOut;
+  delete result.dutOut;
+  delete result.dutRawOut;
+  delete result.marsOut;
+  delete result.simOut;
+  delete result.logisimOut;
+  delete result.logisimCircuit;
 }
 
 /**

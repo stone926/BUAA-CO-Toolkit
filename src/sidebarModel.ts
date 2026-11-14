@@ -194,6 +194,14 @@ function actionsSection(context: SidebarModelContext): SidebarNodeModel {
         '持续生成当前 Profile 的最强测试点，直到首个失败、错误或手动停止。'
       ),
       actionItem(
+        'core.userAsmTest',
+        '测试用户汇编文件 / 目录',
+        Commands.Test.RunAsmTests,
+        'beaker',
+        '用自己的汇编程序验证当前 CPU',
+        '选择一个汇编文件或目录；目录仅测试直属 .asm、.s、.mips 文件。'
+      ),
+      actionItem(
         'core.stopAutomaticTest',
         '停止持续测试',
         Commands.Test.StopContinuousTests,

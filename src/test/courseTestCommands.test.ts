@@ -6,6 +6,7 @@ import { requestContinuousTestsStop, startContinuousGeneratedTraceTests } from '
 import { openAsmCaseIndex } from '../courseTestHistory';
 import { resolveP3LogisimTraceSetup } from '../courseTestLogisim';
 import { runCourseTraceCase } from '../courseTesting/traceRunner';
+import { requestUserAsmTestsStop, runUserAsmTests } from '../courseTestUserAsm';
 import { createTestServices } from './helpers/appServices';
 
 vi.mock('vscode', async () => {
@@ -20,6 +21,7 @@ vi.mock('../courseTestContinuous', () => ({
 vi.mock('../courseTestHistory', () => ({ openAsmCaseIndex: vi.fn() }));
 vi.mock('../courseTestLogisim', () => ({ resolveP3LogisimTraceSetup: vi.fn() }));
 vi.mock('../courseTesting/traceRunner', () => ({ runCourseTraceCase: vi.fn() }));
+vi.mock('../courseTestUserAsm', () => ({ requestUserAsmTestsStop: vi.fn(() => false), runUserAsmTests: vi.fn() }));
 vi.mock('../courseTesting/generatorWorkflow', () => ({
   resolveGeneratorRunSetup: vi.fn(),
   generatorFolder: vi.fn(),
@@ -44,6 +46,7 @@ describe('public course-test commands', () => {
   it('starts continuous testing through the retained pipeline and resolves P3 setup without a picker', async () => {
     const { commands, services } = register();
     expect([...commands.keys()]).toEqual([
+      Commands.Test.RunAsmTests,
       Commands.Test.StartContinuousGeneratedTraceTests,
       Commands.Test.StopContinuousTests,
       Commands.Test.OpenAsmCaseIndex
@@ -65,5 +68,24 @@ describe('public course-test commands', () => {
 
     await commands.get(Commands.Test.OpenAsmCaseIndex)!();
     expect(openAsmCaseIndex).toHaveBeenCalledOnce();
+  });
+
+  it('routes selected ASM and CPU arguments and stops the user batch through its controller', async () => {
+    const { commands, services } = register();
+    const asm = vscode.Uri.file('D:/user sources/test.asm');
+    const cpu = vscode.Uri.file('E:/CPU/rtl/mips.v');
+    await commands.get(Commands.Test.RunAsmTests)!(asm, cpu, 'mars');
+    expect(runUserAsmTests).toHaveBeenCalledWith(services, asm, cpu, 'mars');
+    vi.mocked(requestUserAsmTestsStop).mockReturnValueOnce(true);
+    await commands.get(Commands.Test.StopContinuousTests)!();
+    expect(requestContinuousTestsStop).not.toHaveBeenCalled();
+    expect(vscode.window.showInformationMessage).toHaveBeenCalledWith('已请求停止用户汇编测试');
+  });
+
+  it('does not treat Explorer selected-resource arrays as an explicit CPU argument', async () => {
+    const { commands, services } = register();
+    const asm = vscode.Uri.file('D:/user sources/test.asm');
+    await commands.get(Commands.Test.RunAsmTests)!(asm, [asm]);
+    expect(runUserAsmTests).toHaveBeenCalledWith(services, asm, undefined, undefined);
   });
 });

@@ -17,6 +17,8 @@ import { imageSegmentWords, wordsToHexText } from './mips/core/assembler/artifac
 import { writeFileAtomicReplace } from './mips/replay/atomicFile';
 import { readBoundedRegularFile } from './mips/replay/boundedFile';
 import type { EngineArtifactIdentity, ResolvedEngineRun } from './mips/providers/contracts';
+import { needsCustomMars } from './mips/providers/customMarsCommon';
+import { runCustomMarsConsole } from './mips/host/customMarsConsole';
 
 export { buildMarsArgs } from './language/mips/marsArgs';
 export type MarsRunMode = 'run' | 'dumpText' | 'dumpKernel';
@@ -77,7 +79,7 @@ async function runTerminal(services: AppServices): Promise<void> {
   terminal.show();
 }
 
-/** Compatibility command API backed solely by the internal MARS Worker. */
+/** Ordinary command API: builtin Worker first, complete custom Mars fallback before execution. */
 export async function runMarsFile(services: AppServices, asmUri: vscode.Uri, mode: MarsRunMode,
   options: MarsRunOptions = {}): Promise<MarsRunOutput | undefined> {
   const messages = options.showMessages !== false && !options.nonInteractive;
@@ -89,12 +91,18 @@ export async function runMarsFile(services: AppServices, asmUri: vscode.Uri, mod
     return { result: { ok: false, exitCode: null, commandLine: 'internal-mars', cwd: dirname(asmUri), stdout: '', stderr, timedOut: false } };
   }
   if (!options.nonInteractive && (options.revealOutput ?? shouldRevealOutput(asmUri))) revealOutputChannel(services.output, asmUri);
-  const output = await runInternalMars({
+  let output = await runInternalMars({
     sourcePath: asmUri.fsPath, allowedRoot: workspaceFolderFor(asmUri)?.uri.fsPath ?? dirname(asmUri),
     memoryConfiguration: getMemoryConfiguration(asmUri) as MarsMemoryConfiguration,
     delayedBranching: useDelayedBranching(asmUri), timeoutMs: getRunTimeout(asmUri),
     maxSteps: options.maxSteps, stdin: options.stdin, signal: options.signal, runtime: services.mipsRuntime, console: options.console
   }, mode === 'run');
+  let external = false;
+  if (!options.signal?.aborted && needsCustomMars(output.result, output.assemblyDiagnostics)) {
+    external = true;
+    try { output = await runCustomMarsConsole(asmUri, mode === 'run', options); }
+    catch (error) { output = { result: { ...output.result, stderr: error instanceof Error ? error.message : String(error) } }; }
+  }
   let outputFile: vscode.Uri | undefined;
   try {
     if (mode === 'run') {
@@ -111,8 +119,9 @@ export async function runMarsFile(services: AppServices, asmUri: vscode.Uri, mod
     if (output.result.stderr) services.output.appendLine(output.result.stderr);
   }
   if (messages) {
-    if (output.result.ok) vscode.window.showInformationMessage(mode === 'run' ? '内置 MARS 运行完成' : '内置 MARS 已导出机器码');
-    else vscode.window.showErrorMessage(`内置 MARS ${mode === 'run' ? '运行' : '导出'}失败：${output.result.stderr}`);
+    const engine = external ? '自定义 Mars' : '内置 MARS';
+    if (output.result.ok) vscode.window.showInformationMessage(mode === 'run' ? `${engine} 运行完成` : `${engine} 已导出机器码`);
+    else vscode.window.showErrorMessage(`${engine} ${mode === 'run' ? '运行' : '导出'}失败：${output.result.stderr}`);
   }
   return { result: output.result, outputFile };
 }

@@ -1,0 +1,71 @@
+{
+  "schemaVersion": 1,
+  "textNormalization": "CRLF-to-LF",
+  "inputs": [
+    {
+      "path": "resources/mars/bridge/src/co/mars/bridge/ControlFlowIntent.java",
+      "sha256": "21dcc2cf4f8e82a654123a9c72a747a6ab26b4eba4129d94bda54daed3decf19"
+    },
+    {
+      "path": "resources/mars/bridge/src/co/mars/bridge/CourseDomain.java",
+      "sha256": "7e602bd23e73a9406f3fd3b26605dc1e8ff28691c8fdd0f286ba229f041e688b"
+    },
+    {
+      "path": "resources/mars/bridge/src/co/mars/bridge/DataReservations.java",
+      "sha256": "9591d8b532de1293b793152a43b9526c3f9a515e30649d38eb0347f7918e39a6"
+    },
+    {
+      "path": "resources/mars/bridge/src/co/mars/bridge/Execution.java",
+      "sha256": "e29787b767bd6eaba2d9da024dcbecff9bf127da676f8e44164009ad5dd65a8a"
+    },
+    {
+      "path": "resources/mars/bridge/src/co/mars/bridge/Json.java",
+      "sha256": "92858e3d8ee55954e37dba9348f8219c3312ba71983e5d915d26eee7f40eadd5"
+    },
+    {
+      "path": "resources/mars/bridge/src/co/mars/bridge/Main.java",
+      "sha256": "12a287a02017b209ab42bbe29afe77dcb2376708cd19ca15995f9aaed5228913"
+    },
+    {
+      "path": "resources/mars/bridge/src/co/mars/bridge/MarsBridge.java",
+      "sha256": "ca252fa297866dc4132558ab67031ef9b7821a1bc9b60d7315a39ac574c61090"
+    },
+    {
+      "path": "resources/mars/bridge/src/co/mars/bridge/P7CustomControl.java",
+      "sha256": "e391104b41137db0fe660e2dafa91977df68b13a34bc768eec8ad13effe0ffc9"
+    },
+    {
+      "path": "resources/mars/bridge/src/co/mars/bridge/Reflect.java",
+      "sha256": "b5b4812b8fe7b7341a63ed919155f3599c4cfbf0b436f09cb003551f8b688e98"
+    },
+    {
+      "path": "resources/mars/bridge/vendor/DEPENDENCIES.json",
+      "sha256": "53fd1086433d37972342f7331a149be14aaff8062aa75b553e14c2dee0b8555e"
+    },
+    {
+      "path": "resources/mars/bridge/vendor/LICENSE-ASM.txt",
+      "sha256": "806627a3f06b0b48f08d958ae3615eb806e4b83056b21355a87de2b7ad87fe8d"
+    },
+    {
+      "path": "resources/mars/bridge/vendor/asm-9.11.1.jar",
+      "sha256": "ae4e6e10d59d0a1500317764b21881ad883f8550e33c66e6142f7032c6fb566c"
+    },
+    {
+      "path": "resources/mars/bridge/vendor/asm-9.11.1.pom",
+      "sha256": "11fbc3d89590bf8a8c76012d4588aa03aacf54fbacfbe94b1e765a77f86c219a"
+    },
+    {
+      "path": "scripts/build-mars-bridge.mjs",
+      "sha256": "5f0ac81884d9bcf9e86d437dbba54b0f4bc9470c980a598d582287c52a30d46f"
+    },
+    {
+      "path": "scripts/check-mars-bridge.mjs",
+      "sha256": "667c99b63ffa52b911fe0c56356457b64093fb81e03db4823ce37cf6485b681d"
+    }
+  ],
+  "artifact": {
+    "path": "resources/mars/bridge/mars-bridge.jar",
+    "sha256": "c5b618516a57597295e14c9ea0a980a2217a0a89d9dfcaa55890228b32dc247e",
+    "bytes": 177847
+  }
+}

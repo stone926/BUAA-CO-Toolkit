@@ -59,7 +59,7 @@ describe('configuration source', () => {
       const groups = read('package.json', cwd).contributes.configuration;
       const properties: any = Object.assign({}, ...groups.map((group: any) => group.properties));
       expect(properties['co.run.revealOutput'].default).toBe(true);
-      expect(properties['co.mips.engine']).not.toHaveProperty('default');
+      expect(properties).not.toHaveProperty('co.mips.engine');
       expect(properties['co.project.topModule'].default).toBe('');
       expect(read('resources/co/configDefaults.json', cwd)['project.topModule']).toBe('mips');
       for (const property of Object.values(properties)) {

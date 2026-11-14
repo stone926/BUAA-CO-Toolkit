@@ -1,6 +1,6 @@
 // @index mips-providers — provider 解析：唯一入口，preflight 在副作用前完成，禁止半途 fallback
 import { AppServices } from '../../types';
-import { getMipsEngine, getProfile } from '../../config';
+import { getProfile } from '../../config';
 import {
   AssembleRequest,
   AssembleResult,
@@ -13,8 +13,12 @@ import {
 } from './contracts';
 import { BuiltinTsExecutionProvider } from './builtinExecutionProvider';
 import { BuiltinTsAssemblerProvider } from './builtinAssemblerProvider';
+import { CustomMarsAssemblerProvider, type CustomMarsSessions } from './customMarsAssemblerProvider';
+import { CustomMarsExecutionProvider } from './customMarsExecutionProvider';
+import { needsCustomMars } from './customMarsCommon';
 import {
   BUILTIN_TS_ENGINE_ID,
+  CUSTOM_MARS_ENGINE_ID,
   type CourseEnginePlan,
   type CourseProviderEngineId,
   LEGACY_MARS_ENGINE_ID,
@@ -25,7 +29,8 @@ import {
 /**
  * Provider resolver（计划第 5.3/9 节）。
  *
- * 生产只注册内部汇编器和课程执行器；普通 MARS 运行由同一 Worker 的服务模式处理。
+ * 生产注册内置和自定义 Mars 的完整参考栈；auto 在未知指令汇编失败后、
+ * 程序执行前绑定自定义栈。普通控制台复用独立的 MARS 服务模式。
  * 解析失败（preflight not ok）时调用方必须以
  * 结构化诊断结束任务——任何 provider 都不允许在部分执行后隐式 fallback。
  */
@@ -50,9 +55,10 @@ export function registerDefaultProviders(services: AppServices): ProviderRegistr
   // Resolution follows the immutable plan's id and never relies on array order.
   const builtinAssemblerProvider = new BuiltinTsAssemblerProvider(services.mipsRuntime);
   const builtinExecutionProvider = new BuiltinTsExecutionProvider(services.mipsRuntime);
+  const customSessions: CustomMarsSessions = new WeakMap();
   const registry = {
-    assemblerProviders: [builtinAssemblerProvider],
-    executionProviders: [builtinExecutionProvider]
+    assemblerProviders: [builtinAssemblerProvider, new CustomMarsAssemblerProvider(customSessions)],
+    executionProviders: [builtinExecutionProvider, new CustomMarsExecutionProvider(customSessions)]
   };
   defaultRegistries.set(services, registry);
   return registry;
@@ -78,7 +84,7 @@ export function resolveAssemblerProvider(
 }> {
   const registry = registerDefaultProviders(services);
   const effectiveSelection = selection ?? resolveCourseEnginePlan(
-    getMipsEngine(request.sourceUri),
+    'auto',
     request.requirements?.profile ?? getProfile(request.sourceUri),
     request.requirements
   );
@@ -229,7 +235,7 @@ async function resolvePlannedProvider<
 
 function isCourseProviderEngineId(engineId: string): engineId is CourseProviderEngineId {
   return engineId === LEGACY_MARS_ENGINE_ID || engineId === OFFICIAL_MARS_ENGINE_ID
-    || engineId === BUILTIN_TS_ENGINE_ID;
+    || engineId === BUILTIN_TS_ENGINE_ID || engineId === CUSTOM_MARS_ENGINE_ID;
 }
 
 /** Convenience: run preflight, fail closed with a structured result when unsupported. */
@@ -243,7 +249,7 @@ export async function assembleWithPreflight(
   result?: AssembleResult;
   preflight: ProviderPreflight;
 }> {
-  const { provider, preflight } = await resolveAssemblerProvider(
+  const { provider, preflight, selection: initialSelection } = await resolveAssemblerProvider(
     services,
     request,
     selection
@@ -251,7 +257,15 @@ export async function assembleWithPreflight(
   if (!preflight.ok) {
     return { ok: false, preflight };
   }
-  const result = await provider.assemble(request, context);
+  let result = await provider.assemble(request, context);
+  if (initialSelection.mode === 'auto' && provider.descriptor.id === BUILTIN_TS_ENGINE_ID
+    && !context?.signal?.aborted && needsCustomMars(result.status, result.assemblyDiagnostics)) {
+    const selected = resolveCourseEnginePlan('mars', request.requirements?.profile ?? getProfile(request.sourceUri));
+    const custom = await resolveAssemblerProvider(services, request, selected);
+    if (!custom.preflight.ok) return { ok: false, preflight: custom.preflight };
+    result = await custom.provider.assemble(request, context);
+    return { ok: result.ok, result: { ...result, enginePlan: selected }, preflight: custom.preflight };
+  }
   return { ok: result.ok, result, preflight };
 }
 

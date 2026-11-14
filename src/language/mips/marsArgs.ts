@@ -3,7 +3,6 @@ import * as path from 'path';
 import { resourcePath } from '../../resourcePaths';
 import {
   getMemoryConfiguration,
-  getMipsExtraArgs,
   getProfile,
   useDelayedBranching
 } from '../../config';
@@ -65,7 +64,7 @@ export function buildMarsArgs(
   memoryConfiguration = getMemoryConfiguration(asmUri as any),
   resolved?: MarsResolvedArgumentSettings
 ): string[] {
-  const extraArgs = resolved?.extraArgs ?? getMipsExtraArgs(asmUri as any);
+  const extraArgs = resolved?.extraArgs ?? [];
   const unsupported = officialMarsUnsupportedReason(mode, options, extraArgs);
   if (unsupported) throw new Error(unsupported);
   if (!(OFFICIAL_MARS_MEMORY_CONFIGURATIONS as readonly string[]).includes(memoryConfiguration)) {

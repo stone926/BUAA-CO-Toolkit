@@ -6,10 +6,12 @@ import type { MipsEngineMode } from '../../config';
 export const LEGACY_MARS_ENGINE_ID = 'legacy-mars-configured' as const;
 export const BUILTIN_TS_ENGINE_ID = 'builtin-ts' as const;
 export const OFFICIAL_MARS_ENGINE_ID = 'official-mars-configured' as const;
+export const CUSTOM_MARS_ENGINE_ID = 'custom-mars' as const;
 
 export type CourseProviderEngineId =
   | typeof LEGACY_MARS_ENGINE_ID
   | typeof OFFICIAL_MARS_ENGINE_ID
+  | typeof CUSTOM_MARS_ENGINE_ID
   | typeof BUILTIN_TS_ENGINE_ID;
 
 export interface CourseEngineCapabilityRequest {
@@ -50,10 +52,10 @@ export function resolveCourseEnginePlan(
   profile: string | undefined,
   _capabilities: CourseEngineCapabilityRequest = {}
 ): CourseEnginePlan {
-  // Old workspace rollback settings must never select the fork's course oracle.
-  // Console capability failures are reported by builtin preflight, without fallback.
-  const effectiveMode = mode === 'mars' || mode === 'verify-both' ? 'auto' : mode;
-  const primaryEngineId = BUILTIN_TS_ENGINE_ID;
+  // This is an explicit per-run choice, independent of retired workspace settings.
+  // Auto starts with builtin; assembly capability failure can finalize a custom plan.
+  const effectiveMode = mode;
+  const primaryEngineId = mode === 'mars' ? CUSTOM_MARS_ENGINE_ID : BUILTIN_TS_ENGINE_ID;
 
   return Object.freeze({
     mode: effectiveMode,

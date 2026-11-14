@@ -1,4 +1,4 @@
-# course-testing | src/courseTesting/ | 78 files + host adapters
+# course-testing | src/courseTesting/ | 81 files + host adapters
 
 P3–P7 自动化测试：生成 ASM → 内置 TS assembler/ProgramImage → 内置 TS 课程 oracle → Verilog（bundled Icarus）或 Logisim 仿真 Trace → 对比/Probe 检查 → HTML/JSON 报告。通用 Verilog 仿真与自动 DUT lane 固定使用扩展内置 Icarus，运行目录 `.co/iverilog`。
 
@@ -20,7 +20,7 @@ P3–P7 自动化测试：生成 ASM → 内置 TS assembler/ProgramImage → �
 
 **证据诚实。** probe 在首次 mtc0/异常前用 mfc0 读取 SR/Cause/EPC 并把原始值写入 DM，metadata 把样本绑定到各自的 store PC 并严格检查初值零、唯一、早于 handler 记录。MDU 黑盒结果无法区分产生相同完整结果的合法早启动与非法晚启动，因此**不**宣称为内部启动时刻的证明。报告也说明"通过"只对应本次可观察结果，完整无写回执行、课程周期与结构仍需独立验证。
 
-**引擎边界。** 手动与 automatic case 均建立 builtin `CourseEnginePlan`，prepare 与 oracle 必须复用；旧 mars/verify-both 配置归 auto，不启动魔改 MARS 或其 capability probe。text/ktext `.word` RI、P7 异常/Timer/IRQ 与课程复位、停机语义由内置引擎提供。历史 legacy adapter 与证据只用于辨认原结果，不把官方 MARS 当作课程 oracle。
+**引擎边界。** 随机生成点固定 builtin；用户 ASM 的 auto 在未知指令汇编失败后、执行前选择 custom，显式 Mars 直接使用自定义参考。prepare 与 oracle 必须复用最终 CourseEnginePlan 及相同 Jar/class 快照。机器码校验保留课程布局、容量、零 DM 初态与停机要求，custom 编码由实际加载的注册表授权。P7 probe 继续走现有 DUT-only 黑盒检查，不经过 Mars Timer 时钟推断。历史重跑保留原 CPU/ASM 上下文并核实参考依赖版本，不静默换引擎。
 
 **有界并发、失败即停。** 会话启动时快照并发量；P3–P6 每轮生成对应数量的独立随机点，P7 保留原有 14 点套件。GPR / 常规 / 特殊测试之间有完成屏障，同一 manifest 的 stdin 变体互斥，空闲槽立即接新点。首个失败或错误立即停止派发并 abort 同批任务，等待所有在途任务（含进程退出、manifest 写入）完成后才清理或释放会话；取消不计 error，已完成结果和失败证据保存。并发量 1 维持串行顺序，轮间零延迟主动 yield 保持扩展宿主响应。报告写入仍串行合并，caseIndex 保持原测试点编号，activeCases 展示多个活动点并兼容旧 activeCase。
 
@@ -40,6 +40,7 @@ P3–P7 自动化测试：生成 ASM → 内置 TS assembler/ProgramImage → �
 - `courseTestSession.ts` — 持续测试的原子会话租约（异步初始化前同步占位）
 - `concurrentCases.ts` — 固定槽的有界异步调度、阶段屏障、产物互斥、即时失败取消与全量 drain；不依赖 VS Code
 - `continuousTraceBatch.ts` — 单批课程测试的并发执行、活动点状态与串行结果保存
+- `userAsmInputs.ts` / `userAsmBatch.ts` / `userAsmBatchReport.ts` — 用户单个 ASM 或目录的直属 `.asm/.s/.mips` 文件发现、确定性顺序执行与独立报告；源文件/include 的捕获边界和待测 CPU 工程上下文分别传递，复用现有私有 TB、会话租约、结果历史和工作区通过点留存，取消或首个失败后停止并等待在途任务退出
 - `executorShadowRunner.ts` — executor-only shadow，结果显式标为 `executor-only`，不计入 full-stack gate
 - `fullStackShadowRunner.ts` + `shadowBundleArtifacts.ts` — full-stack shadow：隔离物化 source closure，双端独立运行并逐字比较 image，matched/mismatch/inconclusive 都原子保存 bundle，未登记或不可比较结果阻断
 
@@ -108,7 +109,8 @@ P3–P7 自动化测试：生成 ASM → 内置 TS assembler/ProgramImage → �
 - `caseInspection.ts` — 指定 case 的 containment/hash/bounded read、ProgramImage→include 源码行、部分损坏降级；大波形只在打开时验证
 - `caseRerun.ts` / `caseRerunWaveform.ts` — 原 ASM/include/stdin/P7 闭包→独立新 case→现有 automatic pipeline；阶段校验、原证据保留、取消单列。波形仅装饰 DUT，复用私有 TB / 预算，dump 编译失败可降级存储器；波形问题不改 CPU 判定
 
-- `courseTest.ts` — 仅注册持续测试启动/停止/测试历史三个公共入口
+- `courseTest.ts` — 注册持续测试、用户汇编文件/目录测试、停止和测试历史公共入口；停止命令路由到当前持有会话的控制器
+- `src/courseTestUserAsm.ts` — `co.test.runAsmTests(inputUri?, cpuResource?, referenceMode?)` 的宿主入口：独立选择 CPU 工程与汇编输入，保存源码、显示可取消进度与文件级结果报告，并保留历史和用例排查入口；目录不递归。每次运行可选推荐的 `auto` 或显式 `mars` 参考策略，后者适合修改已有指令语义；第三个参数指定后跳过参考策略选择，不新增设置项
 - `courseTestHistory.ts` / `courseTestHistoryReport.ts` — 历史页宿主监视/合并刷新与纯 HTML 渲染分离；执行终态优先，无结果明确标注，面板关闭后释放监视与定时器
 - `courseTestContinuous.ts` — 持续生成循环：首个失败即停、有界产物与报告、1 秒窗口合并；持有会话时发布 `co.continuousTestRunning`，覆盖异步启动和停止 drain，最终报告处理后清除工具栏状态，再释放会话
 - `courseTestToolchain.ts` — mode-aware 校验，automatic 固定 builtin override 且不泄漏本机路径

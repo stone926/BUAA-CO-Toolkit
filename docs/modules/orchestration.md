@@ -1,4 +1,4 @@
-# orchestration | src/ | 63 files
+# orchestration | src/ | 64 files
 
 扩展宿主层：生命周期、命令注册、配置读取、Profile 推断、UI、工具链、MIPS/Verilog/Logisim 操作命令与用例存储。**不含**语言智能逻辑（在 `src/language/` 的 LSP Server 端）。这一层只做 VS Code glue，业务逻辑必须落在下面的领域模块里。
 
@@ -10,7 +10,7 @@
 ## 配置与 Profile
 
 - `constants.ts` — 命令 ID、Profile 能力集合、输出目录名（`.co/*`）等公共常量
-- `config.ts` — `co.*` 设置读取（分层取值 + 显式 Profile 持久化 + 值域裁剪）；运行时自动推断不写入工作区 Profile，避免切换独立工程后沿用上一阶段；显式 Profile 的默认项直接来自 courseConfig，向导无需写冗余设置；旧 MARS jar/参数设置被忽略，延迟槽与内存布局由内置 MIPS 引擎读取
+- `config.ts` — `co.*` 设置读取（分层取值 + 显式 Profile 持久化 + 值域裁剪）；运行时自动推断不写入工作区 Profile，避免切换独立工程后沿用上一阶段；显式 Profile 的默认项直接来自 courseConfig，向导无需写冗余设置；`co.toolchain.mars` 是可选的 modded Mars 路径，仅供未知或自定义 ASM 指令使用；旧引擎、额外参数、延迟槽和内存布局设置已删除，延迟槽按 Profile 推导，普通 MARS 使用 Default 内存布局
 - `configDefaults.ts` — 从 `resources/co/configDefaults.json` 加载默认值，宿主/LSP/测试共享
 - `projectSettings.ts` — 项目专属 overrides 的纯校验、路径匹配与原始配置合并；工作区是容器/默认设置作用域，项目是独立源集合/目录或显式文件。`co.project.overrides` 保存 profile/topModule/testbench/machineCode/simTime，键相对所属工作区；共享依赖设置冲突时不任取一个调用者。
 - `resourcePaths.ts` — 宿主、LSP 与独立辅助入口共享扩展根与静态资源定位；Worker 管理器据此定位 Worker 入口

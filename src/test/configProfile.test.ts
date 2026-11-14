@@ -63,9 +63,7 @@ import {
   getAutomaticTestInstructions,
   getAutomaticTestConcurrency,
   getMachineCode,
-  getMipsEngine,
   getMarsJar,
-  getMarsP7Jar,
   getMemoryConfiguration,
   getRunTimeout,
   getSimTime,
@@ -187,16 +185,15 @@ describe('profile-derived project defaults', () => {
   });
 });
 
-describe('retired external MARS settings', () => {
+describe('configured modded Mars path', () => {
   beforeEach(() => {
     clearConfig();
   });
 
-  it('ignores configured MARS and P7 override paths', () => {
-    setConfig('co.toolchain.mars', '/opt/mars/Mars.jar');
-    setConfig('co.toolchain.marsP7', '/opt/mars/MarsP7.jar');
+  it('reads the optional machine-overridable path and defaults to empty', () => {
     expect(getMarsJar()).toBe('');
-    expect(getMarsP7Jar()).toBe('');
+    setConfig('co.toolchain.mars', '/opt/mars/Mars.jar');
+    expect(getMarsJar()).toBe('/opt/mars/Mars.jar');
   });
 });
 
@@ -223,63 +220,9 @@ describe('getMemoryConfiguration', () => {
     expect(getMemoryConfiguration()).toBe('Default');
   });
 
-  it('migrates the old auto memory setting to Default', () => {
-    setConfig('co.project.profile', 'P7');
-    setConfig('co.mips.memoryConfiguration', 'auto');
-
-    expect(getMemoryConfiguration()).toBe('Default');
-  });
-
-  it('returns explicit setting when configured', () => {
-    setConfig('co.project.profile', 'P5');
+  it('always uses ordinary MARS Default regardless of stale settings', () => {
     setConfig('co.mips.memoryConfiguration', 'CompactDataAtZero');
-
-    expect(getMemoryConfiguration()).toBe('CompactDataAtZero');
-  });
-
-  it.each(['FixedCompactLargeText', 'CompactLargeText', 'invalid-mode', ''])('migrates %s to official Default', (mode) => {
-    setConfig('co.project.profile', 'P7');
-    setConfig('co.mips.memoryConfiguration', mode);
-
-    expect(getMemoryConfiguration()).toBe('Default');
-  });
-
-  it.each(['Default', 'CompactDataAtZero', 'CompactTextAtZero'])('normalizes official %s names', (mode) => {
-    setConfig('co.mips.memoryConfiguration', ` ${mode.toLowerCase()} `);
-    expect(getMemoryConfiguration(makeUri())).toBe(mode);
-  });
-});
-
-describe('getMipsEngine', () => {
-  beforeEach(() => {
-    clearConfig();
-  });
-
-  it('defaults to auto', () => {
-    expect(getMipsEngine()).toBe('auto');
-  });
-
-  it.each(['auto', 'builtin'] as const)(
-    'accepts the supported %s mode',
-    (mode) => {
-      setConfig('co.mips.engine', mode);
-      expect(getMipsEngine()).toBe(mode);
-    }
-  );
-
-  it.each(['mars', 'verify-both'] as const)('migrates the old %s engine to auto', (mode) => {
-    setConfig('co.mips.engine', ` ${mode.toUpperCase()} `);
-    expect(getMipsEngine(makeUri())).toBe('auto');
-  });
-
-  it('normalizes a resource-scoped value', () => {
-    setConfig('co.mips.engine', ' BUILTIN ');
-    expect(getMipsEngine(makeUri('/workspace/project.asm'))).toBe('builtin');
-  });
-
-  it('falls back to auto for an invalid value', () => {
-    setConfig('co.mips.engine', 'unknown-engine');
-    expect(getMipsEngine()).toBe('auto');
+    expect(getMemoryConfiguration(makeUri())).toBe('Default');
   });
 });
 
@@ -290,43 +233,27 @@ describe('useDelayedBranching', () => {
 
   it('returns true for P5 in profile mode', () => {
     setConfig('co.project.profile', 'P5');
-    setConfig('co.mips.delayedBranching', 'profile');
-
     expect(useDelayedBranching()).toBe(true);
   });
 
   it('returns true for P6 in profile mode', () => {
     setConfig('co.project.profile', 'P6');
-    setConfig('co.mips.delayedBranching', 'profile');
-
     expect(useDelayedBranching()).toBe(true);
   });
 
   it('returns true for P7 in profile mode', () => {
     setConfig('co.project.profile', 'P7');
-    setConfig('co.mips.delayedBranching', 'profile');
-
     expect(useDelayedBranching()).toBe(true);
   });
 
   it('returns false for P4 in profile mode', () => {
     setConfig('co.project.profile', 'P4');
-    setConfig('co.mips.delayedBranching', 'profile');
-
     expect(useDelayedBranching()).toBe(false);
   });
 
-  it('returns true when explicitly on regardless of profile', () => {
+  it('ignores a stale override and follows the selected profile', () => {
     setConfig('co.project.profile', 'P4');
     setConfig('co.mips.delayedBranching', 'on');
-
-    expect(useDelayedBranching()).toBe(true);
-  });
-
-  it('returns false when explicitly off regardless of profile', () => {
-    setConfig('co.project.profile', 'P7');
-    setConfig('co.mips.delayedBranching', 'off');
-
     expect(useDelayedBranching()).toBe(false);
   });
 });

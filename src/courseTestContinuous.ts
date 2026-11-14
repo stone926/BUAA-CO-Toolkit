@@ -26,6 +26,7 @@ import {
   ContinuousTraceReport,
   CourseTraceBatchSource,
   CourseTraceCaseResult,
+  markCourseTraceArtifactsPruned,
   publicContinuousTraceReport,
   renderContinuousTraceMonitor
 } from './courseTestReport';
@@ -480,7 +481,7 @@ async function applyContinuousRetention(
     for (const item of session.report.iterations) {
       for (const result of item.results) {
         if (result.status === 'passed' && result.caseManifest && removedPaths.has(normalizePathKey(result.caseManifest))) {
-          markContinuousArtifactsPruned(result);
+          markCourseTraceArtifactsPruned(result);
         }
       }
     }
@@ -511,20 +512,6 @@ async function discardContinuousUnfinishedCases(
   if (refused) {
     services.output.appendLine('部分未完成测试点未能安全清理，已保留原始用例');
   }
-}
-
-function markContinuousArtifactsPruned(result: CourseTraceCaseResult): void {
-  result.artifactsPruned = true;
-  delete result.caseManifest;
-  delete result.asmSnapshot;
-  delete result.machineCode;
-  delete result.oracleOut;
-  delete result.dutOut;
-  delete result.dutRawOut;
-  delete result.marsOut;
-  delete result.simOut;
-  delete result.logisimOut;
-  delete result.logisimCircuit;
 }
 
 async function waitForNextContinuousIteration(session: ContinuousTraceSession, ms: number): Promise<void> {

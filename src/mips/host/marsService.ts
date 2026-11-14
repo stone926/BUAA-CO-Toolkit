@@ -8,6 +8,7 @@ import { captureAssemblyInput } from './sourceInput';
 import { MarsConsole, MarsHostIo } from './marsIo';
 import type { WorkerJob, WorkerOutboundMessage } from './workerProtocol';
 import type { RunResult } from '../../types';
+import type { AssemblerDiagnostic } from '../core/assembler/diagnostics';
 
 export interface MarsRuntimeHost {
   runJob(job: WorkerJob, options?: {
@@ -30,7 +31,7 @@ export interface MarsOperationOptions {
 
 /** This mode is ordinary MARS console execution, never the P7 CPU exception oracle. */
 export async function runInternalMars(options: MarsOperationOptions, execute: boolean): Promise<{
-  result: RunResult; image?: ProgramImage;
+  result: RunResult; image?: ProgramImage; assemblyDiagnostics?: readonly AssemblerDiagnostic[];
 }> {
   const controller = new AbortController();
   const forwardAbort = () => controller.abort();
@@ -75,7 +76,8 @@ export async function runInternalMars(options: MarsOperationOptions, execute: bo
       ...input, memoryConfiguration: options.memoryConfiguration, delayedBranching: options.delayedBranching
     } }) as AssemblerServiceResult;
     if (!assembly.ok || !assembly.image) {
-      return { result: { ...base, stderr: assembly.diagnostics.map((item) => `[${item.code}] ${item.message}`).join('\n') } };
+      return { assemblyDiagnostics: assembly.diagnostics,
+        result: { ...base, stderr: assembly.diagnostics.map((item) => `[${item.code}] ${item.message}`).join('\n') } };
     }
     if (!execute) return { result: { ...base, ok: true, exitCode: 0 }, image: assembly.image };
     const execution = await job({ kind: 'mars-execute', payload: {

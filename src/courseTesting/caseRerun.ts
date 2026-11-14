@@ -16,6 +16,7 @@ import { resolveP3LogisimTraceSetup } from '../courseTestLogisim';
 import type { CourseTraceCaseResult } from '../courseTestReport';
 import { simOutputFileNameForCase } from '../courseTestTraceFiles';
 import { resolveCourseEnginePlan } from '../mips/providers/courseEnginePolicy';
+import { CUSTOM_MARS_ENGINE_ID } from '../mips/providers/courseEnginePolicy';
 import { readBoundedRegularFile, maximumReplayManifestBytes } from '../mips/replay/boundedFile';
 import { sha256Bytes } from '../asmCaseStoreCore';
 import type { AppServices } from '../types';
@@ -39,7 +40,9 @@ export async function rerunCourseTestCase(
   let item: CourseTraceCaseInput = { asm: original.asm };
   try {
     throwIfCancelled(options.signal);
-    const profile = getProfile(original.asm);
+    const recordedCpu = original.manifest.version === 2 ? original.manifest.metadata?.['test.cpuResource'] : undefined;
+    const cpuResource = recordedCpu ? vscode.Uri.file(recordedCpu) : original.asm;
+    const profile = getProfile(cpuResource);
     if (!/^P[3-7]$/.test(profile) || profile !== original.manifest.profile) {
       throw new Error(`当前课程阶段 ${profile} 与原用例 ${original.manifest.profile} 不一致，请恢复原阶段后重跑`);
     }
@@ -58,18 +61,24 @@ export async function rerunCourseTestCase(
       ? vscode.Uri.file(path.join(original.dir.fsPath, ...original.manifest.stdin.path.split('/')))
       : undefined;
     const metadata: Record<string, string> = { 'rerun.originalCaseId': original.id };
+    metadata['test.cpuResource'] = cpuResource.fsPath;
+    const engineResource = vscode.Uri.file(original.manifest.metadata?.['test.engineResource'] ?? original.manifest.originalAsmPath);
+    metadata['test.engineResource'] = engineResource.fsPath;
+    const custom = original.manifest.program.assembler?.id === CUSTOM_MARS_ENGINE_ID;
+    const engineMode = custom ? 'mars' as const : automaticTestEngineMode;
     // Source facts determine private budgets and reproduce seeded probe programs.
     // Session ownership and old execution outcomes must not leak into the new case.
     for (const [key, value] of Object.entries(original.manifest.metadata ?? {})) {
       if (key.startsWith('source.') && key !== 'source.sessionId') metadata[key] = value;
     }
     rerun = await createAsmCaseFromAsm(original.sourceAsm, {
-      resource: original.asm,
+      resource: cpuResource,
+      sourceRoot: original.dir,
       stdin,
       source: manifestSourceOf(original.manifest),
       p7: manifestP7Of(original.manifest),
       metadata,
-      enginePlan: resolveCourseEnginePlan(automaticTestEngineMode, profile, { deterministicConsole: stdin !== undefined })
+      enginePlan: resolveCourseEnginePlan(engineMode, profile, { deterministicConsole: stdin !== undefined })
     });
     // The new manifest records the old case-local stdin as its originalPath.
     item = { asm: rerun.asm, stdin, asmCase: rerun };
@@ -77,7 +86,8 @@ export async function rerunCourseTestCase(
     throwIfCancelled(options.signal);
 
     const logisim = profile === 'P3'
-      ? await resolveP3LogisimTraceSetup(services, rerun.asm, { nonInteractive: true })
+      ? await resolveP3LogisimTraceSetup(services, cpuResource, { nonInteractive: true,
+        ...(path.extname(cpuResource.fsPath).toLowerCase() === '.circ' ? { circuit: cpuResource } : {}) })
       : undefined;
     if (profile === 'P3' && !logisim) throw new Error('无法准备 P3 Logisim 电路与写回记录设置');
     throwIfCancelled(options.signal);
@@ -86,7 +96,12 @@ export async function rerunCourseTestCase(
       : undefined;
     const capture = dump ? courseRerunWaveformCapture(dump) : undefined;
     const result: CourseTraceCaseResult = await runCourseTraceCase(services, item, {
-      source: { kind: 'generator', generator: manifestSourceOf(original.manifest).generator },
+      source: custom ? { kind: 'selected', asmFiles: [original.sourceAsm.fsPath] }
+        : { kind: 'generator', generator: manifestSourceOf(original.manifest).generator },
+      cpuResource,
+      engineResource,
+      engineMode,
+      expectedEngineArtifact: custom ? original.manifest.program.assembler?.artifact : undefined,
       artifactOutputMode: 'case',
       revealOutput: false,
       signal: options.signal,

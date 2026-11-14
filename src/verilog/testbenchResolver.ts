@@ -7,7 +7,7 @@ import {
   getTestbench,
   getTopModule
 } from '../config';
-import { buildTestbench, moduleAtPosition } from '../language/verilog/moduleUtils';
+import { buildTestbench, moduleAtPosition, type CustomInstructionEncodingMask } from '../language/verilog/moduleUtils';
 import { isCompleteVerilogModuleDeclaration, parseVerilogModuleDeclarations } from '../language/verilog/moduleDeclarations';
 import type { VerilogModule } from '../language/verilog/model';
 import { ensureDirectory, isFile, pathExists, workspaceFolderFor, workspaceFolderForOrFirst, writeTextFile } from '../fsUtil';
@@ -73,6 +73,7 @@ export interface ExistingTestbenchSearchResult {
 }
 
 export interface TestbenchResolutionOptions {
+  customInstructionEncodings?: readonly CustomInstructionEncodingMask[];
   /** Internal automation lane: suppress UI/path details and let the runner control termination. */
   nonInteractive?: boolean;
   /** Private automatic simulation directory; prevents case-specific P7 stimuli from racing. */
@@ -149,7 +150,8 @@ export async function ensureP7InterruptTestbench(
   const testbenchText = buildTestbench(topDefinition.module, p7AutoRuntimeTestbenchName, {
     profile: 'P7',
     interruptSchedule,
-    p7Probe
+    p7Probe,
+    customInstructionEncodings: options.customInstructionEncodings
   });
   const sha256 = await writeGeneratedRuntimeTestbench(tbUri, testbenchText, options);
   if (!sha256) {
@@ -187,7 +189,8 @@ export async function ensureRunnableTestbench(
     const tbUri = await privateRuntimeTestbenchUri(topDefinition.uri, automaticRuntimeTestbenchName, options.runtimeDirectory);
     const testbenchText = buildTestbench(topDefinition.module, automaticRuntimeTestbenchName, {
         finishDelay: false,
-        profile: getProfile(topDefinition.uri)
+        profile: getProfile(topDefinition.uri),
+        customInstructionEncodings: options.customInstructionEncodings
       });
     const sha256 = await writeGeneratedRuntimeTestbench(tbUri, testbenchText, options);
     if (!sha256) {

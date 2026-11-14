@@ -145,6 +145,26 @@ describe('testbench workspace discovery', () => {
     expect(generatedText).not.toContain('module mips_tb;');
   });
 
+  it('includes registered custom instruction masks in the private testbench identity', async () => {
+    const resource = URI.file('E:/work/mips.v');
+    vscodeState.module!.workspace.fs.readFile.mockResolvedValue(Buffer.from([
+      'module mips(input clk, reset, input [31:0] i_inst_rdata, m_data_rdata,',
+      'output [31:0] i_inst_addr, m_data_addr, m_data_wdata, m_inst_addr, output [3:0] m_data_byteen);',
+      'endmodule'
+    ].join('\n')));
+    const first = await ensureRunnableTestbench(services(), resource, false, undefined, {
+      nonInteractive: true, customInstructionEncodings: [{ mask: 0xfc000000, value: 0xfc000000 }]
+    });
+    const changed = await ensureRunnableTestbench(services(), resource, false, undefined, {
+      nonInteractive: true, customInstructionEncodings: [{ mask: 0xfc000000, value: 0xf8000000 }]
+    });
+    expect(first?.kind).toBe('generated');
+    expect(first?.sha256).toBeTruthy();
+    expect(changed?.sha256).not.toBe(first?.sha256);
+    expect(first?.generatedText).toContain("co_dm_store_instruction & 32'hfc000000");
+    expect(first?.generatedText).toContain("=== 32'hfc000000");
+  });
+
   it('places standard and case-specific P7 automatic testbenches inside their runtime slot', async () => {
     const resource = URI.file('E:/work/mips.v');
     vscodeState.module!.workspace.fs.readFile.mockResolvedValue(Buffer.from('module mips(input clk, reset); endmodule'));

@@ -35,6 +35,12 @@ vi.mock('../../mips/providers/providerResolver', () => ({
     (preflight.diagnostics ?? []).map((diagnostic) => diagnostic.message).join('\n'))
 }));
 
+vi.mock('../../mips/replay/atomicFile', () => ({
+  writeFileAtomicReplace: async (file: string, bytes: Uint8Array) => {
+    await vscode.workspace.fs.writeFile(vscode.Uri.file(file), bytes);
+  }
+}));
+
 
 function services() {
   return {
@@ -99,7 +105,7 @@ describe('MIPS assembly command routing', () => {
   });
 
   it.each(['P3', 'P4', 'P5', 'P6', 'P7'] as const)(
-    'forces the builtin assembler for %s text dumps',
+    'uses the automatic provider plan for %s text dumps',
     async (profile) => {
       mocks.ensureConcreteProfile.mockResolvedValue(profile);
       const source = vscode.Uri.file(`E:/work/${profile.toLowerCase()}.asm`);
@@ -115,7 +121,7 @@ describe('MIPS assembly command routing', () => {
         }),
         undefined,
         expect.objectContaining({
-          mode: 'builtin',
+          mode: 'auto',
           profile,
           primaryEngineId: 'builtin-ts'
         })
@@ -123,7 +129,7 @@ describe('MIPS assembly command routing', () => {
     }
   );
 
-  it('routes P2 text dumps to the internal MARS assembler', async () => {
+  it('routes P2 text dumps through the automatic provider plan', async () => {
     mocks.ensureConcreteProfile.mockResolvedValue('P2');
     const source = vscode.Uri.file('E:/work/p2.asm');
 
@@ -156,7 +162,7 @@ describe('MIPS assembly command routing', () => {
     expect(request.target.kind).toBe('kernelText');
     expect(request.target.outputFile.fsPath).toMatch(/handler\.kernel\.txt$/i);
     expect(plan).toMatchObject({
-      mode: 'builtin',
+      mode: 'auto',
       profile: 'P7',
       primaryEngineId: 'builtin-ts'
     });

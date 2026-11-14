@@ -268,7 +268,7 @@ async function discoverRtl(root, excludedFiles, relative = '') {
 function installVscodeAdapter(workspaceRoot, profile) {
   const { URI, Utils } = require('vscode-uri');
   const folder = { uri: URI.file(workspaceRoot), name: 'benchmark', index: 0 };
-  const settings = { 'project.profile': profile, 'project.topModule': 'mips', 'mips.engine': 'builtin' };
+  const settings = { 'project.profile': profile, 'project.topModule': 'mips' };
   const fileType = (stat) => stat.isSymbolicLink() ? 64 : stat.isDirectory() ? 2 : 1;
   const fileOperations = { scope: 'VS Code workspace.fs adapter only; Node-direct manifest/source/cache operations excluded',
     writes: 0, writeBytes: 0, copies: 0, copyBytes: 0, reads: 0, readBytes: 0 };

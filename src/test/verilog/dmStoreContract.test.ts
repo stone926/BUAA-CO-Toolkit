@@ -27,6 +27,8 @@ interface StoreVector {
   data: string;
   pc?: string;
   failure?: string;
+  custom?: boolean;
+  customFailure?: string;
 }
 
 const vectors: StoreVector[] = [
@@ -74,7 +76,13 @@ const vectors: StoreVector[] = [
   { name: 'sb rejects unknown lane-selecting address bit', opcode: 0x28, address: '0000000x', addressLiteral: "{30'b0, 2'b0x}", wordAddress: '00000000', byteen: '0001', data: 'xxxxxxab', failure: 'invalid_address' },
   { name: 'sh rejects unknown half-selecting address bit', opcode: 0x29, address: '0000000x', addressLiteral: "{30'b0, 2'bx0}", wordAddress: '00000000', byteen: '0011', data: 'xxxxbeef', failure: 'invalid_address' },
   { name: 'swl rejects unknown lane-selecting address bit', opcode: 0x2a, address: '0000000x', addressLiteral: "{30'b0, 2'b0x}", wordAddress: '00000000', byteen: '0001', data: 'xxxxxxab', failure: 'invalid_address' },
-  { name: 'swr rejects high-impedance lane-selecting address bit', opcode: 0x2e, address: '0000000z', addressLiteral: "{30'b0, 2'b0z}", wordAddress: '00000000', byteen: '1111', data: '12345678', failure: 'invalid_address' }
+  { name: 'swr rejects high-impedance lane-selecting address bit', opcode: 0x2e, address: '0000000z', addressLiteral: "{30'b0, 2'b0z}", wordAddress: '00000000', byteen: '1111', data: '12345678', failure: 'invalid_address' },
+  { name: 'registered custom full-word store', opcode: 0x3f, address: '00000000', byteen: '1111', data: '12345678', failure: 'non_store_instruction', custom: true },
+  { name: 'registered custom byte-lane store', opcode: 0x3f, address: '00000001', byteen: '0010', data: 'xxxxabxx', failure: 'non_store_instruction', custom: true },
+  { name: 'custom store rejects unknown active byte enable', opcode: 0x3f, address: '00000000', byteen: 'x001', data: 'xxxxxxab', failure: 'non_store_instruction', custom: true, customFailure: 'byte_enable' },
+  { name: 'custom store rejects unknown enabled value', opcode: 0x3f, address: '00000000', byteen: '0001', data: 'xxxxxxax', failure: 'non_store_instruction', custom: true, customFailure: 'unknown_enabled_lane' },
+  { name: 'custom store rejects invalid DM address', opcode: 0x3f, address: '00003000', byteen: '1111', data: '12345678', failure: 'invalid_address', custom: true, customFailure: 'invalid_address' },
+  { name: 'declared sb override may ignore native lane-selecting low bits', opcode: 0x28, address: '0000000x', addressLiteral: "{30'b0, 2'bxx}", wordAddress: '00000000', byteen: '1111', data: '12345678', failure: 'invalid_address' }
 ];
 
 describe.skipIf(!runtimeAvailable)('public DM store contract with bundled Icarus', () => {
@@ -91,10 +99,17 @@ describe.skipIf(!runtimeAvailable)('public DM store contract with bundled Icarus
       const checked = buildTestbench(parseModules(document, source)[0], 'contract_tb', { profile });
       expect(checked).not.toContain('uut.');
       const contract = renderResourceTemplate('verilog/dm_store_contract.v', {
-        activeCondition: '!reset && ', userTextBase: "32'h3000", instructionMemoryWords: 4096, dataMemoryBytes: 12288
+        activeCondition: '!reset && ', userTextBase: "32'h3000", instructionMemoryWords: 4096, dataMemoryBytes: 12288,
+        customInstructionPredicate: "1'b0"
       });
       expect(checked).toContain(contract);
-      for (const [suffix, testbench] of [['checked', checked], ['original', checked.replace(contract, '')]]) {
+      const custom = buildTestbench(parseModules(document, source)[0], 'contract_tb', { profile,
+        customInstructionEncodings: [{ mask: 0xfc000000, value: 0xfc000000 }]
+      });
+      const override = buildTestbench(parseModules(document, source)[0], 'contract_tb', { profile,
+        customInstructionEncodings: [{ mask: 0xfc000000, value: 0xa0000000 }]
+      });
+      for (const [suffix, testbench] of [['checked', checked], ['original', checked.replace(contract, '')], ['custom', custom], ['override', override]]) {
         const file = `${profile}-${suffix}`;
         fs.writeFileSync(path.join(workDir, `${file}.v`), testbench);
         const result = spawnSync(compiler, [
@@ -112,7 +127,45 @@ describe.skipIf(!runtimeAvailable)('public DM store contract with bundled Icarus
   });
 
   for (const profile of ['P6', 'P7'] as const) {
+    const overrideCases = [
+      { name: 'sb read-modify-write with 1111 mask', failure: undefined },
+      { name: 'declared sb override may ignore native lane-selecting low bits', failure: undefined },
+      { name: 'unknown mask on an active write', failure: 'byte_enable' },
+      { name: 'unknown enabled data', failure: 'unknown_enabled_lane' },
+      { name: 'unknown effective address', failure: 'invalid_address' },
+      { name: 'unknown store PC', failure: 'invalid_pc' },
+      { name: 'unaligned store PC', failure: 'invalid_pc' },
+      { name: 'store PC beyond IM', failure: 'invalid_pc' },
+      { name: 'write from a non-store instruction', failure: 'non_store_instruction' },
+      { name: 'sh read-modify-write with 1111 mask', failure: 'byte_enable' }
+    ];
+    for (const overrideCase of overrideCases) {
+      it(`${profile} declared SB override: ${overrideCase.name}`, () => {
+        const index = vectors.findIndex(vector => vector.name === overrideCase.name);
+        expect(index).toBeGreaterThanOrEqual(0);
+        const result = runVector(workDir, profile, 'override', index);
+        if (overrideCase.failure) {
+          expect(result.status).not.toBe(0);
+          expect(result.stdout).toContain(`CO_DM_CONTRACT ${overrideCase.failure}`);
+        } else {
+          expect(result.status, result.stdout + result.stderr).toBe(0);
+          expect(parseSimOutput(result.stdout)).toHaveLength(1);
+        }
+      });
+    }
     for (const [index, vector] of vectors.entries()) {
+      it(`${profile} custom-aware: ${vector.name}`, () => {
+        const result = runVector(workDir, profile, 'custom', index);
+        const expectedFailure = vector.custom ? vector.customFailure : vector.failure;
+        if (expectedFailure) {
+          expect(result.status).not.toBe(0);
+          expect(result.stdout).toContain(`CO_DM_CONTRACT ${expectedFailure}`);
+        } else {
+          expect(result.status, result.stdout + result.stderr).toBe(0);
+          expect(result.stdout).not.toContain('CO_DM_CONTRACT');
+          if (vector.custom) expect(parseSimOutput(result.stdout)).toHaveLength(1);
+        }
+      });
       it(`${profile}: ${vector.name}`, () => {
         const result = runVector(workDir, profile, 'checked', index);
         if (vector.failure) {

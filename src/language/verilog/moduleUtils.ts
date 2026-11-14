@@ -26,12 +26,18 @@ export function declDetail(decl: VerilogDecl): string {
   return `${decl.direction ?? decl.kind} ${decl.width ? `${decl.width} ` : ''}${decl.name}`.trim();
 }
 
+export interface CustomInstructionEncodingMask {
+  readonly mask: number;
+  readonly value: number;
+}
+
 interface TestbenchOptions {
   /** `false` leaves termination to the simulator command (used by automatic tests). */
   finishDelay?: string | false;
   profile?: ProjectProfile;
   interruptSchedule?: number[];
   p7Probe?: P7ProbeTestbenchMetadata;
+  customInstructionEncodings?: readonly CustomInstructionEncodingMask[];
 }
 
 interface P7ProbeTestbenchMetadata {
@@ -58,7 +64,7 @@ export function buildTestbench(module: VerilogModule, tbName: string, options: T
   const hasCourseExternalMemory = hasExternalInstructionMemory || hasExternalDataMemory;
   const isP7ExternalInterface = hasPort(module, 'interrupt') || hasPort(module, 'macroscopic_pc') || hasPort(module, 'm_int_addr') || hasPort(module, 'm_int_byteen');
   if (options.profile === 'P7' || isP7ExternalInterface) {
-    return buildP7OfficialTestbench(module.name, tbName, options.interruptSchedule, options.p7Probe);
+    return buildP7OfficialTestbench(module.name, tbName, options.interruptSchedule, options.p7Probe, options.customInstructionEncodings);
   }
   const hasWritebackTrace = hasPort(module, 'w_grf_we') && hasPort(module, 'w_grf_addr') && hasPort(module, 'w_grf_wdata') && hasPort(module, 'w_inst_addr');
   const hasDataMemoryTrace = hasExternalDataMemory && hasPort(module, 'm_inst_addr');
@@ -85,7 +91,8 @@ export function buildTestbench(module: VerilogModule, tbName: string, options: T
       hasWritebackTrace,
       isP7ExternalInterface,
       module,
-      tbName
+      tbName,
+      customInstructionEncodings: options.customInstructionEncodings
     });
   }
 
@@ -153,6 +160,7 @@ interface ExternalMemoryTestbenchViewModel {
   isP7ExternalInterface: boolean;
   module: VerilogModule;
   tbName: string;
+  customInstructionEncodings?: readonly CustomInstructionEncodingMask[];
 }
 
 function renderExternalMemoryTestbench(view: ExternalMemoryTestbenchViewModel): string {
@@ -192,7 +200,7 @@ function renderExternalMemoryTestbench(view: ExternalMemoryTestbenchViewModel): 
       ? separatedBlock(externalDataMemoryWriteLines(view.hasReset, view.isP7ExternalInterface, view.hasDataMemoryTrace))
       : '',
     storeContractBlock: view.hasExternalInstructionMemory && view.hasDataMemoryTrace && view.hasClk
-      ? storeContractBlock(view.hasReset, courseExternalInstructionMemoryWords, courseExternalDataMemoryWords)
+      ? storeContractBlock(view.hasReset, courseExternalInstructionMemoryWords, courseExternalDataMemoryWords, view.customInstructionEncodings)
       : '',
     writebackTraceBlock: view.hasWritebackTrace && view.hasClk ? separatedBlock(writebackTraceLines(view.hasReset)) : '',
     courseInitialBlock: separatedBlock(courseExternalInitialLines(view.module, view.hasClk, view.hasReset)),
@@ -212,7 +220,8 @@ function buildP7OfficialTestbench(
   topModuleName: string,
   tbName: string,
   interruptSchedule?: number[],
-  p7Probe?: P7ProbeTestbenchMetadata
+  p7Probe?: P7ProbeTestbenchMetadata,
+  customInstructionEncodings?: readonly CustomInstructionEncodingMask[]
 ): string {
   return renderResourceTemplate('verilog/p7_official_testbench.v', {
     tbName,
@@ -222,17 +231,24 @@ function buildP7OfficialTestbench(
     instructionMemoryWords: p7InstructionMemoryWords,
     instructionMemoryLastIndex: p7InstructionMemoryWords - 1,
     userTextBase: verilogHex32(p7UserTextBaseAddress),
-    storeContractBlock: storeContractBlock(true, p7InstructionMemoryWords, p7DataMemoryWords),
+    storeContractBlock: storeContractBlock(true, p7InstructionMemoryWords, p7DataMemoryWords, customInstructionEncodings),
     interruptBlock: p7Probe ? p7ProbeBlock(p7Probe) : p7InterruptBlock(interruptSchedule)
   });
 }
 
-function storeContractBlock(hasReset: boolean, instructionMemoryWords: number, dataMemoryWords: number): string {
+function storeContractBlock(hasReset: boolean, instructionMemoryWords: number, dataMemoryWords: number, customInstructionEncodings: readonly CustomInstructionEncodingMask[] = []): string {
+  const customPatterns = [...new Set(customInstructionEncodings.map(({ mask, value }) => {
+    if (![mask, value].every(number => Number.isInteger(number) && number >= 0 && number <= 0xffff_ffff)) {
+      throw new Error('自定义指令编码必须包含 32 位无符号 mask 和 value');
+    }
+    return `((co_dm_store_instruction & ${verilogHex32(mask)}) === ${verilogHex32(value)})`;
+  }))].sort();
   return renderResourceTemplate('verilog/dm_store_contract.v', {
     activeCondition: hasReset ? '!reset && ' : '',
     userTextBase: verilogHex32(p7UserTextBaseAddress),
     instructionMemoryWords,
-    dataMemoryBytes: dataMemoryWords * 4
+    dataMemoryBytes: dataMemoryWords * 4,
+    customInstructionPredicate: customPatterns.length ? customPatterns.join(' || ') : "1'b0"
   });
 }
 

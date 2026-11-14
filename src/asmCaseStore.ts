@@ -4,7 +4,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { randomBytes } from 'crypto';
 import * as vscode from 'vscode';
-import { getMemoryConfiguration, getMipsEngine, getProfile } from './config';
+import { getMemoryConfiguration, getProfile } from './config';
 import { ensureDirectory, pathExists, workspaceFolderForOrFirst } from './fsUtil';
 import { normalizePathKey } from './pathUtils';
 import { AppServices, ProjectProfile } from './types';
@@ -53,6 +53,7 @@ import {
 import { LEGACY_MARS_DESCRIPTOR } from './mips/providers/contracts';
 import { BUILTIN_TS_DESCRIPTOR } from './mips/providers/contracts';
 import { BUILTIN_TS_ASSEMBLER_DESCRIPTOR } from './mips/providers/builtinAssemblerProvider';
+import { CUSTOM_MARS_DESCRIPTOR } from './mips/providers/customMarsCommon';
 import {
   courseHardwareMachineCodeCapacityPolicy,
   courseMachineCodeValidationError,
@@ -135,6 +136,8 @@ export interface CreateAsmCaseOptions {
   source?: AsmCaseSource;
   stdin?: vscode.Uri;
   resource?: vscode.Uri;
+  /** Source/include containment root, independent of the CPU workspace that owns the case. */
+  sourceRoot?: vscode.Uri;
   createdAt?: Date;
   p7?: AsmCaseP7Metadata;
   /** Initial non-file provenance, committed with the first manifest write. */
@@ -185,7 +188,7 @@ export async function createAsmCaseFromAsm(
     paths.caseDir,
     asmBytes,
     { ...defaultSourceCaptureLimits },
-    { allowedRoot: root }
+    { allowedRoot: options.sourceRoot?.fsPath ?? root }
   );
   const sourceBundleManifest = await sourceBundleManifestFields(sourceBundle, paths.caseDir);
 
@@ -346,6 +349,9 @@ export async function prepareAsmCaseMachineCode(
   );
   const invocation = await assembleWithPreflight(services, {
     sourceUri: asmCase.sourceAsm,
+    resourceUri: options.engineResource ?? vscode.Uri.file(asmCase.manifest.originalAsmPath),
+    expectedEngineArtifact: options.expectedEngineArtifact,
+    sourcePaths: graph.units.map((unit) => ({ id: unit.id, path: path.join(asmCase.dir.fsPath, ...unit.materializedPath.split('/')) })),
     inputGraph,
     sourceGraphInput: verifiedSource.sourceGraphInput,
     target: { kind: 'userText', outputFile: asmCase.machineCode },
@@ -427,7 +433,8 @@ export async function prepareAsmCaseMachineCode(
       asmCase.manifest.source.kind === 'builtin',
       legacyAssembler
         ? stableMarsMachineCodeCapacityPolicy
-        : courseHardwareMachineCodeCapacityPolicy
+        : courseHardwareMachineCodeCapacityPolicy,
+      dump.customInstructionEncodings
     );
     if (validationError) {
       services.output.appendLine(machineCodeValidationOutputMessage(
@@ -526,6 +533,8 @@ export async function prepareAsmCaseMachineCode(
   const assembler = manifestEngineInfo(dump.descriptor, assemblerArtifact);
   asmCase.manifest = {
     ...asmCase.manifest,
+    metadata: { ...asmCase.manifest.metadata,
+      ...(dump.resolvedRun.javaVersion ? { 'reference.javaVersion': dump.resolvedRun.javaVersion } : {}) },
     program: {
       ...asmCase.manifest.program,
       machineCode,
@@ -557,6 +566,9 @@ export async function prepareAsmCaseMachineCode(
 }
 
 export interface PrepareAsmCaseOptions {
+  resource?: vscode.Uri;
+  engineResource?: vscode.Uri;
+  expectedEngineArtifact?: EngineArtifactIdentity;
   showMessages?: boolean;
   revealOutput?: boolean;
   /** Internal automatic-test lane; keeps provider process details out of user output. */
@@ -713,6 +725,8 @@ export async function recordAsmCaseOracleResult(
   await fs.promises.chmod(tracePath, 0o444).catch(() => undefined);
   asmCase.manifest = {
     ...asmCase.manifest,
+    metadata: { ...asmCase.manifest.metadata,
+      ...(result.referenceTiming ? { 'reference.timing': result.referenceTiming } : {}) },
     oracle: {
       engine: {
         ...engine,
@@ -1525,7 +1539,7 @@ function initialCaseEngineSelection(
   memoryConfiguration: string;
 } {
   const plan = explicitPlan ?? resolveCourseEnginePlan(
-    getMipsEngine(resource),
+    'auto',
     profile,
     { deterministicConsole }
   );
@@ -1533,9 +1547,9 @@ function initialCaseEngineSelection(
   if (profileError) throw new Error(profileError);
   const builtin = plan.primaryEngineId === BUILTIN_TS_ENGINE_ID;
   return {
-    assembler: builtin ? BUILTIN_TS_ASSEMBLER_DESCRIPTOR : LEGACY_MARS_DESCRIPTOR,
-    executor: builtin ? BUILTIN_TS_DESCRIPTOR : LEGACY_MARS_DESCRIPTOR,
-    memoryConfiguration: builtin ? 'course-contract-v1' : getMemoryConfiguration(resource)
+    assembler: builtin ? BUILTIN_TS_ASSEMBLER_DESCRIPTOR : CUSTOM_MARS_DESCRIPTOR,
+    executor: builtin ? BUILTIN_TS_DESCRIPTOR : CUSTOM_MARS_DESCRIPTOR,
+    memoryConfiguration: 'course-contract-v1'
   };
 }
 
