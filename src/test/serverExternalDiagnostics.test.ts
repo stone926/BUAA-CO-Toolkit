@@ -146,32 +146,6 @@ describe('server diagnostic quick fixes', () => {
     expect(latestDiagnostics(p4).find((entry) => entry.code === 'project-pc-reset')?.message).toContain('P4:');
     expect(latestDiagnostics(p5).find((entry) => entry.code === 'project-pc-reset')?.message).toContain('P5:');
   });
-  it.each([
-    ['width-mismatch', 'module a(input [31:0] x, output y, z); assign y = x; assign z = x; endmodule'],
-    ['port-width-mismatch', 'module child(input x); endmodule\nmodule a(input [31:0] x); child u1(.x(x)); child u2(.x(x)); endmodule']
-  ])('returns one Chinese suppression action per scope for repeated %s diagnostics', async (code, text) => {
-    await open(uriA, text);
-    const diagnostics = latestDiagnostics(uriA).filter((entry) => entry.code === code);
-    expect(diagnostics).toHaveLength(2);
-
-    const result = await client.sendRequest(CodeActionRequest.type, {
-      textDocument: { uri: uriA },
-      range: diagnostics[0].range,
-      context: { diagnostics: [...diagnostics, diagnostics[0]] }
-    });
-    const actions = (result ?? []).filter((action): action is CodeAction =>
-      typeof action.command === 'object' && action.command.command === Commands.Diagnostics.DisableCode);
-
-    expect(actions.map((action) => action.title)).toEqual([
-      `对此文件禁用「${code}」检查`,
-      `对此工作区禁用「${code}」检查`
-    ]);
-    expect(actions.map((action) => action.command?.arguments)).toEqual([
-      ['verilog', code, 'file', uriA],
-      ['verilog', code, 'workspace', uriA]
-    ]);
-    expect(actions.every((action) => action.command?.title === action.title)).toBe(true);
-  });
 });
 
 afterEach(() => {
@@ -215,7 +189,7 @@ describe('server external Verilog diagnostic lifecycle', () => {
     expect(mocks.compile).not.toHaveBeenCalled();
   });
 
-  it.each([false, true])('merges compiler context only when its diagnostic is enabled (suppressed: %s)', async (suppressed) => {
+  it.each([false, true])('merges compiler context even with retired suppression settings (old setting: %s)', async (suppressed) => {
     await configure(suppressed ? ['verilog:iverilog-syntax'] : []);
     await open(uriA, 'module a(input [31:0] inputA,inputB);\nwire [31:0] a_add_b <= inputA + inputB;\nendmodule\n');
     const local = latestDiagnostics(uriA).find((entry) => entry.code === 'syntax-malformed-declaration');
@@ -234,7 +208,7 @@ describe('server external Verilog diagnostic lifecycle', () => {
     const merged = latestDiagnostics(uriA).find((entry) => entry.code === 'syntax-malformed-declaration')!;
     expect(merged.range).toEqual(local!.range);
     expect(merged.relatedInformation?.map((entry) => entry.message) ?? []).toEqual(
-      suppressed ? [] : ['Icarus Verilog: syntax error']
+      ['Icarus Verilog: syntax error']
     );
     expect(externalDiagnostics(uriA)).toEqual([]);
   });

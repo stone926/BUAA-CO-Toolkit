@@ -1,11 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
   defaultCoSettings,
-  diagnosticCodeKey,
-  diagnosticFileCodeKey,
-  diagnosticCodeToString,
-  isDiagnosticCodeDisabled,
-  isDiagnosticCodeDisabledForFile,
   mergeCoSettings
 } from '../../../language/common/settings';
 
@@ -80,7 +75,6 @@ describe('mergeCoSettings', () => {
   it('merges a partial verilog.implicitNet section', () => {
     const result = mergeCoSettings({ verilog: { implicitNet: { diagnostic: 'error' } } });
     expect(result.verilog.implicitNet.diagnostic).toBe('error');
-    expect(result.verilog.implicitNet.ignorePatterns).toEqual(defaultCoSettings.verilog.implicitNet.ignorePatterns);
     expect(result.verilog.lint).toEqual(defaultCoSettings.verilog.lint);
   });
 
@@ -121,8 +115,7 @@ describe('mergeCoSettings', () => {
       }
     });
     expect(result.verilog.syntax.external).toEqual({
-      mode: 'commandOnly',
-      timeoutMs: 600000
+      mode: 'commandOnly'
     });
   });
 
@@ -156,35 +149,11 @@ describe('mergeCoSettings', () => {
     expect(result.verilog).not.toHaveProperty('format');
   });
 
-  it('normalizes disabled diagnostic codes', () => {
-    const result = mergeCoSettings({
-      diagnostics: {
-        disabledCodes: [' Verilog:SYNTH-MUL-DIV ', 'bad code', 'verilog:synth-mul-div', 'mipsasm:co-section-address']
-      }
-    });
-    expect(result.diagnostics.disabledCodes).toEqual(['mipsasm:co-section-address', 'verilog:synth-mul-div']);
-    expect(diagnosticCodeKey('Verilog', 'SYNTH-MUL-DIV')).toBe('verilog:synth-mul-div');
-    expect(diagnosticCodeToString(' missing-endmodule ')).toBe('missing-endmodule');
-    expect(isDiagnosticCodeDisabled(result, 'verilog', 'SYNTH-MUL-DIV')).toBe(true);
-    expect(isDiagnosticCodeDisabled(result, 'mipsasm', 'co-section-address')).toBe(true);
-  });
-
-  it('normalizes disabled file diagnostic codes', () => {
-    const uri = 'file:///work/cpu.v';
-    const result = mergeCoSettings({
-      diagnostics: {
-        disabledFileCodes: [
-          ` Verilog:SYNTH-MUL-DIV@${uri} `,
-          'bad code@file:///work/cpu.v',
-          `verilog:synth-mul-div@${uri}`
-        ]
-      }
-    });
-
-    expect(result.diagnostics.disabledFileCodes).toEqual([`verilog:synth-mul-div@${uri}`]);
-    expect(diagnosticFileCodeKey('Verilog', 'SYNTH-MUL-DIV', uri)).toBe(`verilog:synth-mul-div@${uri}`);
-    expect(isDiagnosticCodeDisabledForFile(result, 'verilog', 'SYNTH-MUL-DIV', uri)).toBe(true);
-    expect(isDiagnosticCodeDisabledForFile(result, 'verilog', 'SYNTH-MUL-DIV', 'file:///work/other.v')).toBe(false);
+  it('ignores retired diagnostic and timeout settings', () => {
+    const result = mergeCoSettings({ diagnostics: { disabledCodes: ['verilog:x'] }, run: { timeoutMs: 1 }, verilog: { implicitNet: { ignorePatterns: ['.*'] } } });
+    expect(result).not.toHaveProperty('diagnostics');
+    expect(result).not.toHaveProperty('run');
+    expect(result.verilog.implicitNet).not.toHaveProperty('ignorePatterns');
   });
 
   it('merges multiple sections at once', () => {

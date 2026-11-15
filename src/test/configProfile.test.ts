@@ -85,19 +85,10 @@ function makeUri(fsPath = '/test/asm/test.asm'): vscode.Uri {
   return { scheme: 'file', fsPath, path: fsPath } as vscode.Uri;
 }
 
-describe('manual tool timeout compatibility', () => {
-  beforeEach(clearConfig);
-
-  it.each([0, -1, 1.5, NaN, Infinity, 0x80000000, '120000'])('uses the default budget for retired or invalid value %s', (value) => {
-    const fallback = getRunTimeout(makeUri());
-    setConfig('co.run.timeoutMs', value);
-    expect(getRunTimeout(makeUri())).toBe(fallback);
-    expect(fallback).toBeGreaterThan(0);
-  });
-
-  it('preserves a valid explicit budget', () => {
+describe('manual tool timeout', () => {
+  it('ignores the retired setting', () => {
     setConfig('co.run.timeoutMs', 12345);
-    expect(getRunTimeout(makeUri())).toBe(12345);
+    expect(getRunTimeout(makeUri())).toBe(120000);
   });
 });
 
@@ -125,9 +116,9 @@ describe('automatic test instruction setting migration', () => {
     expect(getAutomaticTestInstructions()).toBe('add , ori');
   });
 
-  it('reads the old instruction key only when the new key is absent', () => {
+  it('ignores the old instruction key when the new key is absent', () => {
     setConfig('co.test.builtinGenerator.instructions', 'sub lw');
-    expect(getAutomaticTestInstructions()).toBe('sub lw');
+    expect(getAutomaticTestInstructions()).toBe('');
   });
 
   it('lets an explicitly empty new setting reset a migrated legacy value', () => {

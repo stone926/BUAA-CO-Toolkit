@@ -12,9 +12,6 @@ import {
   setProfileInferenceProvider
 } from './config';
 import { getProjectScopes, setProjectProfile } from './config';
-import {
-  disableDiagnosticCodeCommand
-} from './language/common/settings';
 import { startLanguageServer, stopLanguageServer } from './languageClient';
 import { registerLogisim } from './logisim';
 import { registerMips } from './mips';
@@ -38,7 +35,6 @@ import { getProfileName } from './courseConfig';
 import { renderToolchainReport } from './webview/toolchainReport';
 import { timeStartup, traceStartup } from './startupTrace';
 import { migrateLegacySemanticColorRules } from './legacySemanticColorMigration';
-import { disableDiagnosticCode } from './diagnosticSettings';
 import { activeProjectResource, clearActiveProjectResource } from './configurationResource';
 import {
   clearVerilogProjectDiscoveryCache,
@@ -90,9 +86,6 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand(Commands.SidebarRefresh, () => scheduleRefreshProjectUi())
   );
 
-  context.subscriptions.push(
-    vscode.commands.registerCommand(disableDiagnosticCodeCommand, disableDiagnosticCode)
-  );
 
   // 工作空间模块注册表：后台解析所有 .v/.vh 文件，供 sidebar 连线分析跨文件查找模块
   const moduleRegistry = new WorkspaceModuleRegistry({

@@ -4,7 +4,7 @@ import * as path from 'path';
 import { normalizeProjectOverrides, ProjectScope, resolveProjectOverride } from './projectSettings';
 import { normalizePathKey } from './pathUtils';
 import { activeProjectResource } from './configurationResource';
-import { DELAYED_BRANCHING_PROFILES } from './constants';
+import { DEFAULT_TOOL_TIMEOUT_MS, DELAYED_BRANCHING_PROFILES } from './constants';
 import { configDefault } from './configDefaults';
 import {
   ConcreteProjectProfile,
@@ -256,18 +256,10 @@ export function getLogisimJar(resource?: vscode.Uri): string {
   return layeredGetString('toolchain.logisim', configDefault<string>('toolchain.logisim'), resource);
 }
 
-export function getRunTimeout(resource?: vscode.Uri): number {
-  const fallback = configDefault<number>('run.timeoutMs');
-  const configured = config<number>('run.timeoutMs', fallback, resource);
-  // Older installations used 0 for unlimited runs. Use the current operation budget
-  // for that retired value (and malformed settings), instead of rejecting every launch.
-  return Number.isSafeInteger(configured) && configured > 0 && configured <= 0x7fffffff
-    ? configured : fallback;
+export function getRunTimeout(_resource?: vscode.Uri): number {
+  return DEFAULT_TOOL_TIMEOUT_MS;
 }
 
-export function showCommandBeforeRun(resource?: vscode.Uri): boolean {
-  return config<boolean>('run.showCommandBeforeRun', configDefault<boolean>('run.showCommandBeforeRun'), resource);
-}
 
 /**
  * 是否在运行外部工具时自动弹出「输出」面板。默认关闭：输出仍会静默写入通道，
@@ -282,7 +274,6 @@ export function getMemoryConfiguration(resource?: vscode.Uri): string {
   return 'Default';
 }
 
-/** The sole public automatic-test customization. The old key is migration-only. */
 /** Snapshot once at session start; malformed settings never create an unbounded pool. */
 export function getAutomaticTestConcurrency(resource?: vscode.Uri): number {
   const fallback = configDefault<number>('test.concurrency');
@@ -296,8 +287,7 @@ export function getAutomaticTestInstructions(resource?: vscode.Uri): string {
   if (typeof current === 'string') {
     return current.trim();
   }
-  const legacy = inspectedValue<string>('test.builtinGenerator.instructions', resource)?.trim();
-  return legacy || configDefault<string>('test.instructions');
+  return configDefault<string>('test.instructions');
 }
 
 export function getLogisimTraceMainCircuit(_resource?: vscode.Uri): string {

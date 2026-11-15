@@ -63,7 +63,7 @@ Verilog 修复回归包含类型化四态常量与上下文传播、非零/升�
 - `scripts/extension-host-asm-smoke.cjs` — 同一真实宿主中验证 P3–P7 内置汇编导出（外部 Java/MARS 不可用）、中文空格路径 include/宏、逐字机器码与停机尾、P7 0x4180 handler 与独立 kernel 文件，以及错误导出保留已有产物和修复
 - `scripts/extension-host-mars-workbench.cjs` — 同一真实宿主中验证生产 MARS 工作台面板与 Worker 的汇编、单步、stdin、等待输入时的内存跳转、断点、终态检查、段导出、取消、源文件变化和 P7 syscall trap；浏览器 fixture 的手动构建/检查命令见 `mips-debug.md`
 - `scripts/verify-mars-workbench-program.mjs` — 真实 Controller/Worker 执行输入样例或指定 P2 卷积源文件，记录运行与单步状态；浏览器验证器回放以检查 PC 可见性，另检查内存导航、展开阅读、输入焦点与窄窗口布局
-- `scripts/extension-host-mars.cjs` — 必跑的真实宿主内部 MARS 测试；Java/JAR 路径故意无效，覆盖各 Profile/工作区外 ASM、中文空格 include/宏、stdin、P2 逐字导出、错误保留产物、超时及实际伪终端输入与文件读写
+- `scripts/extension-host-mars.cjs` — 必跑的真实宿主内部 MARS 测试；Java/JAR 路径故意无效，覆盖各 Profile/工作区外 ASM、中文空格 include/宏、stdin、P2 逐字导出、错误保留产物及实际伪终端输入与文件读写
 - `scripts/verify-mips-{cli,worker}.mjs`、`verify-process-supervisor.mjs`、`verify-real-cpu-shadow*.mjs`、`check-module-boundaries.mjs` — CLI/Worker 边界、进程树、真实 CPU shadow 与模块依赖边界
 - `scripts/package-vsix.test.mjs` — 通过真实 vsce fixture 验证五目标内容裁剪、共享许可/来源/配方保留与中文空格路径
 - `conformance/mips/test/` — ISA golden、决策向量、250+5 冻结执行语料与 phase6 evidence 聚合器；`npm run verify:phase6` 运行 builtin JSONL 汇编/执行与课程向量门禁，历史 MARS 差分仅在明确 archival 命令中读取冻结证据

@@ -49,7 +49,6 @@ async function verifyMars({ folder, configure, bounded, waitFor }) {
   await configure(folder, {
     'toolchain.java': path.join(root, '不存在 Java 工具.exe'),
     'toolchain.mars': path.join(root, '不存在 MARS.jar'),
-    'run.timeoutMs': 120000,
     'run.revealOutput': false
   });
 
@@ -102,21 +101,14 @@ async function verifyMars({ folder, configure, bounded, waitFor }) {
     await bounded('Invalid internal MIPS run', () => vscode.commands.executeCommand('co.mips.runCurrentFile'));
     assert.ok(errors.some((message) => message.includes('运行失败')));
 
-    errors.length = 0;
-    await configure(folder, { 'run.timeoutMs': 1000 });
-    await showSource(source, '.text\nloop: j loop\nnop\n');
-    await bounded('Internal MIPS infinite-loop timeout command', () => vscode.commands.executeCommand('co.mips.runCurrentFile'));
-    assert.ok(errors.some((message) => message.includes('运行失败')),
-      'The bounded internal runtime must report a timeout');
   } finally {
     vscode.window.showErrorMessage = originalError;
-    await configure(folder, { 'run.timeoutMs': 120000 });
   }
-  console.log('PASS internal MIPS diagnostics, atomic export preservation, and timeout');
+  console.log('PASS internal MIPS diagnostics and atomic export preservation');
 
   const terminalResult = path.join(root, 'terminal 数据.txt');
   await fs.rm(terminalResult, { force: true });
-  await configure(folder, { 'project.profile': 'P2', 'run.timeoutMs': 120000 });
+  await configure(folder, { 'project.profile': 'P2' });
   const terminalProgram = `.data
 filename: .asciiz "terminal 数据.txt"
 payload: .ascii "TERMINAL_OK"

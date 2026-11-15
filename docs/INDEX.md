@@ -6,7 +6,7 @@ LSP: src/server.ts (路由) + src/languageClient.ts (客户端)
 
 子系统:
   orchestration   | docs/modules/orchestration.md   | 66 files | 扩展宿主层（命令/配置/UI/工具链；含用户 ASM 测试、Logisim 与 hazard 命令）
-  common-lsp      | docs/modules/common-lsp.md      | 7 files  | 共享 LSP 基础设施
+  common-lsp      | docs/modules/common-lsp.md      | 6 files  | 共享 LSP 基础设施
   mips-lsp        | docs/modules/mips-lsp.md        | 35 files | MIPS 汇编语言支持
   mips-core       | docs/modules/mips-core.md       | 72 files | 纯 TS MIPS 引擎核心（课程与普通 MARS ISA/profile/assembler/machine/devices/events/debug）
   mips-debug      | docs/modules/mips-debug.md      | 19 files | 内置 MARS 调试工作台（VS Code 面板、状态投影与 Webview）

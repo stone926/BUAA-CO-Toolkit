@@ -7,19 +7,16 @@ vi.mock('vscode', () => ({
 
 vi.mock('../config', () => ({
   getRunTimeout: vi.fn(() => 5000),
-  shouldRevealOutput: vi.fn(() => false),
-  showCommandBeforeRun: vi.fn(() => true)
+  shouldRevealOutput: vi.fn(() => false)
 }));
 
 import { runProcessCore } from '../processCore';
 import { runTool } from '../process';
 import * as vscode from 'vscode';
-import { showCommandBeforeRun } from '../config';
 
 describe('process core', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(showCommandBeforeRun).mockReturnValue(true);
   });
 
   it('keeps non-interactive tool commands and raw streams out of the output channel', async () => {
@@ -37,12 +34,10 @@ describe('process core', () => {
     expect(result).toMatchObject({ ok: true, stdout: 'out', stderr: 'err' });
     expect(output.append).not.toHaveBeenCalled();
     expect(output.appendLine).not.toHaveBeenCalled();
-    expect(showCommandBeforeRun).not.toHaveBeenCalled();
     expect(vscode.window.showInformationMessage).not.toHaveBeenCalled();
   });
 
-  it('preserves command confirmation and process chatter for an interactive manual run', async () => {
-    vi.mocked(vscode.window.showInformationMessage).mockResolvedValueOnce('运行' as never);
+  it('preserves process chatter for an interactive manual run', async () => {
     const output = { append: vi.fn(), appendLine: vi.fn() };
     const result = await runTool(process.execPath, [
       '-e',
@@ -54,8 +49,7 @@ describe('process core', () => {
     });
 
     expect(result.ok).toBe(true);
-    expect(showCommandBeforeRun).toHaveBeenCalledOnce();
-    expect(vscode.window.showInformationMessage).toHaveBeenCalledOnce();
+    expect(vscode.window.showInformationMessage).not.toHaveBeenCalled();
     expect(output.appendLine).toHaveBeenCalledWith(expect.stringMatching(/^\$ /));
     expect(output.appendLine).toHaveBeenCalledWith(`cwd: ${process.cwd()}`);
     expect(output.append).toHaveBeenCalledWith('manual-out');

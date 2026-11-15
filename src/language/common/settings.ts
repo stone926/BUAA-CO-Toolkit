@@ -1,16 +1,11 @@
-// @index settings — CoSettings接口/默认值/合并验证/诊断禁用键
+// @index settings — CoSettings接口/默认值/合并验证
 import { isConcreteProjectProfile, ProjectProfile } from '../../projectProfile';
 import { getProfileDefaults } from '../../courseConfig';
-import { configDefault, configDefaultArray } from '../../configDefaults';
+import { configDefault } from '../../configDefaults';
 import { normalizeVerilogProjects, VerilogProjects } from '../verilog/projectContext';
 import { normalizeProjectOverrides, ProjectOverrides } from '../../projectSettings';
-export const disableDiagnosticCodeCommand = 'co.diagnostics.disableCode';
 
 export interface CoSettings {
-  diagnostics: {
-    disabledCodes: string[];
-    disabledFileCodes: string[];
-  };
   project: {
     overrides: ProjectOverrides;
     profileSource?: 'project';
@@ -19,9 +14,6 @@ export interface CoSettings {
     testbench: string;
     machineCode: string;
     simTime: string;
-  };
-  run: {
-    timeoutMs: number;
   };
   mips: {
     warnPseudoInstruction: boolean;
@@ -33,12 +25,10 @@ export interface CoSettings {
     syntax: {
       external: {
         mode: 'off' | 'onSave' | 'commandOnly';
-        timeoutMs: number;
       };
     };
     implicitNet: {
       diagnostic: 'off' | 'hint' | 'warning' | 'error';
-      ignorePatterns: string[];
     };
     lint: {
       courseRules: boolean;
@@ -47,10 +37,6 @@ export interface CoSettings {
 }
 
 export const defaultCoSettings: CoSettings = {
-  diagnostics: {
-    disabledCodes: configDefaultArray('diagnostics.disabledCodes'),
-    disabledFileCodes: configDefaultArray('diagnostics.disabledFileCodes')
-  },
   project: {
     overrides: {},
     profile: configDefault<ProjectProfile>('project.profile'),
@@ -58,9 +44,6 @@ export const defaultCoSettings: CoSettings = {
     testbench: configDefault<string>('project.testbench'),
     machineCode: configDefault<string>('project.machineCode'),
     simTime: configDefault<string>('project.simTime')
-  },
-  run: {
-    timeoutMs: configDefault<number>('run.timeoutMs')
   },
   mips: {
     warnPseudoInstruction: configDefault<boolean>('mips.warnPseudoInstruction'),
@@ -71,13 +54,11 @@ export const defaultCoSettings: CoSettings = {
     projects: normalizeVerilogProjects(configDefault('verilog.projects')),
     syntax: {
       external: {
-        mode: configDefault<'off' | 'onSave' | 'commandOnly'>('verilog.syntax.external.mode'),
-        timeoutMs: configDefault<number>('verilog.syntax.external.timeoutMs')
+        mode: configDefault<'off' | 'onSave' | 'commandOnly'>('verilog.syntax.external.mode')
       }
     },
     implicitNet: {
-      diagnostic: configDefault<'off' | 'hint' | 'warning' | 'error'>('verilog.implicitNet.diagnostic'),
-      ignorePatterns: configDefaultArray('verilog.implicitNet.ignorePatterns')
+      diagnostic: configDefault<'off' | 'hint' | 'warning' | 'error'>('verilog.implicitNet.diagnostic')
     },
     lint: {
       courseRules: configDefault<boolean>('verilog.lint.courseRules')
@@ -88,18 +69,7 @@ export const defaultCoSettings: CoSettings = {
 export function mergeCoSettings(value: unknown): CoSettings {
   const candidate = typeof value === 'object' && value !== null ? value as Partial<CoSettings> : {};
   return {
-    diagnostics: {
-      ...defaultCoSettings.diagnostics,
-      ...(candidate.diagnostics ?? {}),
-      disabledCodes: normalizeDisabledDiagnosticCodes(candidate.diagnostics?.disabledCodes),
-      disabledFileCodes: normalizeDisabledDiagnosticFileCodes(candidate.diagnostics?.disabledFileCodes)
-    },
     project: normalizeProject(candidate.project),
-    run: {
-      ...defaultCoSettings.run,
-      ...(candidate.run ?? {}),
-      timeoutMs: normalizeInteger(candidate.run?.timeoutMs, defaultCoSettings.run.timeoutMs, 1000, 600000)
-    },
     mips: {
       ...defaultCoSettings.mips,
       ...(candidate.mips ?? {})
@@ -109,7 +79,7 @@ export function mergeCoSettings(value: unknown): CoSettings {
       syntax: normalizeVerilogSyntax(candidate.verilog?.syntax),
       implicitNet: {
         ...defaultCoSettings.verilog.implicitNet,
-        ...(candidate.verilog?.implicitNet ?? {})
+        diagnostic: candidate.verilog?.implicitNet?.diagnostic ?? defaultCoSettings.verilog.implicitNet.diagnostic
       },
       lint: {
         courseRules: typeof candidate.verilog?.lint?.courseRules === 'boolean'
@@ -172,101 +142,7 @@ function normalizeVerilogSyntax(value: unknown): CoSettings['verilog']['syntax']
     : defaultCoSettings.verilog.syntax.external.mode;
   return {
     external: {
-      mode,
-      timeoutMs: normalizeInteger(
-        externalCandidate.timeoutMs,
-        defaultCoSettings.verilog.syntax.external.timeoutMs,
-        0,
-        600000
-      )
+      mode
     }
   };
-}
-
-export function diagnosticCodeKey(languageId: string, code: string): string {
-  return `${languageId.trim().toLowerCase()}:${code.trim().toLowerCase()}`;
-}
-
-export function diagnosticFileCodeKey(languageId: string, code: string, documentUri: string): string {
-  return `${diagnosticCodeKey(languageId, code)}@${documentUri.trim()}`;
-}
-
-export function diagnosticCodeToString(code: unknown): string | undefined {
-  if (typeof code !== 'string' && typeof code !== 'number') {
-    return undefined;
-  }
-  const normalized = String(code).trim().toLowerCase();
-  return normalized && /^\S+$/.test(normalized) ? normalized : undefined;
-}
-
-export function isDiagnosticCodeDisabled(settings: CoSettings, languageId: string, code: unknown): boolean {
-  const normalized = diagnosticCodeToString(code);
-  if (!normalized) {
-    return false;
-  }
-  const languageKey = diagnosticCodeKey(languageId, normalized);
-  return settings.diagnostics.disabledCodes.some((item) => item === languageKey || item === normalized);
-}
-
-export function isDiagnosticCodeDisabledForFile(
-  settings: CoSettings,
-  languageId: string,
-  code: unknown,
-  documentUri: string | undefined
-): boolean {
-  const normalized = diagnosticCodeToString(code);
-  if (!normalized) {
-    return false;
-  }
-  if (isDiagnosticCodeDisabled(settings, languageId, normalized)) {
-    return true;
-  }
-  if (!documentUri?.trim()) {
-    return false;
-  }
-  const fileKey = diagnosticFileCodeKey(languageId, normalized, documentUri);
-  const codeOnlyFileKey = `${normalized}@${documentUri.trim()}`;
-  return settings.diagnostics.disabledFileCodes.some((item) => item === fileKey || item === codeOnlyFileKey);
-}
-
-function normalizeDisabledDiagnosticCodes(value: unknown): string[] {
-  if (!Array.isArray(value)) {
-    return [...defaultCoSettings.diagnostics.disabledCodes];
-  }
-  return [...new Set(value
-    .filter((item): item is string => typeof item === 'string')
-    .map((item) => item.trim().toLowerCase())
-    .filter((item) => Boolean(item) && /^\S+$/.test(item)))].sort();
-}
-
-function normalizeDisabledDiagnosticFileCodes(value: unknown): string[] {
-  if (!Array.isArray(value)) {
-    return [...defaultCoSettings.diagnostics.disabledFileCodes];
-  }
-  return [...new Set(value
-    .filter((item): item is string => typeof item === 'string')
-    .map((item) => normalizeDiagnosticFileCode(item))
-    .filter((item): item is string => Boolean(item)))].sort();
-}
-
-function normalizeDiagnosticFileCode(value: string): string | undefined {
-  const trimmed = value.trim();
-  const separator = trimmed.indexOf('@');
-  if (separator <= 0 || separator === trimmed.length - 1) {
-    return undefined;
-  }
-  const codePart = trimmed.slice(0, separator).trim();
-  const uriPart = trimmed.slice(separator + 1).trim();
-  if (!uriPart || /\s/.test(uriPart)) {
-    return undefined;
-  }
-  const normalizedCodePart = normalizeDisabledDiagnosticCodes([codePart])[0];
-  return normalizedCodePart ? `${normalizedCodePart}@${uriPart}` : undefined;
-}
-
-function normalizeInteger(value: unknown, fallback: number, min: number, max: number): number {
-  if (typeof value !== 'number' || !Number.isFinite(value)) {
-    return fallback;
-  }
-  return Math.min(max, Math.max(min, Math.trunc(value)));
 }

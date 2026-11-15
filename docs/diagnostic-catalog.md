@@ -1,6 +1,6 @@
 # 内置诊断目录
 
-本目录记录内置 MIPS、Verilog 和 Logisim 分析器当前会产生的稳定诊断码。用户可以通过 `co.diagnostics.disabledCodes` 和 `co.diagnostics.disabledFileCodes` 精确禁用诊断。
+本目录记录内置 MIPS、Verilog 和 Logisim 分析器当前会产生的稳定诊断码。
 
 带 `<...>` 的条目表示带动态后缀的诊断码模式，例如 `implicit-net:<name>` 会实际发出 `implicit-net:missing`。带 `*` 的条目表示同一基础规则下的多个稳定子码。
 

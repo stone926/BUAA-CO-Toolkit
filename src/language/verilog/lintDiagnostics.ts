@@ -3,7 +3,6 @@ import { Diagnostic, DiagnosticSeverity, Position, Range } from 'vscode-language
 import { makeDiagnostic } from '../common/lsp';
 import { CoSettings } from '../common/settings';
 import { VerilogModule, verilogKeywords } from './model';
-import { safeRegExp } from './textUtils';
 import type { VerilogSemanticModel } from './semanticModel';
 import type { VerilogExpressionAst } from './exprAst';
 import { VerilogProceduralBlockAst } from './blockAst';
@@ -24,13 +23,12 @@ export function collectImplicitNetDiagnostics(
     : severityMode === 'hint'
       ? DiagnosticSeverity.Hint
       : DiagnosticSeverity.Warning;
-  const ignorePatterns = settings.verilog.implicitNet.ignorePatterns.map((pattern) => safeRegExp(pattern)).filter((item): item is RegExp => Boolean(item));
   const reported = new Set<string>();
   for (const reference of semantic.unresolvedReferences) {
     if (
       verilogKeywords.has(reference.name) ||
       isMacroReferenceName(reference.name) ||
-      ignorePatterns.some((pattern) => pattern.test(reference.name))
+      /^(?:uut|tb)\./.test(reference.name)
     ) {
       continue;
     }

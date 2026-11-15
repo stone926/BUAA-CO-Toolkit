@@ -1,7 +1,7 @@
 // @index process — runTool(同步捕获)+launchTool(GUI分离启动)
 import { spawn } from 'child_process';
 import * as vscode from 'vscode';
-import { getRunTimeout, shouldRevealOutput, showCommandBeforeRun } from './config';
+import { getRunTimeout, shouldRevealOutput } from './config';
 import { RunResult } from './types';
 import { runProcessCore } from './processCore';
 
@@ -55,20 +55,6 @@ export async function runTool(command: string, args: string[], options: RunToolO
     options.output.appendLine(`cwd: ${cwd}`);
   }
 
-  if (!options.nonInteractive && showCommandBeforeRun(options.resource)) {
-    const choice = await vscode.window.showInformationMessage(`运行外部工具？\n${display}`, '运行');
-    if (choice !== '运行') {
-      return {
-        ok: false,
-        exitCode: null,
-        commandLine: display,
-        cwd,
-        stdout: '',
-        stderr: '用户取消',
-        timedOut: false
-      };
-    }
-  }
 
   const result = await runProcessCore(command, args, {
     cwd,
@@ -108,20 +94,6 @@ export async function launchTool(command: string, args: string[], options: RunTo
     options.output.appendLine(`cwd: ${cwd}`);
   }
 
-  if (!options.nonInteractive && showCommandBeforeRun(options.resource)) {
-    const choice = await vscode.window.showInformationMessage(`运行外部工具？\n${display}`, '运行');
-    if (choice !== '运行') {
-      return {
-        ok: false,
-        exitCode: null,
-        commandLine: display,
-        cwd,
-        stdout: '',
-        stderr: '用户取消',
-        timedOut: false
-      };
-    }
-  }
 
   return await new Promise<RunResult>((resolve) => {
     let settled = false;

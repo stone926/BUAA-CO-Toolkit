@@ -1,6 +1,4 @@
 {
-  "diagnostics.disabledCodes": [],
-  "diagnostics.disabledFileCodes": [],
   "mips.instructionTokenMode": "realVsPseudo",
   "mips.warnMissingExitSyscall": true,
   "mips.warnPseudoInstruction": true,
@@ -11,22 +9,13 @@
   "project.testbench": "mips_tb",
   "project.topModule": "mips",
   "run.revealOutput": false,
-  "run.showCommandBeforeRun": false,
-  "run.timeoutMs": 120000,
   "test.concurrency": 4,
   "test.instructions": "",
-  "toolchain.hazardCalculator": "",
   "toolchain.java": "java",
   "toolchain.logisim": "",
   "toolchain.mars": "",
-  "toolchain.python": "",
   "verilog.implicitNet.diagnostic": "warning",
-  "verilog.implicitNet.ignorePatterns": [
-    "^uut\\.",
-    "^tb\\."
-  ],
   "verilog.lint.courseRules": true,
   "verilog.projects": {},
-  "verilog.syntax.external.mode": "onSave",
-  "verilog.syntax.external.timeoutMs": 0
+  "verilog.syntax.external.mode": "onSave"
 }

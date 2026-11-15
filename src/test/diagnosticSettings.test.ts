@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
 import {
-  disableDiagnosticCode,
   disableMipsPseudoWarnings
 } from '../diagnosticSettings';
 
@@ -42,43 +41,4 @@ describe('diagnostic setting commands', () => {
     );
   });
 
-  it('uses the source root for workspace suppression without mistaking its URI for file scope', async () => {
-    await disableDiagnosticCode(
-      'verilog',
-      'width-mismatch',
-      'workspace',
-      'file:///E:/work/cpu.v'
-    );
-
-    const configuredResource = vi.mocked(vscode.workspace.getConfiguration).mock.calls[0]?.[1] as vscode.Uri;
-    expect(configuredResource.fsPath.replace(/\\/g, '/').toLowerCase()).toBe('e:/work/cpu.v');
-    const config = vscode.workspace.getConfiguration('co', configuredResource);
-    expect(config.update).toHaveBeenLastCalledWith(
-      'diagnostics.disabledCodes',
-      expect.arrayContaining(['verilog:width-mismatch']),
-      vscode.ConfigurationTarget.WorkspaceFolder
-    );
-    expect(config.update).not.toHaveBeenCalledWith(
-      'diagnostics.disabledFileCodes',
-      expect.anything(),
-      expect.anything()
-    );
-  });
-
-  it('keeps file suppression file-scoped in the source root', async () => {
-    await disableDiagnosticCode(
-      'verilog',
-      'width-mismatch',
-      'file',
-      'file:///E:/work/cpu.v'
-    );
-
-    const configuredResource = vi.mocked(vscode.workspace.getConfiguration).mock.calls[0]?.[1] as vscode.Uri;
-    const config = vscode.workspace.getConfiguration('co', configuredResource);
-    expect(config.update).toHaveBeenLastCalledWith(
-      'diagnostics.disabledFileCodes',
-      expect.arrayContaining(['verilog:width-mismatch@file:///E:/work/cpu.v']),
-      vscode.ConfigurationTarget.WorkspaceFolder
-    );
-  });
 });

@@ -290,7 +290,7 @@ describe('package manifest', () => {
     });
   });
 
-  it('keeps internal defaults as a superset without publishing defaults for compatibility settings', () => {
+  it('publishes defaults only for supported settings', () => {
     const pkg = readPackage();
     const groups = pkg.contributes?.configuration ?? [];
     const properties = Object.assign({}, ...groups.map((group) => group.properties ?? {}));
@@ -300,9 +300,7 @@ describe('package manifest', () => {
       .map((key) => `co.${key}`)
       .filter((key) => !publicKeys.has(key));
 
-    expect(Object.keys(configDefaults).length).toBeGreaterThan(publicKeys.size);
-    expect(internalOnlyDefaultKeys).toEqual(expect.arrayContaining([...compatibilityConfigurationKeys]));
-    expect(internalOnlyDefaultKeys).toHaveLength(compatibilityConfigurationKeys.length);
+    expect(internalOnlyDefaultKeys).toEqual([]);
 
     for (const key of publicKeys) {
       const defaultKey = key.replace(/^co\./, '');
@@ -315,21 +313,8 @@ describe('package manifest', () => {
     expect(properties['co.project.topModule']?.description).toContain('通常无需修改');
     expect(properties['co.project.testbench']?.description).toContain('自动测试使用独立');
 
-    const compatibilityGroup = groups.find((group) => group.title === '兼容设置（仅已配置用户可见）');
-    expect(compatibilityGroup?.order).toBe(100);
-    expect(Object.keys(compatibilityGroup?.properties ?? {})).toEqual([...compatibilityConfigurationKeys]);
-    compatibilityConfigurationKeys.forEach((key, index) => {
-      const property = compatibilityGroup?.properties?.[key];
-      expect(property?.default, key).toBeUndefined();
-      expect(property?.deprecationMessage?.trim().length, key).toBeGreaterThan(0);
-      expect(property?.scope, key).toBe(['co.toolchain.python', 'co.toolchain.hazardCalculator'].includes(key)
-        ? 'machine-overridable'
-        : 'resource');
-      if (index > 0) {
-        const previous = compatibilityGroup?.properties?.[compatibilityConfigurationKeys[index - 1]];
-        expect(property?.order, key).toBeGreaterThan(previous?.order ?? 0);
-      }
-    });
+    for (const key of compatibilityConfigurationKeys) expect(properties[key], key).toBeUndefined();
+    expect(groups.some((group) => group.title === '兼容设置（仅已配置用户可见）')).toBe(false);
   });
 
   it('removes retired Mars settings and exposes the configured modded Mars path', () => {

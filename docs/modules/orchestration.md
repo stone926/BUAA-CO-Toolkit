@@ -70,7 +70,7 @@
 - 编辑器标题栏复用侧栏的持续测试命令：P3–P7 空闲时显示火箭启动按钮，`co.continuousTestRunning` 在启动、执行和停止清理期间切换为停止按钮；运行中切换文件或 Profile 仍保留停止入口，最终清理后恢复启动条件。
 - `wizard.ts` / `wizardSettings.ts` — 4 步项目向导：选 Profile → 项目名 → 配置外部工具 → 创建目录与模板
 - `advancedTools.ts` / `advancedToolModel.ts` — 按 Profile 过滤的低频工具
-- `configurationResource.ts` / `diagnosticSettings.ts` — 诊断快速修复的配置读改写（精确作用域）；共享源码上下文在报告/Webview 获得焦点后保留，状态栏、工具链及设置读取使用同一资源，工具链缓存按文件隔离
+- `configurationResource.ts` / `diagnosticSettings.ts` — MIPS 伪指令警告快速修复的配置读改写；共享源码上下文在报告/Webview 获得焦点后保留，状态栏、工具链及设置读取使用同一资源，工具链缓存按文件隔离
 - `webview/reportLayout.ts` — 报告 Webview 共享 shell/CSS、状态徽标、可横向滚动表格与 nonce CSP；历史报告按需加载本地筛选脚本
 - `webview/toolchainReport.ts` — 无宿主依赖的工具链报告渲染（汇总、状态与操作建议）；检查命令等待模块注册表初始扫描就绪后推断阶段
 - `templates/templateRegistry.ts` — `resources/templates` 受控占位替换加载器

@@ -8,7 +8,6 @@ import {
   getMemoryConfiguration,
   getProfile,
   getRunTimeout,
-  showCommandBeforeRun,
   type MipsEngineMode
 } from './config';
 import {
@@ -754,26 +753,6 @@ export async function runLogisimTraceCli(
     services.output.appendLine(`工作目录：${cwd}`);
   }
 
-  if (!nonInteractive && showCommandBeforeRun(resource)) {
-    const choice = await vscode.window.showInformationMessage(`运行外部工具？\n${display}`, '运行');
-    if (choice !== '运行') {
-      return {
-        result: {
-          ok: false,
-          exitCode: null,
-          commandLine: display,
-          cwd,
-          stdout: '',
-          stderr: '用户取消',
-          timedOut: false
-        },
-        stdout: '',
-        stderr: '用户取消',
-        rowsSeen: 0,
-        haltedByPc: false
-      };
-    }
-  }
 
   let rowsSeen = 0;
   let haltedByPc = false;

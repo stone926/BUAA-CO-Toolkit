@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 import * as fs from 'fs';
 import * as path from 'path';
-import { automaticTestEngineMode } from '../../src/courseTesting/automaticTestPolicy';
 import type { AppServices } from '../../src/types';
 import { startContinuousP7Pipeline } from './pipeline';
 import type { ContinuousPipelineOptions } from './pipeline';
@@ -246,10 +245,6 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     config: {
       'project.profile': PROFILE,
       'project.topModule': options.topModule,
-      'mips.engine': automaticTestEngineMode,
-      'mips.memoryConfiguration': 'auto',
-      'mips.delayedBranching': 'profile',
-      'run.showCommandBeforeRun': false,
       'run.revealOutput': false,
       'test.instructions': options.instructions
     }

@@ -17,8 +17,7 @@ vi.mock('../config', () => ({
   getMemoryConfiguration: vi.fn(() => 'FixedCompactLargeText'),
   getMipsEngine: vi.fn(() => 'mars'),
   getProfile: vi.fn(),
-  getRunTimeout: vi.fn(() => 10_000),
-  showCommandBeforeRun: vi.fn(() => false)
+  getRunTimeout: vi.fn(() => 10_000)
 }));
 
 vi.mock('../processCore', () => ({ runProcessCore: processState.run }));
@@ -29,7 +28,6 @@ import {
   resolveP3LogisimTraceSetup,
   runLogisimTraceCli
 } from '../courseTestLogisim';
-import { showCommandBeforeRun } from '../config';
 import { checkToolchain } from '../toolchain';
 
 describe('Logisim CLI cancellation boundary', () => {
@@ -101,8 +99,6 @@ describe('Logisim CLI cancellation boundary', () => {
   });
 
   it('keeps an automatic Logisim run non-interactive and hides command paths', async () => {
-    vi.mocked(showCommandBeforeRun).mockClear();
-    vi.mocked(showCommandBeforeRun).mockReturnValue(true);
     processState.run.mockResolvedValue({
       ok: false,
       exitCode: 1,
@@ -125,7 +121,6 @@ describe('Logisim CLI cancellation boundary', () => {
       true
     );
 
-    expect(showCommandBeforeRun).not.toHaveBeenCalled();
     expect(services.output.append).not.toHaveBeenCalled();
     expect(services.output.appendLine).not.toHaveBeenCalledWith(expect.stringContaining('E:/work'));
     expect(services.output.appendLine).not.toHaveBeenCalledWith(expect.stringContaining('$ java'));

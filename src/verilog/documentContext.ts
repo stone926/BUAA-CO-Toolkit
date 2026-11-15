@@ -4,7 +4,6 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 import {
   config,
   getProfile,
-  getRunTimeout,
   getSimTime,
   getTestbench,
   getTopModule
@@ -40,20 +39,15 @@ export function coSettingsForUri(uri: vscode.Uri): CoSettings {
       testbench: getTestbench(uri),
       simTime: getSimTime(uri)
     },
-    run: {
-      timeoutMs: getRunTimeout(uri)
-    },
     verilog: {
       projects: config<CoSettings['verilog']['projects']>('verilog.projects', defaultCoSettings.verilog.projects, uri),
       syntax: {
         external: {
-          mode: config<CoSettings['verilog']['syntax']['external']['mode']>('verilog.syntax.external.mode', defaultCoSettings.verilog.syntax.external.mode, uri),
-          timeoutMs: config<number>('verilog.syntax.external.timeoutMs', defaultCoSettings.verilog.syntax.external.timeoutMs, uri)
+          mode: config<CoSettings['verilog']['syntax']['external']['mode']>('verilog.syntax.external.mode', defaultCoSettings.verilog.syntax.external.mode, uri)
         }
       },
       implicitNet: {
-        diagnostic: config<CoSettings['verilog']['implicitNet']['diagnostic']>('verilog.implicitNet.diagnostic', defaultCoSettings.verilog.implicitNet.diagnostic, uri),
-        ignorePatterns: config<string[]>('verilog.implicitNet.ignorePatterns', defaultCoSettings.verilog.implicitNet.ignorePatterns, uri)
+        diagnostic: config<CoSettings['verilog']['implicitNet']['diagnostic']>('verilog.implicitNet.diagnostic', defaultCoSettings.verilog.implicitNet.diagnostic, uri)
       },
       lint: {
         courseRules: config<boolean>('verilog.lint.courseRules', defaultCoSettings.verilog.lint.courseRules, uri)

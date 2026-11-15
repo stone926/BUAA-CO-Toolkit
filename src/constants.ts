@@ -2,6 +2,9 @@
 import { profilesWithCapability } from './courseConfig';
 import { ProjectProfile, concreteProjectProfiles } from './projectProfile';
 
+/** Default budget for manual tools and external syntax checks. */
+export const DEFAULT_TOOL_TIMEOUT_MS = 120000;
+
 // ── Profile 分组 ──
 
 /** 所有可选 Profile（含 auto）。 */
@@ -122,10 +125,6 @@ export const Commands = {
   Hazard: {
     AnalyzeCurrentMachineCode: 'co.hazard.analyzeCurrentMachineCode',
     OpenReport: 'co.hazard.openReport'
-  },
-
-  Diagnostics: {
-    DisableCode: 'co.diagnostics.disableCode'
   },
 
   Server: {

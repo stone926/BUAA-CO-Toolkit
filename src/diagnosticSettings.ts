@@ -2,14 +2,6 @@
 import * as vscode from 'vscode';
 import { configurationTargetForResource } from './config';
 import { configurationResource } from './configurationResource';
-import {
-  defaultCoSettings,
-  diagnosticCodeKey,
-  diagnosticCodeToString,
-  diagnosticFileCodeKey
-} from './language/common/settings';
-
-export type DiagnosticSuppressionScope = 'file' | 'workspace';
 
 export async function disableMipsPseudoWarnings(documentUri?: string): Promise<void> {
   const resource = configurationResource(documentUri);
@@ -19,39 +11,4 @@ export async function disableMipsPseudoWarnings(documentUri?: string): Promise<v
     configurationTargetForResource(resource)
   );
   vscode.window.showInformationMessage('已在当前工作区中禁用 MIPS 伪指令警告');
-}
-
-export async function disableDiagnosticCode(
-  languageId?: string,
-  code?: string,
-  scope?: DiagnosticSuppressionScope,
-  documentUri?: string
-): Promise<void> {
-  const normalizedLanguageId = typeof languageId === 'string' ? languageId.trim().toLowerCase() : '';
-  const normalizedCode = diagnosticCodeToString(code);
-  if (!normalizedLanguageId || !normalizedCode || (scope !== 'file' && scope !== 'workspace')) {
-    vscode.window.showErrorMessage('无法禁用此诊断，因为其代码或作用域无效');
-    return;
-  }
-  const resource = configurationResource(documentUri);
-  if (!resource || !documentUri?.trim()) {
-    vscode.window.showErrorMessage('无法禁用此诊断，因为无法确定诊断所属工作区');
-    return;
-  }
-  const config = vscode.workspace.getConfiguration('co', resource);
-  const target = configurationTargetForResource(resource);
-  if (scope === 'file') {
-    const key = diagnosticFileCodeKey(normalizedLanguageId, normalizedCode, documentUri);
-    const current = config.get<string[]>('diagnostics.disabledFileCodes', defaultCoSettings.diagnostics.disabledFileCodes);
-    const merged = [...new Set([...current.map((item) => item.trim()).filter(Boolean), key])].sort();
-    await config.update('diagnostics.disabledFileCodes', merged, target);
-    vscode.window.showInformationMessage(`已在当前工作区中对该文件禁用 ${normalizedCode} 诊断`);
-    return;
-  }
-
-  const key = diagnosticCodeKey(normalizedLanguageId, normalizedCode);
-  const current = config.get<string[]>('diagnostics.disabledCodes', defaultCoSettings.diagnostics.disabledCodes);
-  const merged = [...new Set([...current.map((item) => item.trim().toLowerCase()).filter(Boolean), key])].sort();
-  await config.update('diagnostics.disabledCodes', merged, target);
-  vscode.window.showInformationMessage(`已在当前工作区中禁用 ${normalizedCode} 诊断`);
 }

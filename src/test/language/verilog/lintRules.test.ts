@@ -57,7 +57,7 @@ endmodule`;
     expect(actions.some((action) => action.title === 'Add default case item' || action.command?.command === 'co.verilog.disableLintRule')).toBe(false);
   });
 
-  it('leaves width suppression actions to the shared diagnostic provider', () => {
+  it('does not offer removed width suppression actions', () => {
     const document = doc('module demo; endmodule');
     const diagnostic = {
       range: Range.create(0, 0, 0, 6),

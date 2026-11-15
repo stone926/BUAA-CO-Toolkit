@@ -1,4 +1,4 @@
-import { Commands } from './constants';
+import { Commands, DEFAULT_TOOL_TIMEOUT_MS } from './constants';
 // @index lsp-server — 协议路由、验证调度、跨文件索引管理
 import {
   CodeAction,
@@ -47,10 +47,6 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 import { URI } from 'vscode-uri';
 import { defaultCoSettings, mergeCoSettings, CoSettings } from './language/common/settings';
 import { applyResolvedProfile, ProfileResolverInput } from './profileResolver';
-import {
-  filterDisabledDiagnostics,
-  getDiagnosticSuppressActions
-} from './language/common/diagnosticActions';
 import {
   getLogisimDiagnostics,
   getLogisimDocumentSymbols,
@@ -596,14 +592,8 @@ async function validateDocument(document: TextDocument, settings?: CoSettings): 
     ? timeStartup(`diagnostics ${document.languageId} ${document.uri}`)
     : undefined;
   const resolvedSettings = effectiveSettingsForDocument(document, settings ?? await getDocumentSettings(document.uri));
-  const diagnosticLanguageId = serviceKeyForDocument(document);
   const serviceDiagnostics = serviceForDocument(document)?.getDiagnostics?.(document, resolvedSettings) ?? [];
-  const diagnostics = filterDisabledDiagnostics(
-    diagnosticLanguageId,
-    mergeExternalDiagnostics(document, serviceDiagnostics, resolvedSettings),
-    resolvedSettings,
-    document.uri
-  );
+  const diagnostics = mergeExternalDiagnostics(document, serviceDiagnostics, resolvedSettings);
   connection.sendDiagnostics({
     uri: document.uri,
     diagnostics
@@ -616,8 +606,7 @@ function mergeExternalDiagnostics(document: TextDocument, diagnostics: Diagnosti
   if (document.languageId !== languageIds.verilog) {
     return diagnostics;
   }
-  const externalDiagnostics = filterDisabledDiagnostics(document.languageId,
-    state.verilogExternalDiagnostics.get(document.uri) ?? [], settings, document.uri);
+  const externalDiagnostics = state.verilogExternalDiagnostics.get(document.uri) ?? [];
   if (!externalDiagnostics.length) {
     return diagnostics;
   }
@@ -696,7 +685,7 @@ async function runExternalVerilogSyntaxCheck(uri: string, settings: CoSettings, 
       workspaceFolders: state.workspaceFolders,
       triggerUri: uri,
       extensionRoot: state.extensionRoot,
-      timeoutMs: external.timeoutMs > 0 ? external.timeoutMs : settings.run.timeoutMs,
+      timeoutMs: DEFAULT_TOOL_TIMEOUT_MS,
       // A save can arrive before the background scan completes. In that case
       // discovery must infer from disk rather than a partial index snapshot.
       projects: verilogIndex.complete ? verilogIndex.effectiveProjects : settings.verilog.projects,
@@ -763,11 +752,7 @@ function getCodeActions(
   settings: CoSettings,
   service: CoLanguageService
 ): CodeAction[] {
-  const languageActions = service.getCodeActions?.(document, range, diagnostics, settings) ?? [];
-  return [
-    ...languageActions,
-    ...getDiagnosticSuppressActions(serviceKeyForDocument(document), diagnostics, settings, document.uri)
-  ];
+  return service.getCodeActions?.(document, range, diagnostics, settings) ?? [];
 }
 
 async function validateAllDocuments(): Promise<void> {
