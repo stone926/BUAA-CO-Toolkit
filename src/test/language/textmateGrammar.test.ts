@@ -20,6 +20,7 @@ const projectRoot = process.cwd();
 const requireFromProject = createRequire(path.join(projectRoot, 'package.json'));
 const grammarFiles: Readonly<Record<string, string>> = {
   'source.mips': path.join(projectRoot, 'syntaxes', 'mips.tmLanguage.json'),
+  'source.mips.instruction-preview': path.join(projectRoot, 'syntaxes', 'mips-instruction-preview.tmLanguage.json'),
   'source.verilog': path.join(projectRoot, 'syntaxes', 'verilog.tmLanguage.json'),
   'source.systemverilog.co': path.join(projectRoot, 'syntaxes', 'systemverilog.tmLanguage.json'),
 };
@@ -183,6 +184,17 @@ describe('generated TextMate grammars', () => {
 
     expectScope(scopesAt(lines, 0, 'unterminated'), 'string.quoted.double.mips');
     expectScope(scopesAt(lines, 1, 'ADD'), 'keyword.control.instruction.mips');
+  });
+
+  it('colors a custom instruction preview with the regular MIPS instruction and operand scopes', async () => {
+    const preview = await requireGrammar('source.mips.instruction-preview');
+    const lines = tokenize(preview, 'bds $t1, $t2\ncustom_load $s0, 16($s1)');
+
+    expectScope(scopesAt(lines, 0, 'bds'), 'keyword.control.instruction.mips');
+    expectScope(scopesAt(lines, 0, '$t1'), 'variable.language.register.mips');
+    expectScope(scopesAt(lines, 0, '$t2'), 'variable.language.register.mips');
+    expectScope(scopesAt(lines, 1, '16'), 'constant.numeric.mips');
+    expectScope(scopesAt(lines, 1, '$s1'), 'variable.language.register.mips');
   });
 
   it('keeps dollar macro parameters scoped across a MIPS macro block without hiding real registers', () => {

@@ -22,7 +22,7 @@ LSP: src/server.ts (路由) + src/languageClient.ts (客户端)
   conformance     | conformance/mips/               | 独立 Node 包：ISA golden、冻结执行语料与 JSONL 门禁；MARS 参考仅用于历史证据
   test-suite      | docs/modules/test-suite.md      | 313 test files| Vitest 测试，含真实自定义指令与 P7 Timer/IRQ probe 集成
   resources       | docs/modules/resources.md       | ~55 files + 5 bundled Icarus runtimes | 静态资源与生成源
-  highlighting    | docs/modules/syntax-highlighting.md | 3 grammars | TextMate/semantic 分层高亮
+  highlighting    | docs/modules/syntax-highlighting.md | 4 grammars | TextMate/semantic 分层高亮
 
 数据流:
   MIPS: Text -> syntax.ts -> ast.ts -> semantic.ts -> parser.ts -> diagnostics, cache: parseCache.ts

@@ -10,7 +10,7 @@ import {
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { lineAt } from '../common/lsp';
 import { CoSettings } from '../common/settings';
-import { cp0Markdown, syscallMarkdown } from './display';
+import { cp0Markdown, customInstructionPreviewMarkdown, syscallMarkdown } from './display';
 import {
   findMipsSemanticMacroAtPosition,
   mipsSemanticSymbolsVisibleAtPosition
@@ -102,7 +102,7 @@ export function getMipsCompletions(document: TextDocument, position: Position, s
 
   for (const instruction of customInstructionDisplays(document.uri, settings.project.profile)) {
     items.push({ label: instruction.mnemonic, kind: CompletionItemKind.Keyword, detail: instruction.summary,
-      documentation: { kind: MarkupKind.Markdown, value: '```mipsasm\n' + instruction.formats[0] + '\n```\n' + instruction.description } });
+      documentation: { kind: MarkupKind.Markdown, value: customInstructionPreviewMarkdown(instruction) } });
   }
   for (const directive of directives) {
     if (!directiveAvailable(directive, settings.project.profile)) continue;

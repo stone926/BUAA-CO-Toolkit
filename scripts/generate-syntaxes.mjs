@@ -950,6 +950,22 @@ function buildSystemVerilogGrammar(keywordResource, systemVerilogResource) {
   );
 }
 
+function buildMipsInstructionPreviewGrammar() {
+  return generatedGrammar(
+    'MIPS instruction preview',
+    grammars.mipsInstructionPreview.scopeName,
+    [],
+    [mipsStatement(
+      `^[\\t ]*(${MIPS_CALLABLE_IDENTIFIER})${MIPS_IDENTIFIER_END}`,
+      { 1: { name: 'keyword.control.instruction.mips' } },
+      'meta.instruction.mips',
+      mipsOperandPatterns().map(({ include }) => ({ include: `${grammars.mips.scopeName}${include}` })),
+    )],
+    {},
+    ['resources/co/languages.json', 'syntaxes/mips.tmLanguage.json'],
+  );
+}
+
 async function buildOutputs() {
   const [
     mipsInstructions,
@@ -967,6 +983,7 @@ async function buildOutputs() {
 
   return new Map([
     [outputPaths.mips, buildMipsGrammar(mipsInstructions, mipsDirectives, mipsRegisters)],
+    [outputPaths.mipsInstructionPreview, buildMipsInstructionPreviewGrammar()],
     [outputPaths.verilog, buildVerilogGrammar(verilogKeywords)],
     [
       outputPaths.systemVerilog,

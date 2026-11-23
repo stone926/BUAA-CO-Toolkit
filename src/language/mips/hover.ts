@@ -5,6 +5,7 @@ import { CoSettings } from '../common/settings';
 import {
   cp0Markdown,
   cp0RegisterAtPosition,
+  customInstructionPreviewMarkdown,
   directiveHoverText,
   eqvReplacementText,
   macroBody,
@@ -66,7 +67,7 @@ export function getMipsHover(document: TextDocument, position: Position, setting
   const instruction = instructions[word.toLowerCase()];
   const custom = customInstructionDisplayFor(document.uri, settings.project.profile, word);
   if (custom) {
-    return { range: wordRange, contents: { kind: MarkupKind.Markdown, value: '```mipsasm\n' + custom.formats[0] + '\n```\n' + custom.description } };
+    return { range: wordRange, contents: { kind: MarkupKind.Markdown, value: customInstructionPreviewMarkdown(custom) } };
   }
   if (instruction) {
     const parsedInstruction = parsed.instructions.find((line) => rangesEqual(line.range, wordRange));

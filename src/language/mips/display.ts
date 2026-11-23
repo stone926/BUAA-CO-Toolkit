@@ -2,6 +2,7 @@ import { MarkupKind, Position, Range } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { p7ExceptionHandlerAddress } from '../../courseTesting/p7Hardware';
 import { lineAt } from '../common/lsp';
+import { languageIds } from '../generated/languages';
 import { MipsMacro, MipsParseResult } from './model';
 import { instructionWritesRegister } from './instructionValidation';
 import { macroCallArgumentsAtPosition } from './queries';
@@ -13,6 +14,7 @@ import {
   canonicalRegister,
   isRegister,
   MipsCp0RegisterInfo,
+  MipsInstruction,
   MipsSyscallInfo,
   syscallsByCode
 } from './resources';
@@ -21,6 +23,10 @@ import {
   parseIntegerLiteral,
   signed32ImmediateValue
 } from './syntax';
+
+export function customInstructionPreviewMarkdown(instruction: MipsInstruction): string {
+  return `\`\`\`${languageIds.mipsInstructionPreview}\n${instruction.formats[0]}\n\`\`\`\n${instruction.description}`;
+}
 
 export function directiveHoverText(directive: string): string | undefined {
   if (!directives.has(directive)) {

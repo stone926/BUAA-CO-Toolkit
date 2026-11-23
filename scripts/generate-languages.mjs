@@ -15,7 +15,9 @@ for (const language of catalog) {
   }
   ids.add(language.id);
   keys.add(language.key);
-  if (!language.extensions?.length) throw new Error(`Missing extensions: ${language.id}`);
+  if (!Array.isArray(language.extensions) || (!language.extensions.length && (language.lsp || !language.grammar))) {
+    throw new Error(`Missing extensions: ${language.id}`);
+  }
   for (const extension of language.extensions) {
     if (!/^\.[a-z]+$/.test(extension) || extensions.has(extension)) {
       throw new Error(`Invalid or duplicate extension: ${extension}`);

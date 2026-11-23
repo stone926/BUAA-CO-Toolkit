@@ -1,6 +1,7 @@
 // @index language-catalog — Generated from resources/co/languages.json; do not edit.
 export const languageIds = {
   "mips": "mipsasm",
+  "mipsInstructionPreview": "mipsasm-instruction",
   "verilog": "verilog",
   "systemVerilog": "systemverilog",
   "logisim": "logisim-circ"
@@ -28,6 +29,18 @@ export const languageCatalog = [
       "selector": "language",
       "formatting": true,
       "semanticHighlighting": true
+    }
+  },
+  {
+    "key": "mipsInstructionPreview",
+    "id": "mipsasm-instruction",
+    "extensions": [],
+    "aliases": [
+      "mipsasm-instruction"
+    ],
+    "grammar": {
+      "scopeName": "source.mips.instruction-preview",
+      "path": "./syntaxes/mips-instruction-preview.tmLanguage.json"
     }
   },
   {

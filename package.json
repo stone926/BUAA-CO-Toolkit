@@ -89,6 +89,13 @@
         "configuration": "./language-configuration/mipsasm.json"
       },
       {
+        "id": "mipsasm-instruction",
+        "aliases": [
+          "mipsasm-instruction"
+        ],
+        "extensions": []
+      },
+      {
         "id": "verilog",
         "aliases": [
           "Verilog",
@@ -118,6 +125,11 @@
         "language": "mipsasm",
         "scopeName": "source.mips",
         "path": "./syntaxes/mips.tmLanguage.json"
+      },
+      {
+        "language": "mipsasm-instruction",
+        "scopeName": "source.mips.instruction-preview",
+        "path": "./syntaxes/mips-instruction-preview.tmLanguage.json"
       },
       {
         "language": "verilog",

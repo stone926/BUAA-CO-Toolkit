@@ -1,0 +1,49 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "MIPS instruction preview",
+  "scopeName": "source.mips.instruction-preview",
+  "fileTypes": [],
+  "x-generated-from": [
+    "resources/co/languages.json",
+    "syntaxes/mips.tmLanguage.json"
+  ],
+  "patterns": [
+    {
+      "name": "meta.instruction.mips",
+      "begin": "^[\\t ]*([A-Za-z_.][A-Za-z0-9_.$]*)(?![A-Za-z0-9_.$])",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.control.instruction.mips"
+        }
+      },
+      "end": "(?=$)",
+      "patterns": [
+        {
+          "include": "source.mips#comments"
+        },
+        {
+          "include": "source.mips#strings"
+        },
+        {
+          "include": "source.mips#macroParameters"
+        },
+        {
+          "include": "source.mips#registers"
+        },
+        {
+          "include": "source.mips#characters"
+        },
+        {
+          "include": "source.mips#numbers"
+        },
+        {
+          "include": "source.mips#operators"
+        },
+        {
+          "include": "source.mips#punctuation"
+        }
+      ]
+    }
+  ],
+  "repository": {}
+}

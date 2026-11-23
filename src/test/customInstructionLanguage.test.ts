@@ -47,9 +47,10 @@ describe('workspace custom instruction editor facts', () => {
 
     expect(unknowns(source).map(item => item.range.start.line)).toEqual([1]);
     expect(unknowns(document(source.getText(), '/co/other-project'))).toHaveLength(2);
-    expect(getMipsCompletions(document('bd'), { line: 0, character: 2 }, settings, state).some(item => item.label === 'bds')).toBe(true);
+    const completion = getMipsCompletions(document('bd'), { line: 0, character: 2 }, settings, state).find(item => item.label === 'bds');
+    expect(completion?.documentation).toMatchObject({ value: expect.stringContaining('```mipsasm-instruction\nbds $t1, $t2') });
     expect(getMipsHover(source, { line: 0, character: 1 }, settings, state)?.contents).toMatchObject({
-      value: expect.stringContaining('bds $t1, $t2')
+      value: expect.stringContaining('```mipsasm-instruction\nbds $t1, $t2')
     });
     expect(getMipsSignatureHelp(source, { line: 0, character: 9 }, settings, state)?.signatures[0].label).toBe('bds $t1, $t2');
     expect(getMipsDiagnostics(document('ori $1, $0, 1'), settings, state)).toEqual([]);
