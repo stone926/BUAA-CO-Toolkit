@@ -1,6 +1,6 @@
 // @index hazard-blocks — 实现冒险目标：生产者→无关指令×间隔→消费者，含 JR/JALR 精确地址配方、JAL 调用返回、$0 写、转发优先级与 HI/LO 块
 import { CpuState } from '../../cpuState';
-import { branchMnemonics } from '../../mnemonicSets';
+import { branchMnemonics, CpuProfile, linkBranchMnemonics } from '../../mnemonicSets';
 import { alignDown } from '../../mipsUtil';
 import { Random } from '../../random';
 import { branchTaken } from '../instructionSemantics';
@@ -14,6 +14,7 @@ export interface HazardEmitHost {
   readonly state: CpuState;
   readonly rng: Random;
   readonly allowed: ReadonlySet<string>;
+  readonly profile: CpuProfile;
   /** Registers a block may claim for producers, copies and setup values. */
   readonly hazardRegisters: readonly string[];
   remaining(): number;
@@ -148,7 +149,7 @@ export class HazardBlockEmitter {
     if (producer === 'jal') {
       return this.emitLink(consumer, role, gap);
     }
-    const avoid = new Set<string>();
+    const avoid = new Set<string>(linkBranchMnemonics.has(consumer) ? ['$31'] : []);
     let register: string | undefined;
     let twin: string | undefined;
     if (hazardClassOf(consumer) === 'br_r2') {
@@ -461,7 +462,7 @@ export class HazardBlockEmitter {
   }
 
   private emitPriority(target: Extract<HazardTarget, { kind: 'priority' }>): boolean {
-    const avoid = new Set<string>();
+    const avoid = new Set<string>(linkBranchMnemonics.has(target.consumer) ? ['$31'] : []);
     const register = this.pickRegister(avoid);
     avoid.add(register);
     // Prepare the comparison operand before either producer, so setup cannot age away the
@@ -576,7 +577,7 @@ export class HazardBlockEmitter {
   private needsSmallValue(consumer: string, role: SourceRole): boolean {
     const consumerClass = hazardClassOf(consumer);
     return (role === 'rs' && (consumerClass === 'load' || consumerClass === 'store')) ||
-      consumer === 'add' || consumer === 'sub' || consumer === 'addi';
+      (this.host.profile === 'P7' && (consumer === 'add' || consumer === 'sub' || consumer === 'addi'));
   }
 
   /** Whether `value` is a legal operand for the consumer that a stale `stale` would change. */
@@ -599,7 +600,7 @@ export class HazardBlockEmitter {
       return branchTaken(consumer, value, 0) !== branchTaken(consumer, stale, 0);
     }
     if ((consumer === 'div' || consumer === 'divu') && role === 'rt') {
-      return value !== 0 && !(consumer === 'div' && value === -1);
+      return value !== 0 && !(this.host.profile === 'P7' && consumer === 'div' && value === -1);
     }
     return true;
   }

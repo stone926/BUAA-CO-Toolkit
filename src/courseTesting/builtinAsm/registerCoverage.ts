@@ -4,7 +4,8 @@ import { CpuState } from '../cpuState';
 export interface RegisterCoverageWriter {
   remaining(): number;
   pc(): number;
-  emit(mnemonic: string, text: string): void;
+  /** Skipped instructions occupy a static slot but do not enter the dynamic hazard stream. */
+  emit(mnemonic: string, text: string, skipped?: boolean): void;
   label(label: string): void;
 }
 
@@ -106,7 +107,7 @@ export function emitRegisterJumpCoverage(
       if (delaySlot) {
         writer.emit('nop', 'nop');
       }
-      writer.emit('ori', `ori $26, $0, ${0x6000 + caseIndex}`);
+      writer.emit('ori', `ori $26, $0, ${0x6000 + caseIndex}`, true);
       writer.label(label);
       loadImmediate('$22', ++caseIndex);
     }

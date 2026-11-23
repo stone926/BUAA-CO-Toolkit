@@ -1,5 +1,5 @@
 // @index hazard-targets — 冒险覆盖目标：枚举生产者×消费者端口×间隔、静态可行性、课程元组预测与按覆盖缺口选择
-import { controlMnemonics } from '../../mnemonicSets';
+import { controlMnemonics, linkBranchMnemonics } from '../../mnemonicSets';
 import {
   forwardClassKey,
   forwardTupleKey,
@@ -68,6 +68,8 @@ export function isHazardConsumer(mnemonic: string): boolean {
 
 /** Structural feasibility independent of the generator's current register state. */
 export function isFeasibleForwardTarget(producer: string, consumer: string, gap: HazardGap): boolean {
+  // A JAL result can only be consumed through $31, an unpredictable source for BLTZAL/BGEZAL.
+  if (producer === 'jal' && linkBranchMnemonics.has(consumer)) return false;
   const consumerClass = hazardClassOf(consumer);
   if (consumerClass === 'jr' || consumerClass === 'jalr') {
     if (!codeAddressProducers.has(producer)) return false;

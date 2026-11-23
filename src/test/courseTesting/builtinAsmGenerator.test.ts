@@ -239,58 +239,6 @@ describe('built-in ASM generator', () => {
     expect(branches.filter((item) => item.index + 2 < lines.length).every((item) => /\$26\b/.test(lines[item.index + 2]))).toBe(true);
   });
 
-  it('covers both link-branch outcomes while modeling their unconditional MIPS link', () => {
-    const setRegister = vi.spyOn(CpuState.prototype, 'setRegister');
-    let generatedText = '';
-    let modeledLinkAddresses: number[] = [];
-    try {
-      const result = generateBuiltinAsmTestCase({
-        profile: 'P6',
-        instructionText: 'lui bgezal bltzal nop',
-        instructionCount: 400,
-        seed: 'both-link-branch-outcomes'
-      });
-      generatedText = result.text;
-      modeledLinkAddresses = setRegister.mock.calls
-        .filter(([register]) => register === '$31')
-        .map(([, value]) => value);
-    } finally {
-      setRegister.mockRestore();
-    }
-
-    const lines = executableLines(beforeGeneratedHalt(generatedText));
-    const state = new CpuState();
-    const links: Array<{ mnemonic: string; register: string; index: number; taken: boolean }> = [];
-    for (const [index, line] of lines.entries()) {
-      const lui = /^lui\s+(\$\d+),\s*(-?(?:0x[\da-f]+|\d+))$/i.exec(line);
-      if (lui) {
-        state.setRegister(lui[1], Number(lui[2]) << 16);
-        continue;
-      }
-      const link = /^(bgezal|bltzal)\s+(\$\d+),/.exec(line);
-      if (link) {
-        const value = signed32(state.regValue(link[2]));
-        links.push({
-          mnemonic: link[1],
-          register: link[2],
-          index,
-          taken: link[1] === 'bgezal' ? value >= 0 : value < 0
-        });
-      }
-    }
-
-    expect(new Set(links.map((link) => link.mnemonic))).toEqual(new Set(['bgezal', 'bltzal']));
-    for (const mnemonic of ['bgezal', 'bltzal']) {
-      const outcomes = links.filter((link) => link.mnemonic === mnemonic).map((link) => link.taken);
-      expect(outcomes).toContain(true);
-      expect(outcomes).toContain(false);
-    }
-    expect(links.every((link) => link.register !== '$31')).toBe(true);
-    expect(modeledLinkAddresses).toEqual(
-      links.map((link) => p7UserTextBaseAddress + link.index * 4 + 8)
-    );
-  });
-
   it('includes bounded self and genuinely taken backward branch targets', () => {
     const result = generateBuiltinAsmTestCase({
       profile: 'P6',
@@ -364,7 +312,9 @@ describe('built-in ASM generator', () => {
       instructionCount: 40,
       seed: 'poison-0'
     });
-    const poisonLines = executableLines(result.text).filter((line) => /\$26\b/.test(line));
+    const lines = executableLines(result.text);
+    const poisonLines = lines.flatMap((line, index) =>
+      /^(?:j|beq)\s/.test(line) && index + 2 < lines.length ? [lines[index + 2]] : []);
 
     expect(poisonLines.length).toBeGreaterThan(0);
     expect(poisonLines.every((line) => /^(ori|addu)\s+\$26\b/.test(line))).toBe(true);

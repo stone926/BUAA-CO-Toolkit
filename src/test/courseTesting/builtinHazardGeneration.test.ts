@@ -75,7 +75,7 @@ describe('course AT hazard model', () => {
 describe('hazard-directed generation', () => {
   const profiles = ['P5', 'P6', 'P7'] as const;
 
-  it.each(profiles)('keeps the %s software model exact while realizing hazard blocks', (profile) => {
+  it.each(['P3', 'P4', ...profiles] as const)('matches the %s execution engine on modeled GPRs and DM', (profile) => {
     for (const seed of ['a', 'b', 'c']) {
       let modelState: CpuState | undefined;
       const original = CpuState.prototype.setRegister;
@@ -105,7 +105,10 @@ describe('hazard-directed generation', () => {
       const result = projectCourseExecutionOutcome(prepared,
         runCourseProgram(prepared.session, { collectTrace: true, finalSnapshotLevel: 'full' }));
       expect(result, result.diagnostic?.message).toMatchObject({ status: 'halted', haltReason: 'course-halt-loop' });
-      for (const register of [...Array.from({ length: 24 }, (_, index) => index + 1), 31]) {
+      const registers = profile === 'P7'
+        ? [...Array.from({ length: 24 }, (_, index) => index + 1), 31]
+        : Array.from({ length: 32 }, (_, index) => index);
+      for (const register of registers) {
         const expected = `0x${(modelState!.regValue(`$${register}`) >>> 0).toString(16).padStart(8, '0')}`;
         expect(result.finalState.gpr[register], `${profile}/${seed} $${register}`).toBe(expected);
       }
@@ -118,7 +121,8 @@ describe('hazard-directed generation', () => {
           expect(word.value, `${profile}/${seed} DM ${word.address}`).toBe(expected);
         }
       }
-      expect(generated.hazardCoverage?.stallTuples).toBeGreaterThan(0);
+      if (profile === 'P3' || profile === 'P4') expect(generated.hazardCoverage).toBeUndefined();
+      else expect(generated.hazardCoverage?.stallTuples).toBeGreaterThan(0);
     }
   });
 

@@ -7,6 +7,8 @@ import {
 } from '../../language/mips/resources';
 import { P7ProbeMetadata, P7ProbeOptions, P7StressMode } from './types';
 import { CpuState, courseDataByteLength } from '../cpuState';
+import { courseExecutionProfiles } from '../../mips/core/profiles/courseProfiles';
+import { immediateTrapCondition, trapCondition } from '../../mips/core/machine/semantics';
 import {
   p7UserTextBaseAddress,
   p7ExceptionHandlerAddress,
@@ -123,14 +125,9 @@ export interface BuiltinAsmGeneratorResult {
   hazardCoverage?: HazardCoverageSummary;
 }
 
-const generalRegisters = [
-  '$1', '$2', '$3', '$4', '$5', '$6', '$7',
-  '$8', '$9', '$10', '$11', '$12', '$13', '$14', '$15',
-  '$16', '$17', '$18', '$19', '$20', '$21', '$22', '$23', '$24'
-];
-
-const writableRegisters = [...generalRegisters, '$25'];
-const readRegisters = ['$0', ...writableRegisters];
+const allWritableRegisters = Array.from({ length: 31 }, (_, index) => `$${index + 1}`);
+const p7WritableRegisters = allWritableRegisters.slice(0, 25);
+const p7HazardRegisters = p7WritableRegisters.slice(0, 24);
 
 const textBaseAddress = p7UserTextBaseAddress;
 const p7PrologueInstructionCount = 2;
@@ -336,6 +333,8 @@ class ProgramGenerator {
   private readonly rng: Random;
   private readonly allowed: Set<string>;
   private readonly profile: CpuProfile;
+  private readonly writableRegisters: readonly string[];
+  private readonly readRegisters: readonly string[];
   private readonly targetCount: number;
   private readonly seed: string;
   private readonly generatedAt: Date;
@@ -368,8 +367,6 @@ class ProgramGenerator {
   private readonly hazards: HazardTracker | undefined;
   private readonly hazardBlocks: HazardBlockEmitter | undefined;
   private hazardInstructionCount = 0;
-  /** The next recorded instruction sits on a path that no correct execution takes. */
-  private recordingSkipped = false;
   /** Directed loops replay static PCs with different values, so they are excluded from snapshot-based hazard accounting. */
   private suppressControlHazards = false;
   /** Delay-slot emissions must stay a single instruction (no trailing MDU read probe). */
@@ -385,6 +382,8 @@ class ProgramGenerator {
     private readonly customRegistry?: CustomInstructionRegistry
   ) {
     this.profile = profile;
+    this.writableRegisters = profile === 'P7' ? p7WritableRegisters : allWritableRegisters;
+    this.readRegisters = ['$0', ...this.writableRegisters];
     this.allowed = new Set(mnemonics);
     this.targetCount = targetCount;
     // All default automatic programs fit this scaffold; retain historical tiny/focus-only cases.
@@ -416,7 +415,7 @@ class ProgramGenerator {
     const coverageWriter: RegisterCoverageWriter = {
       remaining: () => this.remaining(),
       pc: () => this.currentPc(),
-      emit: (mnemonic, text) => this.emitStaticInstruction(mnemonic, text),
+      emit: (mnemonic, text, skipped) => this.emitStaticInstruction(mnemonic, text, skipped),
       label: (label) => this.addLabel(label)
     };
     if (this.p7HandlerEnabled) {
@@ -501,7 +500,7 @@ class ProgramGenerator {
     if (this.completionMarkerPending) {
       this.completionMarkerPending = false;
       this.addLabel('_co_test_complete');
-      this.emitStaticInstruction('ori', 'ori $25, $0, 0x6d6e');
+      this.emitModeledOri('$25', '$0', 0x6d6e);
     }
 
     if (this.emittedCount !== this.targetCount) {
@@ -774,8 +773,8 @@ class ProgramGenerator {
     const overflows = (value: number): boolean => value > 0x7fffffff || value < -0x80000000;
     if (this.allowed.has('add') || this.allowed.has('sub')) {
       const useSub = !this.allowed.has('add');
-      for (const rs of readRegisters) {
-        for (const rt of readRegisters) {
+      for (const rs of this.readRegisters) {
+        for (const rt of this.readRegisters) {
           const a = signed32(this.state.regValue(rs));
           const b = signed32(this.state.regValue(rt));
           if (overflows(useSub ? a - b : a + b)) {
@@ -785,7 +784,7 @@ class ProgramGenerator {
       }
     }
     if (this.allowed.has('addi')) {
-      for (const rs of readRegisters) {
+      for (const rs of this.readRegisters) {
         const a = signed32(this.state.regValue(rs));
         for (const imm of [0x7fff, -0x8000]) {
           if (overflows(a + imm)) {
@@ -1070,7 +1069,7 @@ class ProgramGenerator {
       return false;
     }
     if (divideMnemonics.has(mnemonic)) {
-      return this.nonZeroRegisters(mnemonic === 'div').length > 0;
+      return this.nonZeroRegisters(this.profile === 'P7' && mnemonic === 'div').length > 0;
     }
     if (registerTrapMnemonics.has(mnemonic)) {
       const mayRaise = this.profile === 'P7' && this.p7HandlerEnabled;
@@ -1150,19 +1149,16 @@ class ProgramGenerator {
     for (const alternative of candidate.hazard ? this.hazards?.model.counterfactuals(candidate.hazard) ?? [] : []) {
       assessments.set(key(alternative), candidate.assess(alternative));
     }
-    this.recordInstruction(mnemonic, candidate.text, candidate.hazard ?? null, (alternative) => assessments.get(key(alternative)) ?? 'unknown');
+    this.recordInstruction(mnemonic, candidate.text, false, candidate.hazard ?? null, (alternative) => assessments.get(key(alternative)) ?? 'unknown');
     this.noteMduProgress(mnemonic);
     applyCustomEffect(this.state, candidate.effect);
     const write = candidate.effect.gprWrites?.[0];
     if (candidate.effect.control) {
       const control = candidate.effect.control;
       const marker = (skipped: boolean): void => {
-        const previous = this.recordingSkipped;
-        this.recordingSkipped = skipped;
         const value = this.rng.int(1, 0xffff);
-        this.emitStaticInstruction('ori', `ori $26, $0, ${value}`);
+        this.emitStaticInstruction('ori', `ori $26, $0, ${value}`, skipped);
         if (!skipped) this.state.setRegister('$26', value);
-        this.recordingSkipped = previous;
       };
       if (this.usesDelaySlot()) marker(!control.taken && control.annulDelaySlot === true);
       marker(control.taken);
@@ -1351,13 +1347,16 @@ class ProgramGenerator {
       (mnemonic === 'add' ? signedAddOverflows(left, right) : signedSubtractOverflows(left, right));
     const chosen = this.searchOperands(steer, () => {
       const destination = this.steeredDestination(steer);
-      const rs = this.steeredSource(mnemonic, 'rs', steer, avoidOverflow);
-      const rt = this.steeredSource(mnemonic, 'rt', steer, avoidOverflow);
+      const small = this.profile === 'P7' && avoidOverflow;
+      const rs = this.steeredSource(mnemonic, 'rs', steer, small);
+      let rt = this.steeredSource(mnemonic, 'rt', steer, small);
       const left = this.state.regValue(rs);
-      const right = this.state.regValue(rt);
-      return overflows(left, right)
-        ? undefined
-        : { destination, rs, rt, value: registerRegisterResult(mnemonic, left, right) };
+      if (overflows(left, this.state.regValue(rt))) {
+        if (steer || this.profile === 'P7') return undefined;
+        // Zero on rt guarantees at least one legal candidate.
+        rt = this.rng.pick(this.readRegisters.filter((register) => !overflows(left, this.state.regValue(register))));
+      }
+      return { destination, rs, rt, value: registerRegisterResult(mnemonic, left, this.state.regValue(rt)) };
     }, (candidate, wrong) => registerRegisterResult(
       mnemonic,
       wrong.role === 'rs' ? wrong.value : this.state.regValue(candidate.rs),
@@ -1381,12 +1380,16 @@ class ProgramGenerator {
   private emitImmediate(mnemonic: string, steer?: OperandSteer): SteeredEmission | undefined {
     const chosen = this.searchOperands(steer, () => {
       const destination = this.steeredDestination(steer);
-      const rs = this.steeredSource(mnemonic, 'rs', steer, mnemonic === 'addi');
-      const imm = steer?.immediate ?? this.immediateFor(mnemonic);
+      const small = this.profile === 'P7' && mnemonic === 'addi';
+      const rs = this.steeredSource(mnemonic, 'rs', steer, small);
+      let imm = steer?.immediate ?? this.immediateFor(mnemonic);
       const left = this.state.regValue(rs);
-      return mnemonic === 'addi' && signedAddOverflows(left, signExtend16(imm))
-        ? undefined
-        : { destination, rs, imm, value: registerImmediateResult(mnemonic, left, imm) };
+      if (mnemonic === 'addi' && signedAddOverflows(left, signExtend16(imm))) {
+        if (this.profile === 'P7' || steer?.immediate !== undefined) return undefined;
+        // The opposite sign moves away from the overflowing boundary. +32768 is unencodable.
+        imm = Math.min(-imm, 0x7fff);
+      }
+      return { destination, rs, imm, value: registerImmediateResult(mnemonic, left, imm) };
     }, (candidate, wrong) => registerImmediateResult(mnemonic, wrong.value, candidate.imm) !== candidate.value);
     if (!chosen) {
       return undefined;
@@ -1552,28 +1555,33 @@ class ProgramGenerator {
 
   private emitDivide(mnemonic: string, steer?: OperandSteer): SteeredEmission | undefined {
     const signed = mnemonic === 'div';
+    const legacySigned = this.profile === 'P7' && signed;
     const quotient = (dividend: number, divisor: number): { hi: number; lo: number } => {
       const left = signed ? signed32(dividend) : unsigned32(dividend);
       const right = signed ? signed32(divisor) : unsigned32(divisor);
       return { lo: signed32(Math.trunc(left / right)), hi: signed32(left % right) };
     };
     // Divide-by-zero is outside the course contract, and signed INT_MIN / -1 overflows.
-    const legalDivisor = (value: number): boolean => value !== 0 && !(signed && value === -1);
+    const excludesMinusOne = (dividend: number): boolean => signed && (legacySigned || signed32(dividend) === -0x80000000);
+    const legalOperands = (dividend: number, divisor: number): boolean =>
+      divisor !== 0 && !(signed32(divisor) === -1 && excludesMinusOne(dividend));
     const chosen = this.searchOperands(steer, () => {
-      const rs = this.steeredSource(mnemonic, 'rs', steer, signed);
-      const divisors = this.nonZeroRegisters(signed);
+      const rs = this.steeredSource(mnemonic, 'rs', steer, legacySigned);
+      const dividend = this.state.regValue(rs);
+      const divisors = this.nonZeroRegisters(excludesMinusOne(dividend));
       const rt = steer?.reads?.rt ?? (divisors.length ? this.rng.pick(divisors) : undefined);
-      if (!rt || !legalDivisor(this.state.regValue(rt))) {
-        return undefined;
-      }
-      const result = quotient(this.state.regValue(rs), this.state.regValue(rt));
+      if (!rt) return undefined;
+      const divisor = this.state.regValue(rt);
+      if (!legalOperands(dividend, divisor)) return undefined;
+      const result = quotient(dividend, divisor);
       return { destination: 'lo', rs, rt, result, value: result.lo };
     }, (candidate, wrong) => {
+      const dividend = wrong.role === 'rs' ? wrong.value : this.state.regValue(candidate.rs);
       const divisor = wrong.role === 'rt' ? wrong.value : this.state.regValue(candidate.rt);
-      if (!legalDivisor(divisor)) {
+      if (!legalOperands(dividend, divisor)) {
         return true;
       }
-      const other = quotient(wrong.role === 'rs' ? wrong.value : this.state.regValue(candidate.rs), divisor);
+      const other = quotient(dividend, divisor);
       return other.hi !== candidate.result.hi || other.lo !== candidate.result.lo;
     });
     if (!chosen) {
@@ -1677,8 +1685,8 @@ class ProgramGenerator {
   private emitTrapRegister(mnemonic: string): void {
     const mayRaise = this.profile === 'P7' && this.p7HandlerEnabled;
     const preferRaise = mayRaise && (this.nextTrapOutcome.get(mnemonic) ?? true);
-    const operands = this.trapRegisterOperands(mnemonic, preferRaise)
-      ?? this.trapRegisterOperands(mnemonic, !preferRaise);
+    const operands = this.trapRegisterOperands(mnemonic, preferRaise, this.profile !== 'P7')
+      ?? (mayRaise ? this.trapRegisterOperands(mnemonic, !preferRaise) : undefined);
     if (!operands) {
       throw new BuiltinAsmGeneratorError(`Cannot emit non-throwing ${mnemonic}; add a value-producing instruction such as ori/addiu first.`);
     }
@@ -1697,7 +1705,7 @@ class ProgramGenerator {
     const raises = mayRaise && (this.nextTrapOutcome.get(mnemonic) ?? true);
     const [rs, imm] = raises
       ? this.trueTrapImmediateOperands(mnemonic)
-      : falseTrapImmediateOperands(mnemonic);
+      : this.nonRaisingTrapImmediateOperands(mnemonic);
     this.emit(mnemonic, `${mnemonic} ${rs}, ${imm}`);
     if (mayRaise) {
       this.nextTrapOutcome.set(mnemonic, !raises);
@@ -1727,20 +1735,18 @@ class ProgramGenerator {
     const label = this.nextLabel('br');
     const operands = this.steeredBranchOperands(mnemonic, steer);
     const willTake = this.branchWillTake(mnemonic, operands);
+    const linkAddress = this.currentPc() + courseExecutionProfiles[this.profile].linkOffset;
 
     this.emit(mnemonic, `${mnemonic} ${operands.join(', ')}, ${label}`);
     this.nextBranchOutcome.set(mnemonic, !willTake);
     if (linkBranchMnemonics.has(mnemonic)) {
-      // MIPS links to branch-PC+8 regardless of the condition. The trace parser repairs modified
-      // MARS' missing not-taken event, so both outcomes remain useful differential tests.
-      this.state.setRegister('$31', this.currentPc() + 4);
+      // Both outcomes write the link. P3/P4 resume at PC+4, delayed profiles at PC+8.
+      this.state.setRegister('$31', linkAddress);
     }
     if (this.usesDelaySlot()) {
       this.emitDelaySlot();
     }
-    // The instruction between the branch and label is observable on exactly one path. This makes
-    // both taken and not-taken decisions detectable; its destination ($26) is excluded from the
-    // generator's state-dependent operand pool, so a skipped instruction need not be modeled.
+    // Only the fall-through path executes the marker, so either wrong branch decision is visible.
     this.emitSkippedPoisonInstruction(willTake);
     this.addLabel(label);
   }
@@ -1784,14 +1790,16 @@ class ProgramGenerator {
     const minCost = 3 + delayCost;
     const targetIndex = this.emittedCount + minCost;
     const targetAddress = textBaseAddress + targetIndex * 4;
-    const targetRegister = '$25';
+    const targetRegister = this.profile === 'P7' ? '$25' : this.chooseVisibleWriteRegister();
 
     this.emitAddressLoad(loader, targetRegister, targetAddress);
     if (mnemonic === 'jr') {
       this.emit('jr', `jr ${targetRegister}`);
     } else {
-      this.emit('jalr', `jalr $31, ${targetRegister}`);
-      this.state.setRegister('$31', textBaseAddress + (this.emittedCount + delayCost) * 4);
+      const link = this.profile === 'P7' ? '$31' : this.chooseVisibleWriteRegister(new Set([targetRegister]));
+      const linkAddress = this.currentPc() + courseExecutionProfiles[this.profile].linkOffset;
+      this.emit('jalr', `jalr ${link}, ${targetRegister}`);
+      this.state.setRegister(link, linkAddress);
     }
     if (this.usesDelaySlot()) {
       this.emitDelaySlot();
@@ -1819,12 +1827,7 @@ class ProgramGenerator {
     if (!mnemonic) {
       throw new BuiltinAsmGeneratorError('Internal generator error: control-flow probe requires an observable poison instruction.');
     }
-    this.recordingSkipped = skipped;
-    try {
-      this.emitStatefulPoison(mnemonic);
-    } finally {
-      this.recordingSkipped = false;
-    }
+    this.emitStatefulPoison(mnemonic, skipped);
   }
 
   private pickDelaySlotMnemonic(): string | undefined {
@@ -1865,41 +1868,47 @@ class ProgramGenerator {
     );
   }
 
-  private emitStatefulPoison(mnemonic: string): void {
+  private emitStatefulPoison(mnemonic: string, skipped: boolean): void {
+    const write = (operands: string, value: number): void => {
+      const text = `${mnemonic} ${poisonRegister}, ${operands}`;
+      if (skipped) {
+        this.emitStaticInstruction(mnemonic, text, true);
+      } else {
+        this.emit(mnemonic, text);
+        this.state.setRegister(poisonRegister, value);
+      }
+    };
     const imm = this.poisonImmediate();
     if (mnemonic === 'lui') {
-      this.emitStaticInstruction(mnemonic, `lui ${poisonRegister}, ${formatUnsignedImmediate(imm)}`);
+      write(formatUnsignedImmediate(imm), imm << 16);
       return;
     }
-    if (mnemonic === 'addi' || mnemonic === 'addiu') {
-      this.emitStaticInstruction(mnemonic, `${mnemonic} ${poisonRegister}, $0, ${formatImmediate(imm)}`);
-      return;
-    }
-    if (mnemonic === 'ori' || mnemonic === 'andi' || mnemonic === 'xori' || mnemonic === 'slti' || mnemonic === 'sltiu') {
-      this.emitStaticInstruction(mnemonic, `${mnemonic} ${poisonRegister}, $0, ${formatImmediate(imm)}`);
+    if (['ori', 'addiu', 'addi', 'andi', 'xori', 'slti', 'sltiu'].includes(mnemonic)) {
+      write(`$0, ${formatImmediate(imm)}`, registerImmediateResult(mnemonic, 0, imm));
       return;
     }
     if (mnemonic === 'sll' || mnemonic === 'srl' || mnemonic === 'sra') {
-      this.emitStaticInstruction(mnemonic, `${mnemonic} ${poisonRegister}, $0, ${this.rng.int(0, 31)}`);
+      const shamt = this.rng.int(0, 31);
+      write(`$0, ${shamt}`, shiftResult(mnemonic, 0, shamt));
+      return;
+    }
+    if (mnemonic === 'sllv' || mnemonic === 'srlv' || mnemonic === 'srav') {
+      write('$0, $0', shiftResult(mnemonic, 0, 0));
       return;
     }
     if (mnemonic === 'clz' || mnemonic === 'clo') {
-      this.emitStaticInstruction(mnemonic, `${mnemonic} ${poisonRegister}, $0`);
+      write('$0', countBitsResult(mnemonic, 0));
       return;
     }
     if (mnemonic === 'mfc0') {
-      this.emitStaticInstruction(mnemonic, `mfc0 ${poisonRegister}, $12`);
+      write('$12', this.state.cp0ReadValue('$12'));
       return;
     }
-    if (mnemonic === 'lw' || mnemonic === 'lb' || mnemonic === 'lbu' || mnemonic === 'lh' || mnemonic === 'lhu') {
-      this.emitStaticInstruction(mnemonic, `${mnemonic} ${poisonRegister}, 0($0)`);
+    if (loadMnemonics.has(mnemonic)) {
+      write('0($0)', this.loadResult(mnemonic, 0, this.state.regValue(poisonRegister)));
       return;
     }
-    if (mnemonic === 'sw' || mnemonic === 'sb' || mnemonic === 'sh') {
-      this.emitStaticInstruction(mnemonic, `${mnemonic} $0, 0($0)`);
-      return;
-    }
-    this.emitStaticInstruction(mnemonic, `${mnemonic} ${poisonRegister}, $0, $0`);
+    write('$0, $0', registerRegisterResult(mnemonic, 0, 0));
   }
 
   private poisonImmediate(): number {
@@ -1909,66 +1918,27 @@ class ProgramGenerator {
   private branchWillTake(mnemonic: ControlMnemonic, operands: string[]): boolean {
     const first = operands[0] ? this.state.regValue(operands[0]) : 0;
     const second = operands[1] ? this.state.regValue(operands[1]) : 0;
-    switch (mnemonic) {
-      case 'beq':
-        return first === second;
-      case 'bne':
-        return first !== second;
-      case 'bgez':
-      case 'bgezal':
-        return signed32(first) >= 0;
-      case 'bgtz':
-        return signed32(first) > 0;
-      case 'blez':
-        return signed32(first) <= 0;
-      case 'bltz':
-      case 'bltzal':
-        return signed32(first) < 0;
-      default:
-        return false;
-    }
+    return branchTaken(mnemonic, first, second);
   }
 
   private branchOperands(mnemonic: ControlMnemonic): string[] {
     const preferTaken = this.nextBranchOutcome.get(mnemonic) ?? this.rng.chance(0.5);
-    if (mnemonic === 'beq') {
-      const reg = this.chooseReadRegister();
-      const different = this.differentRegisterPair();
-      return this.pickBranchOperands(preferTaken, [[reg, reg]], different ? [different] : []);
+    if (mnemonic === 'beq' || mnemonic === 'bne') {
+      if (this.profile === 'P7') {
+        const equal = mnemonic === 'beq' ? this.chooseReadRegister() : '$0';
+        const different = this.differentRegisterPair();
+        return this.pickBranchOperands(preferTaken === (mnemonic === 'beq'), [[equal, equal]], different ? [different] : []);
+      }
+      const rs = this.chooseReadRegister();
+      const value = this.state.regValue(rs);
+      const wantEqual = preferTaken === (mnemonic === 'beq');
+      const matches = this.readRegisters.filter(rt => (this.state.regValue(rt) === value) === wantEqual);
+      return [rs, matches.length ? this.rng.pick(matches) : rs];
     }
-    if (mnemonic === 'bne') {
-      const different = this.differentRegisterPair();
-      return this.pickBranchOperands(preferTaken, different ? [different] : [], [['$0', '$0']]);
-    }
-    if (mnemonic === 'bgez' || mnemonic === 'bgezal') {
-      return this.pickBranchOperands(
-        preferTaken,
-        this.nonNegativeRegisters().map((register) => [register]),
-        this.negativeRegisters().map((register) => [register])
-      );
-    }
-    if (mnemonic === 'bgtz') {
-      return this.pickBranchOperands(
-        preferTaken,
-        this.positiveRegisters().map((register) => [register]),
-        this.nonPositiveRegisters().map((register) => [register])
-      );
-    }
-    if (mnemonic === 'blez') {
-      return this.pickBranchOperands(
-        preferTaken,
-        this.nonPositiveRegisters().map((register) => [register]),
-        this.positiveRegisters().map((register) => [register])
-      );
-    }
-    if (mnemonic === 'bltz' || mnemonic === 'bltzal') {
-      return this.pickBranchOperands(
-        preferTaken,
-        this.negativeRegisters().map((register) => [register]),
-        this.nonNegativeRegisters().map((register) => [register])
-      );
-    }
-    return ['$0'];
+    // BLTZAL and BGEZAL have unpredictable behavior when their condition reads the link register.
+    const sources = linkBranchMnemonics.has(mnemonic) ? this.readRegisters.filter(rs => rs !== '$31') : this.readRegisters;
+    const preferred = sources.filter(rs => branchTaken(mnemonic, this.state.regValue(rs), 0) === preferTaken);
+    return [this.rng.pick(preferred.length ? preferred : sources)];
   }
 
   private pickBranchOperands(preferTaken: boolean, taken: string[][], notTaken: string[][]): string[] {
@@ -2017,23 +1987,22 @@ class ProgramGenerator {
   }
 
   private chooseVisibleWriteRegister(avoid?: ReadonlySet<string>): string {
-    const candidates = avoid ? writableRegisters.filter((register) => !avoid.has(register)) : writableRegisters;
-    return this.rng.pick(candidates.length ? candidates : writableRegisters);
+    const candidates = avoid ? this.writableRegisters.filter((register) => !avoid.has(register)) : this.writableRegisters;
+    return this.rng.pick(candidates);
   }
 
   private chooseReadRegister(): string {
-    // Directed coverage also writes the poison/handler registers. Keep those outside all
-    // state-dependent operands once control-flow and P7 handler code can modify them.
+    // P7's exception handler owns k0/k1. On P3–P6 path markers are ordinary modeled writes.
     const recent = this.state.recentWrites.filter((register) =>
-      register !== '$0' && register !== '$26' && register !== '$27');
+      register !== '$0' && (this.profile !== 'P7' || (register !== '$26' && register !== '$27')));
     if (recent.length && this.rng.chance(this.pipelineProfile() ? 0.62 : 0.35)) {
       return this.rng.pick(recent.slice(0, 4));
     }
-    return this.rng.pick(readRegisters);
+    return this.rng.pick(this.readRegisters);
   }
 
   private chooseSmallReadRegister(): string {
-    const small = readRegisters.filter((register) => Math.abs(signed32(this.state.regValue(register))) <= 0x2000);
+    const small = this.readRegisters.filter((register) => Math.abs(signed32(this.state.regValue(register))) <= 0x2000);
     if (small.length) {
       return this.rng.pick(small);
     }
@@ -2041,35 +2010,19 @@ class ProgramGenerator {
   }
 
   private nonZeroRegisters(avoidSignedMinusOne: boolean): string[] {
-    return readRegisters.filter((register) => {
+    return this.readRegisters.filter((register) => {
       const value = this.state.regValue(register);
       return value !== 0 && (!avoidSignedMinusOne || signed32(value) !== -1);
     });
   }
 
   private zeroRegisters(): string[] {
-    return readRegisters.filter((register) => this.state.regValue(register) === 0);
-  }
-
-  private positiveRegisters(): string[] {
-    return readRegisters.filter((register) => signed32(this.state.regValue(register)) > 0);
-  }
-
-  private negativeRegisters(): string[] {
-    return readRegisters.filter((register) => signed32(this.state.regValue(register)) < 0);
-  }
-
-  private nonNegativeRegisters(): string[] {
-    return readRegisters.filter((register) => signed32(this.state.regValue(register)) >= 0);
-  }
-
-  private nonPositiveRegisters(): string[] {
-    return readRegisters.filter((register) => signed32(this.state.regValue(register)) <= 0);
+    return this.readRegisters.filter((register) => this.state.regValue(register) === 0);
   }
 
   private differentRegisterPair(): [string, string] | undefined {
-    for (const left of readRegisters) {
-      for (const right of readRegisters) {
+    for (const left of this.readRegisters) {
+      for (const right of this.readRegisters) {
         if (this.state.regValue(left) !== this.state.regValue(right)) {
           return this.rng.chance(0.5) ? [left, right] : [right, left];
         }
@@ -2078,9 +2031,11 @@ class ProgramGenerator {
     return undefined;
   }
 
-  private trapRegisterOperands(mnemonic: string, raises: boolean): [string, string] | undefined {
-    for (const rs of readRegisters) {
-      for (const rt of readRegisters) {
+  private trapRegisterOperands(mnemonic: string, raises: boolean, randomize = false): [string, string] | undefined {
+    const sources = randomize ? this.shuffle(this.readRegisters) : this.readRegisters;
+    const targets = randomize ? this.shuffle(this.readRegisters) : this.readRegisters;
+    for (const rs of sources) {
+      for (const rt of targets) {
         if (this.trapRegisterWillRaise(mnemonic, rs, rt) === raises) {
           return [rs, rt];
         }
@@ -2090,24 +2045,20 @@ class ProgramGenerator {
   }
 
   private trapRegisterWillRaise(mnemonic: string, rs: string, rt: string): boolean {
-    const left = this.state.regValue(rs);
-    const right = this.state.regValue(rt);
-    switch (mnemonic) {
-      case 'teq':
-        return left === right;
-      case 'tne':
-        return left !== right;
-      case 'tge':
-        return signed32(left) >= signed32(right);
-      case 'tgeu':
-        return unsigned32(left) >= unsigned32(right);
-      case 'tlt':
-        return signed32(left) < signed32(right);
-      case 'tltu':
-        return unsigned32(left) < unsigned32(right);
-      default:
-        return false;
+    return trapCondition(mnemonic, this.state.regValue(rs), this.state.regValue(rt)) === true;
+  }
+
+  private nonRaisingTrapImmediateOperands(mnemonic: string): [string, string] {
+    if (this.profile !== 'P7') {
+      for (const rs of this.shuffle(this.readRegisters)) {
+        const value = this.state.regValue(rs);
+        // Try the exact operand for tnei and the signed/unsigned immediate extrema for inequalities.
+        const immediate = [this.rng.int(-0x8000, 0x7fff), signExtend16(value), -0x8000, 0x7fff, 0, -1]
+          .find((candidate) => immediateTrapCondition(mnemonic, value, candidate) === false);
+        if (immediate !== undefined) return [rs, formatImmediate(immediate)];
+      }
     }
+    return falseTrapImmediateOperands(mnemonic);
   }
 
   private trueTrapImmediateOperands(mnemonic: string): [string, string] {
@@ -2148,7 +2099,7 @@ class ProgramGenerator {
       address: number;
     }> = [];
 
-    const bases = steer?.reads?.rs ? [steer.reads.rs] : readRegisters;
+    const bases = steer?.reads?.rs ? [steer.reads.rs] : this.readRegisters;
     for (const register of bases) {
       const baseValue = signed32(this.state.regValue(register));
       const nearby = [baseValue, baseValue - alignment, baseValue + alignment];
@@ -2331,17 +2282,23 @@ class ProgramGenerator {
     this.noteMduProgress(mnemonic);
   }
 
-  private emitStaticInstruction(mnemonic: string, text: string): void {
-    this.recordInstruction(mnemonic, text);
+  private emitStaticInstruction(mnemonic: string, text: string, skipped = false): void {
+    this.recordInstruction(mnemonic, text, skipped);
   }
 
-  private recordInstruction(mnemonic: string, text: string, customHazard?: HazardInstruction | null, assess?: HazardObservationValues['assess']): void {
+  private recordInstruction(
+    mnemonic: string,
+    text: string,
+    skipped = false,
+    customHazard?: HazardInstruction | null,
+    assess?: HazardObservationValues['assess']
+  ): void {
     if (this.remaining() <= 0) {
       throw new BuiltinAsmGeneratorError('Internal generator error: attempted to emit past the requested instruction count.');
     }
     this.lines.push(`    ${text}`);
     if (customHazard === undefined) this.nativeDependencies.add(mnemonic);
-    this.hazards?.record(this.emittedCount, text, !this.recordingSkipped && !this.suppressControlHazards, customHazard, assess);
+    this.hazards?.record(this.emittedCount, text, !skipped && !this.suppressControlHazards, customHazard, assess);
     this.emittedCount++;
     this.used.add(mnemonic);
   }
@@ -2366,7 +2323,8 @@ class ProgramGenerator {
       state: this.state,
       rng: this.rng,
       allowed: this.allowed,
-      hazardRegisters: generalRegisters,
+      profile: this.profile,
+      hazardRegisters: this.profile === 'P7' ? p7HazardRegisters : this.writableRegisters,
       remaining: () => this.remaining(),
       currentPc: () => this.currentPc(),
       delaySlotCost: () => this.delaySlotCost(),
@@ -2468,7 +2426,7 @@ class ProgramGenerator {
   }
 
   private usesDelaySlot(): boolean {
-    return this.profile === 'P5' || this.profile === 'P6' || this.profile === 'P7';
+    return courseExecutionProfiles[this.profile].delaySlot;
   }
 
   private delaySlotCost(): number {
@@ -2479,7 +2437,7 @@ class ProgramGenerator {
     return this.profile === 'P5' || this.profile === 'P6' || this.profile === 'P7';
   }
 
-  private shuffle<T>(items: T[]): T[] {
+  private shuffle<T>(items: readonly T[]): T[] {
     const result = [...items];
     for (let i = result.length - 1; i > 0; i--) {
       const j = this.rng.int(0, i);

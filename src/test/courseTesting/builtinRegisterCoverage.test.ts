@@ -91,11 +91,13 @@ describe('directed architectural register coverage', () => {
         expect(result.trace!.some((line) => line.startsWith(`@${hex(pc)}: $22 <=`)), `${producer} -> jr, gap ${gap}`).toBe(true);
       }
     }
-    const body = generated.text.split('main:\n')[1].split('.ktext')[0];
-    for (const line of body.split(/\r?\n/)) {
-      const registers = line.match(/\$\d+\b/g) ?? [];
-      expect(registers.slice(1), line).not.toContain('$26');
-      expect(registers.slice(1), line).not.toContain('$27');
+    if (profile === 'P7') {
+      const body = generated.text.split('main:\n')[1].split('.ktext')[0];
+      for (const line of body.split(/\r?\n/)) {
+        const registers = line.match(/\$\d+\b/g) ?? [];
+        expect(registers.slice(1), line).not.toContain('$26');
+        expect(registers.slice(1), line).not.toContain('$27');
+      }
     }
   });
 
