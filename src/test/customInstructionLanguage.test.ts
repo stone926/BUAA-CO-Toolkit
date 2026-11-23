@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { URI } from 'vscode-uri';
-import { setCustomInstructionFacts, clearCustomInstructionFacts } from '../language/mips/customInstructionFacts';
+import { setCustomInstructionFacts, clearCustomInstructionFacts, removeCustomInstructionFacts } from '../language/mips/customInstructionFacts';
 import { getMipsDiagnostics, getMipsCompletions, getMipsHover, getMipsSignatureHelp, getMipsSemanticTokens } from '../language/mips/service';
 import { defaultCoSettings } from '../language/common/settings';
 import type { CustomInstructionMetadata } from '../mips/core/custom/api';
@@ -33,5 +33,28 @@ describe('workspace custom instruction editor facts', () => {
     expect(getMipsSemanticTokens(source, settings, state).data.slice(0, 3)).toEqual([0, 0, 11]);
     expect(getMipsDiagnostics(document('xori_custom 1,$0,7'), settings, state).some(item => String(item.message).includes('GPR'))).toBe(true);
     expect(getMipsDiagnostics(document('xori_custom $1,$0,65536'), settings, state).some(item => String(item.message).includes('65535'))).toBe(true);
+  });
+
+  it('recognizes the registered MARS template without accepting unrelated unknown instructions', () => {
+    const source = document('bds $1, $2\nunknown_mnemonic $1, $2');
+    const unknowns = (input: TextDocument) => getMipsDiagnostics(input, settings, state).filter(item => item.code === 'unknown-instruction');
+    expect(unknowns(source)).toHaveLength(2);
+
+    setCustomInstructionFacts(root, [definition], [
+      { mnemonic: 'bds', mask: 0xfc00ffff, value: 10, template: 'bds $t1, $t2' },
+      { mnemonic: 'ori', mask: 0xfc000000, value: 0x34000000, template: 'ori $t1' }
+    ]);
+
+    expect(unknowns(source).map(item => item.range.start.line)).toEqual([1]);
+    expect(unknowns(document(source.getText(), '/co/other-project'))).toHaveLength(2);
+    expect(getMipsCompletions(document('bd'), { line: 0, character: 2 }, settings, state).some(item => item.label === 'bds')).toBe(true);
+    expect(getMipsHover(source, { line: 0, character: 1 }, settings, state)?.contents).toMatchObject({
+      value: expect.stringContaining('bds $t1, $t2')
+    });
+    expect(getMipsSignatureHelp(source, { line: 0, character: 9 }, settings, state)?.signatures[0].label).toBe('bds $t1, $t2');
+    expect(getMipsDiagnostics(document('ori $1, $0, 1'), settings, state)).toEqual([]);
+
+    removeCustomInstructionFacts(root);
+    expect(unknowns(source)).toHaveLength(2);
   });
 });

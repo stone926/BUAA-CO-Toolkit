@@ -41,7 +41,7 @@ import {
   parseIntegerLiteral
 } from './syntax';
 import type { MipsParsedLine, MipsParsedToken } from './syntax';
-import { customInstructionFor, customInstructionDisplay, customInstructionSyntaxIssue } from './customInstructionFacts';
+import { customInstructionDisplayFor, customInstructionSyntaxIssue } from './customInstructionFacts';
 import {
   buildMipsSemanticModel,
   resolveMipsSemanticMacroParamAtPosition,
@@ -314,8 +314,8 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
       continue;
     }
 
-    const customInstruction = customInstructionFor(document.uri, profile, mnemonic);
-    const instruction = customInstruction ? customInstructionDisplay(customInstruction, mnemonic) : instructions[mnemonic];
+    const customInstruction = customInstructionDisplayFor(document.uri, profile, mnemonic);
+    const instruction = customInstruction ?? instructions[mnemonic];
     const macroOverloads = macros.get(executableAst.mnemonic);
     if (!instruction && !macroOverloads?.length) {
       const continuation = statement.dataContinuation;

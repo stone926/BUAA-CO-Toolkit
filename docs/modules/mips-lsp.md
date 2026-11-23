@@ -1,6 +1,6 @@
 # mips-lsp | src/language/mips/ | 35 files
 
-MIPS 汇编（`.asm` / `.s` / `.mips`）LSP：解析 → AST → 语义 → 诊断 → 补全/hover/跳转/格式化/高亮/签名/折叠/重命名/内联提示/代码操作。另保留历史 MARS trace 解析对比；LSP 不启动 MARS。
+MIPS 汇编（`.asm` / `.s` / `.mips`）LSP：解析 → AST → 语义 → 诊断 → 补全/hover/跳转/格式化/高亮/签名/折叠/重命名/内联提示/代码操作。另保留历史 MARS trace 解析对比。扩展宿主按需从配置的 MARS 获取工作区 class 的助记符和格式，语言服务器使用收到的元数据。
 
 数据流: core assembler lexer → `syntax.ts`（位置与不完整源码适配）→ `ast.ts` → `semantic.ts` → `parser.ts`（编排）→ 诊断 → `service.ts`；`parseCache.ts` 按 URI/设置缓存。诊断委托 `parseCache.ts`，LSP 层只做 provider。
 
@@ -55,4 +55,4 @@ MIPS 汇编（`.asm` / `.s` / `.mips`）LSP：解析 → AST → 语义 → 诊�
 - `traceParser.ts` — 解析 coL1/coL2 为 `CpuTraceEvent[]`；legacy MARS oracle 固定用 coL2（支持停机尾证明与动态兼容检查），默认 builtin TS oracle 不经过此解析器
 - `traceCompare.ts` — 事件对比引擎；自动判定与交互对照共用 `iterTraceDiffEntries`（包含同周期相邻换序规则）
 
-- `customInstructionFacts.ts` — 按工作区隔离的纯元数据注册表；共享汇编操作数诊断、补全、hover、签名与缓存版本
+- `customInstructionFacts.ts` — 按工作区隔离 JS/TS 和 MARS class 元数据；共享指令识别、补全、hover、签名与缓存版本，JS/TS 另提供操作数诊断

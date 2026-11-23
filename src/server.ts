@@ -74,7 +74,7 @@ import {
   MipsServerState
 } from './language/mips/service';
 import { mipsSemanticTokenTypes } from './language/mips/resources';
-import { setCustomInstructionFacts } from './language/mips/customInstructionFacts';
+import { removeCustomInstructionFacts, setCustomInstructionFacts, type CustomInstructionFactsUpdate } from './language/mips/customInstructionFacts';
 import {
   getVerilogCodeActions,
   getVerilogCompletions,
@@ -371,11 +371,17 @@ connection.onDidChangeConfiguration((change) => {
   });
 });
 
-connection.onNotification('co/customInstructions', (params: { rootUri: string; instructions: import('./mips/core/custom/api').CustomInstructionMetadata[] }) => {
+connection.onNotification('co/customInstructions', (params: CustomInstructionFactsUpdate) => {
   try {
-    setCustomInstructionFacts(params.rootUri, params.instructions);
-    clearMipsParseCache(); clearMipsSemanticTokenCache(); refreshSemanticTokens();
-    void validateDocuments(document => document.languageId === languageIds.mips);
+    const root = fsPathFromUri(params.rootUri);
+    if (!root) return;
+    if ('removed' in params) removeCustomInstructionFacts(params.rootUri);
+    else setCustomInstructionFacts(params.rootUri, params.instructions, params.marsInstructions);
+    refreshSemanticTokens();
+    void validateDocuments(document => {
+      const file = document.languageId === languageIds.mips ? fsPathFromUri(document.uri) : undefined;
+      return !!file && isInsideDirectory(file, root);
+    });
   } catch (error) { connection.console.error(`自定义指令元数据无效：${String(error)}`); }
 });
 

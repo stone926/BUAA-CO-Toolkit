@@ -78,4 +78,4 @@
 - `workflowInputs.ts` / `types.ts` — 文件选择辅助与 `AppServices`/`RunResult`/`ToolDetection` 等公共类型
 
 - `customInstructionCommands.ts` — 创建 JS/TS 示例、本地编辑器 SDK 声明与 noEmit 配置
-- `scriptInstructionLanguage.ts` — 打开 MIPS 文档后定向发现/监听脚本，取消与去抖发布只读 ISA 元数据
+- `customInstructionLanguage.ts` — 打开 MIPS 文档后定向发现和监听脚本、MARS class，按工作区取消和去抖发布只读 ISA 元数据

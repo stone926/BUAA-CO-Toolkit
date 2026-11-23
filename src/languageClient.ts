@@ -9,7 +9,7 @@ import {
 } from 'vscode-languageclient/node';
 import { StartupTraceOutput, timeStartup, traceStartup } from './startupTrace';
 import { languageDocumentSelector, languageFileGlob } from './language/languageRegistry';
-import { startScriptInstructionLanguage } from './scriptInstructionLanguage';
+import { startCustomInstructionLanguage } from './customInstructionLanguage';
 
 let client: LanguageClient | undefined;
 let extensionContext: vscode.ExtensionContext | undefined;
@@ -87,7 +87,7 @@ export function ensureLanguageClient(): Promise<void> {
   client = current;
   context.subscriptions.push(current);
   startPromise = current.start().then(
-    () => { finishStartTrace(); startScriptInstructionLanguage(context, (method, payload) => current.sendNotification(method, payload)); },
+    () => { finishStartTrace(); startCustomInstructionLanguage(context, (method, payload) => current.sendNotification(method, payload)); },
     (error) => {
       traceStartup(`language client start failed: ${error instanceof Error ? error.message : String(error)}`, output);
       watcher.dispose();

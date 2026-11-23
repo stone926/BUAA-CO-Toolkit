@@ -1,13 +1,14 @@
 // @index mips-host — 有界 Java bridge 进程、结构化输出校验和交互 stdin 适配
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import type { Uri } from 'vscode';
 import { runProcessCore } from '../../processCore';
 import type { RunResult } from '../../types';
 import type { ProgramSegment } from '../core/api';
 import type { CourseProfile } from '../core/generated/isaCatalog';
 import { readBoundedRegularFile } from '../replay/boundedFile';
 import { maximumReplayTraceBytes } from '../replay/boundedFile';
-import { withStagedCustomMars, type CustomMarsEnvironment } from './customMarsArtifacts';
+import { captureCustomMarsEnvironment, withStagedCustomMars, type CustomMarsEnvironment } from './customMarsArtifacts';
 import type { MarsConsole } from './marsIo';
 
 export interface CustomInstructionEncoding { mnemonic: string; mask: number; value: number; template: string }
@@ -30,10 +31,21 @@ export interface CustomMarsBridgeOptions {
   cwd?: string;
 }
 
-export async function invokeCustomMars(environment: CustomMarsEnvironment, options: CustomMarsBridgeOptions): Promise<{
+export async function inspectCustomMarsInstructions(resource: Uri, signal: AbortSignal): Promise<readonly CustomInstructionEncoding[]> {
+  signal.throwIfAborted();
+  const environment = await captureCustomMarsEnvironment(resource, { ifPresent: true });
+  if (!environment) return [];
+  signal.throwIfAborted();
+  const { result, payload } = await invokeCustomMars(environment, { mode: 'inspect', signal });
+  if (!result.ok || !payload) throw new Error(result.stderr || '魔改 Mars 未返回自定义指令元数据');
+  return payload.customInstructions;
+}
+
+export async function invokeCustomMars(environment: CustomMarsEnvironment, request: CustomMarsBridgeOptions | { mode: 'inspect'; signal?: AbortSignal }): Promise<{
   result: RunResult; payload?: CustomMarsBridgeResult;
 }> {
   return withStagedCustomMars(environment, async (stage) => {
+    const options = request.mode === 'inspect' ? await inspectionSource(stage.directory, request.signal) : request;
     const resultFile = path.join(stage.directory, 'result.json');
     const args = ['-Dfile.encoding=UTF-8', '-Djava.awt.headless=true', '-cp', stage.classPath, 'co.mars.bridge.Main',
       '--mode', options.mode, '--source', options.source, '--profile', options.profile, '--layout', options.layout,
@@ -46,11 +58,12 @@ export async function invokeCustomMars(environment: CustomMarsEnvironment, optio
       await fs.writeFile(expected, JSON.stringify({ segments: options.expectedSegments }));
       args.push('--expected-image', expected);
     }
+    const console = options.console;
     const processResult = await runProcessCore(environment.java, args, {
       cwd: options.cwd ?? path.dirname(options.source), timeoutMs: environment.timeoutMs, signal: options.signal,
       stdin: options.stdin,
-      readStdin: options.console?.readLine ? (signal) => readConsoleLine(options.console!, signal) : undefined,
-      onStdout: (text) => { void options.console?.write(text); },
+      readStdin: console?.readLine ? (signal) => readConsoleLine(console, signal) : undefined,
+      onStdout: (text) => { void console?.write(text); },
       maxStdoutBytes: maximumReplayTraceBytes, maxStderrBytes: 2 * 1024 * 1024,
       commandLine: `${environment.java} co.mars.bridge.Main ${options.mode}`
     });
@@ -72,6 +85,13 @@ export async function invokeCustomMars(environment: CustomMarsEnvironment, optio
       return { result: { ...result, ok: false, stderr: `魔改 Mars 未返回有效结果：${error instanceof Error ? error.message : String(error)}` } };
     }
   });
+}
+
+async function inspectionSource(directory: string, signal?: AbortSignal): Promise<CustomMarsBridgeOptions> {
+  // The existing assembly protocol returns the registered class templates even with an empty text segment.
+  const source = path.join(directory, 'inspect.asm');
+  await fs.writeFile(source, '.text\n', { signal });
+  return { mode: 'assemble', source, profile: 'ordinary', layout: 'Default', delayed: false, signal };
 }
 
 export function parseCustomMarsBridgeResult(value: unknown): CustomMarsBridgeResult {
