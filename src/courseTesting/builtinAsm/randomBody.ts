@@ -154,11 +154,6 @@ const p7ScratchRegisterA = '$24';
 const p7ScratchRegisterB = '$23';
 const p7InterruptAnchorRegister = '$25';
 type MemoryOperandCoverage = 'zero-offset' | 'positive-offset' | 'negative-offset' | 'negative-base';
-// Stable Mars v0.6.3 treats the configured data-segment limit (0x2fff) as exclusive when
-// validating an instruction's effective address. Wider accesses based at 0x2ffc/0x2ffe still
-// cover the final hardware word, but LWR/SWR validate each byte while walking toward the
-// aligned word end, so their effective address must leave room through 0x2ffe.
-const stableMarsDataAddressExclusiveLimit = courseDataByteLength - 1;
 /** Operand draws a steered (hazard-block) emission may try before it reports unsatisfiable. */
 const steeredOperandAttempts = 48;
 /** Share of payload instructions spent on coverage-directed hazard blocks while targets remain. */
@@ -569,9 +564,8 @@ class ProgramGenerator {
     if (this.interruptEnabled) {
       // With external interrupts enabled, the generator emits the interrupt anchor immediately
       // after the SR prologue and before any internal exception source. Therefore the first handler
-      // entry is the external interrupt. Avoid reading full Cause there: MARS leaves IP clear for
-      // p7irq while many course CPUs expose HWInt[2] in Cause.IP, and that implementation detail
-      // would otherwise appear as a trace-visible $k0 write.
+      // entry is the external interrupt. Read Cause on subsequent synchronous traps once the
+      // device has been acknowledged. Each trapped instruction exposes both Cause and EPC.
       return renderP7ExceptionHandler(p7ExternalInterruptAckAddress, p7ExceptionHandlerAddress);
     }
     // Unified P7 handler at the course exception entry.
@@ -2132,11 +2126,7 @@ class ProgramGenerator {
   }
 
   private memoryLastAddress(mnemonic: string): number {
-    const alignment = memoryAlignment(mnemonic);
-    const stableMarsLastAddress = mnemonic === 'lwr' || mnemonic === 'swr'
-      ? stableMarsDataAddressExclusiveLimit - 4
-      : stableMarsDataAddressExclusiveLimit - 1;
-    return Math.min(courseDataByteLength - alignment, stableMarsLastAddress);
+    return courseDataByteLength - memoryAlignment(mnemonic);
   }
 
   /** Whether some legal DM operand of `mnemonic` exists for a base register holding `base`. */

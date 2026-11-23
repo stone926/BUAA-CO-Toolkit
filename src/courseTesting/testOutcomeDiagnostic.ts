@@ -37,11 +37,21 @@ export function publicAutomaticDiagnosticMessage(item: CourseTraceCaseResult): s
 
 export function baseAutomaticDiagnosticMessage(item: CourseTraceCaseResult): string {
   if (item.cancelled) return '[AUTO-STOPPED] 测试已停止';
-  if (item.status === 'error' && uncoveredProbeCoverage(item.probe).length) {
-    return '[AUTO-COVERAGE] 未覆盖：返回后中断触发窗口未观测，无法判定';
+  if (item.status === 'error') {
+    const missing = uncoveredProbeCoverage(item.probe)[0];
+    if (missing) {
+      const detail = safeEvidenceText(missing.message);
+      return `[AUTO-COVERAGE] ${detail.includes('未覆盖') ? detail : `未覆盖：${detail}`}`;
+    }
+    if (item.stage === 'compare' && /^未覆盖：在观测预算内未看到宏观 PC 完成 0x[0-9a-f]{4,8} 处的停机循环$/.test(item.message)) {
+      return `[AUTO-COVERAGE] ${item.message}`;
+    }
   }
   if (item.status === 'passed') return '通过';
   if (item.status === 'failed') {
+    if (item.dutFailure?.reason === 'dm-store-contract') {
+      return `[AUTO-DUT] ${verilogSimulationFailureMessage(item.dutFailure, 'iverilog')}`;
+    }
     const failure = item.probe?.failures[0];
     if (failure) {
       const scenario = Number.isSafeInteger(failure.scenarioId) && failure.scenarioId >= 0

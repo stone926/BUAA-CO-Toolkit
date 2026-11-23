@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import * as path from 'path';
+import { URI } from 'vscode-uri';
 import type { RunResult } from '../../types';
 import { parseIverilogDiagnosticRecord } from '../../verilog/iverilogDiagnostics';
+import { privateDmStoreContractFailure } from '../../verilog/dmStoreContractDiagnostic';
+import { automaticRuntimeTestbenchName, generatedRuntimeTestbenchText } from '../../verilogSimulationFiles';
 import {
   createVerilogSimulationFailure,
   missingVerilogSimulationOutputFailure,
@@ -23,6 +27,45 @@ function failedRun(overrides: Partial<RunResult> = {}): RunResult {
 }
 
 describe('Verilog simulation diagnostics', () => {
+  it('binds a DM fatal to the compiled private source, statement and scope, even across run slots', () => {
+    const moduleName = automaticRuntimeTestbenchName;
+    const compileDir = path.resolve('shared compile');
+    const filename = moduleName + '.v';
+    const fatal = `FATAL: ${filename}:3: CO_DM_CONTRACT invalid_pc pc=xxxxxxxx addr=00000004 byteen=1111 wdata=00000000`;
+    const stdout = fatal + '\r\n       Time: 26000  Scope: ' + moduleName + '\r\n';
+    const simResult = failedRun({ exitCode: 1, cwd: path.resolve('slot 2'), stdout });
+    const compileResult = failedRun({ ok: true, exitCode: 0, cwd: compileDir });
+    const testbench = {
+      moduleName, kind: 'generated' as const, generatedUri: URI.file(path.join(compileDir, filename)),
+      generatedText: generatedRuntimeTestbenchText('$fatal(1, "CO_DM_CONTRACT invalid_pc pc=%h", pc);')
+    };
+    const output = { testbench, compileResult, simResult };
+    expect(privateDmStoreContractFailure(output)?.reason).toBe('dm-store-contract');
+    for (const text of [
+      stdout.replace(filename, path.join(simResult.cwd, filename)),
+      stdout.replace(filename, 'student.v'),
+      stdout.replace(':3:', ':2:'),
+      stdout.replace('invalid_pc', 'invalid_address'),
+      stdout.replace('FATAL:', 'WARNING:'),
+      stdout.replace('Scope: ' + moduleName, 'Scope: ' + moduleName + '.uut'),
+      fatal
+    ]) {
+      expect(privateDmStoreContractFailure({ ...output, simResult: { ...simResult, stdout: text } })).toBeUndefined();
+    }
+    for (const termination of [
+      { ok: true, exitCode: 0 }, { exitCode: 2 }, { exitCode: null },
+      { timedOut: true }, { stopped: true }, { stopReason: 'aborted' }, { stopReason: 'stdout-limit' }
+    ]) {
+      expect(privateDmStoreContractFailure({ ...output, simResult: { ...simResult, ...termination } })).toBeUndefined();
+    }
+    expect(privateDmStoreContractFailure({ ...output, compileResult: { ...compileResult, ok: false } })).toBeUndefined();
+    expect(privateDmStoreContractFailure({ ...output, testbench: { ...testbench, kind: 'user' } })).toBeUndefined();
+    expect(privateDmStoreContractFailure({ ...output,
+      testbench: { ...testbench, generatedText: testbench.generatedText.replace('invalid_pc', 'unknown_tag') },
+      simResult: { ...simResult, stdout: stdout.replace('invalid_pc', 'unknown_tag') }
+    })).toBeUndefined();
+  });
+
   it('recognizes the severity prefixes emitted by VVP without treating them as part of the path', () => {
     expect(parseIverilogDiagnosticRecord('ERROR: E:/work/tb.v:12: failed assertion')).toEqual({
       file: 'E:/work/tb.v',

@@ -535,6 +535,7 @@ describe('continuous generated trace orchestration', () => {
   });
 
   it('retains special probe scope after a runner tool error before probe checking', async () => {
+    policyMocks.maxIterations.mockReturnValue(2);
     const asmCase: TestAsmCase = {
       ...testAsmCase('special-tool-error'),
       manifest: {
@@ -544,17 +545,24 @@ describe('continuous generated trace orchestration', () => {
         p7: { probe: { version: 1, scope: 'special-timer-exl', logBase: 0x2800, recordWords: 8, scenarios: [] } }
       }
     };
+    const regular = testAsmCase('regular');
+    const otherSpecial = { ...testAsmCase('other-special'), manifest: asmCase.manifest };
+    const points = [regular, asmCase, otherSpecial];
     const deps = createDependencies({
       runGeneratorAndCollectAsms: vi.fn(async () => ({
-        asms: [asmCase.asm], source: { kind: 'generator' as const }, asmCases: [asmCase]
+        asms: points.map(point => point.asm), source: { kind: 'generator' as const }, asmCases: points
       })),
-      expandTraceCases: vi.fn(async () => [{ asm: asmCase.asm, asmCase }]),
-      runCourseTraceCase: vi.fn(async () => ({
-        asm: asmCase.asm.fsPath, status: 'error' as const, stage: 'dut' as const,
+      expandTraceCases: vi.fn(async () => points.map(point => ({ asm: point.asm, asmCase: point }))),
+      runCourseTraceCase: vi.fn(async (_services, item) => ({
+        asm: item.asm.fsPath, status: item.asmCase === regular ? 'passed' : 'error', stage: 'dut' as const,
         message: 'Icarus failed'
-      }))
+      } as CourseTraceCaseResult))
     });
     await startContinuousGeneratedTraceTests(createServices(), deps);
+    expect(deps.runCourseTraceCase).toHaveBeenCalledTimes(6);
+    const report = JSON.parse(fileMocks.writeTextFile.mock.calls.at(-1)![1] as string);
+    expect(report.iterations[0].summary).toEqual({ total: 1, passed: 1, failed: 0, errors: 0 });
+    expect(report.iterations[0].results).toHaveLength(3);
     expect(recordAsmCaseTestOutcome).toHaveBeenCalledWith(
       asmCase.manifestUri.fsPath,
       expect.objectContaining({ diagnostic: expect.stringContaining('单凭此场景失败，不能判定课程 CPU 不合格') })

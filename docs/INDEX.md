@@ -5,7 +5,7 @@ LSP: src/server.ts (路由) + src/languageClient.ts (客户端)
 架构: Client/Server IPC, TypeScript strict
 
 子系统:
-  orchestration   | docs/modules/orchestration.md   | 66 files | 扩展宿主层（命令/配置/UI/工具链；含用户 ASM 测试、Logisim 与 hazard 命令）
+  orchestration   | docs/modules/orchestration.md   | 67 files | 扩展宿主层（命令/配置/UI/工具链；含用户 ASM 测试、Logisim 与 hazard 命令）
   common-lsp      | docs/modules/common-lsp.md      | 6 files  | 共享 LSP 基础设施
   mips-lsp        | docs/modules/mips-lsp.md        | 35 files | MIPS 汇编语言支持
   mips-core       | docs/modules/mips-core.md       | 72 files | 纯 TS MIPS 引擎核心（课程与普通 MARS ISA/profile/assembler/machine/devices/events/debug）
@@ -17,10 +17,10 @@ LSP: src/server.ts (路由) + src/languageClient.ts (客户端)
   verilog-lsp     | docs/modules/verilog-lsp.md     | 102 files | Verilog HDL 语言支持（子模块：verilog-ast 15、verilog-diagnostics 22）
   logisim-lsp     | docs/modules/logisim-lsp.md     | 2 files  | Logisim 电路文件
   hazard-analysis | docs/modules/hazard-analysis.md | 18 files | 内置流水线冲突分析与交互报告
-  course-testing  | docs/modules/course-testing.md  | 84 files + host adapters | 随机/用户 ASM 测试、失败定位与用例重跑
+  course-testing  | docs/modules/course-testing.md  | 94 files + host adapters | 随机/用户 ASM 测试、失败定位与用例重跑
   waveform        | docs/modules/waveform.md        | 60 files | 内置 VCD 波形查看器（自定义编辑器 + 仿真并查看波形）
   conformance     | conformance/mips/               | 独立 Node 包：ISA golden、冻结执行语料与 JSONL 门禁；MARS 参考仅用于历史证据
-  test-suite      | docs/modules/test-suite.md      | 312 files| Vitest 测试，含真实自定义指令与 P7 Timer/IRQ probe 集成
+  test-suite      | docs/modules/test-suite.md      | 313 test files| Vitest 测试，含真实自定义指令与 P7 Timer/IRQ probe 集成
   resources       | docs/modules/resources.md       | ~55 files + 5 bundled Icarus runtimes | 静态资源与生成源
   highlighting    | docs/modules/syntax-highlighting.md | 3 grammars | TextMate/semantic 分层高亮
 
@@ -32,7 +32,7 @@ LSP: src/server.ts (路由) + src/languageClient.ts (客户端)
 
 自动测试与 P7:
   P2–P7 默认内置引擎；普通命令/用户 ASM 遇未知指令在执行前绑定 custom-mars 完整参考，Jar 来自公开 co.toolchain.mars，class 来自原 ASM 工作区 .co/custom-instructions。随机生成点使用 builtin-ts 和可选冻结 JS/TS 注册表，使用最大 payload 规模；co.test.instructions 选择侧重点，co.test.concurrency 控制并发（默认4，1–8）。旧 Mars 配置不再读取或迁移
-  P7 stress mode（内部类型，非用户设置）: anchor(TS课程oracle对拍+中断/Timer注入) / probe(DM探针黑盒检查) / hybrid(runner 展开为前两者，P7 automatic 固定取值) / off(P3–P6 固定取值，同时关中断与 Timer)；probe 为 DUT-only，不能冒充 full-stack reference evidence
+  P7 stress mode（内部类型，非用户设置）: anchor(TS 课程 oracle 对拍、按宏观 PC 注入外部中断及停机见证) / probe(DM探针黑盒检查) / hybrid(runner 展开为前两者，P7 automatic 固定取值) / off(P3–P6 固定取值，同时关中断与 Timer)；probe 为 DUT-only，不能冒充 full-stack reference evidence
 
 专门文档:
   custom-instructions.md: JS/TS 指令 SDK、运行/随机生成、课程语义与重放

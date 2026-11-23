@@ -138,7 +138,7 @@ describe('built-in ASM generator', () => {
     expect(coverage.baseSigns).toContain('negative');
   });
 
-  it('does not issue a stable-MARS byte access from the exclusive 0x2fff limit', () => {
+  it('uses the last hardware DM byte at 0x2fff in the builtin random lane', () => {
     const byteAt = vi.spyOn(CpuState.prototype, 'byteAt');
     const writeByte = vi.spyOn(CpuState.prototype, 'writeByte');
     let addresses: number[] = [];
@@ -147,7 +147,7 @@ describe('built-in ASM generator', () => {
         profile: 'P6',
         instructionText: 'lui ori lb lbu sb',
         instructionCount: 1000,
-        seed: 'stable-mars-data-limit'
+        seed: 'course-hardware-data-limit'
       });
       addresses = [
         ...byteAt.mock.calls.map(([address]) => address),
@@ -159,10 +159,10 @@ describe('built-in ASM generator', () => {
     }
 
     expect(addresses.length).toBeGreaterThan(0);
-    expect(Math.max(...addresses)).toBeLessThanOrEqual(0x2ffe);
+    expect(Math.max(...addresses)).toBe(0x2fff);
   });
 
-  it('keeps stable-MARS partial-word spans below the exclusive 0x2fff limit', () => {
+  it('includes the final byte in builtin partial-word accesses', () => {
     const byteAt = vi.spyOn(CpuState.prototype, 'byteAt');
     const writeByte = vi.spyOn(CpuState.prototype, 'writeByte');
     const loadWordRight = vi.spyOn(CpuState.prototype, 'loadWordRight');
@@ -192,9 +192,9 @@ describe('built-in ASM generator', () => {
     }
 
     expect(byteAddresses.length).toBeGreaterThan(0);
-    expect(Math.max(...byteAddresses)).toBe(0x2ffe);
+    expect(Math.max(...byteAddresses)).toBe(0x2fff);
     expect(rightEffectiveAddresses.length).toBeGreaterThan(0);
-    expect(Math.max(...rightEffectiveAddresses)).toBeLessThanOrEqual(0x2ffb);
+    expect(Math.max(...rightEffectiveAddresses)).toBe(0x2fff);
   });
 
   it('uses every byte offset for unaligned word-left/right instructions', () => {
@@ -481,7 +481,8 @@ describe('built-in ASM generator', () => {
     const branchToException = handler.indexOf('    bne $k1, $0, _co_excep_skip');
     const interruptAck = handler.indexOf(`    sb $0, ${p7Hex(p7ExternalInterruptAckAddress)}($0)`);
     const exceptionPath = handler.indexOf('_co_excep_skip:');
-    expect(handler).not.toContain('    mfc0 $k0, $13');
+    expect(handler.slice(0, exceptionPath)).not.toContain('    mfc0 $k0, $13');
+    expect(handler.slice(exceptionPath)).toContain('    mfc0 $k0, $13\n    mfc0 $k0, $14');
     expect(branchToException).toBeGreaterThanOrEqual(0);
     expect(firstEntryFlag).toBeGreaterThan(branchToException);
     expect(interruptAck).toBeGreaterThan(firstEntryFlag);
@@ -983,32 +984,36 @@ describe('built-in ASM generator', () => {
         expect(timer.expectedRecords?.[0].allowedBdEpc).toHaveLength(1);
         expect(timer.expectedRecords?.[1].allowedBdEpc).toHaveLength(1);
         expect(timer.expectedRecords?.[0].allowedBdEpc).not.toEqual(timer.expectedRecords?.[1].allowedBdEpc);
-        expect(timer.requiredPreHandlerCommits).toEqual([
-          expect.objectContaining({ kind: 'grf', target: 11, value: 1 }),
-          expect.objectContaining({ kind: 'grf', target: 11, value: 2 }),
+        expect(timer.expectedRecords?.map(record => record.allowedEpc)).toEqual(
+          timer.expectedRecords?.map(record => record.allowedBdEpc)
+        );
+        expect(timer.requiredPreHandlerCommits).toEqual(expect.arrayContaining([
+          expect.objectContaining({ kind: 'grf', target: 14, value: 0x1c00 }),
+          expect.objectContaining({ kind: 'grf', target: 14, value: 0xb }),
+          expect.objectContaining({ kind: 'grf', target: 14, value: 32 }),
           expect.objectContaining({ kind: 'grf', target: 15, value: 0 }),
           expect.objectContaining({ kind: 'dm', target: 0x27dc, value: 0x7100 | timer.id })
-        ]);
+        ]));
         const block = probeScenarioBlock(timerResult.text, timer.id);
         expect(block).toMatch(/ori \$26, \$0, 0xb\s*\n\s*sw \$26, 0x7f(?:00|10)\(\$0\)/);
         expect(block).not.toMatch(/ori \$26, \$0, 0xd\s*\n\s*sw \$26, 0x7f(?:00|10)\(\$0\)/);
-        expect(block).toMatch(
-          /lw \$12, 0x7f(?:08|18)\(\$0\)[\s\S]*sltu \$13, \$10, \$12[\s\S]*addi \$11, \$11, 1[\s\S]*bne \$11, \$14, _co_probe_s\d+_mode1_poll/
-        );
-        if (timer.variant === 'mode1-stopped') expect(block).toMatch(
-          /ori \$14, \$0, 0x2[\s\S]*_mode1_stopped_count:[\s\S]*beq \$10, \$12, _co_probe_s\d+_mode1_stopped_count_ready[\s\S]*ori \$14, \$0, 0xa[\s\S]*_mode1_clear_ip:[\s\S]*sw \$15, 0x27dc\(\$0\)[\s\S]*ori \$14, \$0, 0xb/
-        );
+        expect(timer.timerObservation?.kind).toBe('mode1');
+        if (timer.variant === 'mode1-stopped') {
+          expect(block).toMatch(/ori \$26, \$0, 0xa[\s\S]*lw \$12, 0x7f(?:08|18)\(\$0\)[\s\S]*lw \$13, 0x7f(?:08|18)\(\$0\)[\s\S]*ori \$26, \$0, 0xb/);
+          expect(timer.timerObservation).toHaveProperty('stoppedCount');
+        }
         else {
-          expect(block).not.toContain('ori $14, $0, 0x2');
-          expect(block).not.toContain('ori $14, $0, 0xa');
-          expect(block).toMatch(/_mode1_clear_ip:[\s\S]*bne \$15, \$0, _co_probe_s\d+_mode1_clear_ip\s+nop\s+add \$15, \$15, \$0/);
+          expect(block.match(/sw \$26, 0x7f(?:00|10)\(\$0\)/g)).toHaveLength(1);
+          expect(block).toMatch(/_mode1_clear_ip:[\s\S]*beq \$15, \$0, _co_probe_s\d+_mode1_ip_clear[\s\S]*_mode1_ip_unobserved:[\s\S]*_mode1_ip_clear:\s+add \$15, \$15, \$0/);
+          expect(timer.timerObservation).toHaveProperty('ipSampling.attempts', 64);
         }
       }
       const reload = timers.find((item) => item.variant === 'disable-reload');
       expect(reload?.expectedExcCode).toBe(8);
-      expect(probeScenarioBlock(timerResult.text, reload?.id ?? 0)).toMatch(
-        /bne \$10, \$11, _co_probe_s\d+_bad_timer_state[\s\S]*sltu \$12, \$10, \$11[\s\S]*beq \$12, \$0, _co_probe_s\d+_bad_timer_state/
-      );
+      expect(reload?.timerObservation).toMatchObject({ kind: 'disable-reload',
+        activeCount: [{ register: 10 }, { register: 11 }], stoppedCount: [{ register: 12 }, { register: 13 }],
+        reloadedCount: { register: 14 }
+      });
       const pendingWrites = timers.find((item) => item.variant === 'pending-writes');
       expect(pendingWrites?.expectedExcCode).toBe(8);
       const ipMask = kind === 'timer0' ? 0x400 : 0x800;
@@ -1035,7 +1040,7 @@ describe('built-in ASM generator', () => {
     expect(executableMnemonics(timerResult.text).filter((mnemonic) => !declaredUsedInstructions.has(mnemonic))).toEqual([]);
     expect(handler.indexOf('lw $20, 0x7f00($0)')).toBeLessThan(handler.indexOf('sw $0, 0x7f00($0)'));
     expect(handler).toMatch(/andi \$26, \$22, 2048\s*\n\s*bne \$26, \$0, _co_probe_record_repeat_timer_interrupt/);
-    expect(handler).toMatch(/ori \$26, \$0, 3\s*\n\s*sw \$26, 0x7f(?:00|10)\(\$0\)/);
+    expect(handler).toMatch(/andi \$26, \$25, 0xfffe\s*\n\s*mtc0 \$26, \$12/);
     expect(handler).toMatch(/lui \$26, 0xbad1\s*\n\s*ori \$26, \$26, 0x1\s*\n\s*sw \$26, 0x27dc\(\$0\)/);
     expect(timerResult.text).toContain('_co_probe_record_repeat_timer_interrupt:');
     expect(timerResult.text).toContain('_co_probe_write_repeat_timer_record:');

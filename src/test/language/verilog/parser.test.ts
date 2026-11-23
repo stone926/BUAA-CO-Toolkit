@@ -1516,8 +1516,8 @@ describe('buildTestbench', () => {
     expect(tb).toContain(`//             if (|m_int_byteen && (m_int_addr & 32'hfffffffc) == ${verilogHex32(p7ExternalInterruptAckAddress)}) begin`);
     expect(tb).toMatch(/\/\/\s+interrupt = 1;/);
     expect(tb).not.toMatch(/^\s*parameter\s+target_pc\b/m);
-    expect(tb).not.toMatch(/^\s*always\s+@\(negedge clk\)\s+begin/m);
-    expect(tb).not.toContain('$finish;');
+    expect(tb).not.toMatch(/^\s*interrupt = 1;/m);
+    expect(tb).toContain('$value$plusargs("co_halt_pc=%h", co_halt_pc)');
   });
 
   it('uses the P7 official testbench when the profile is P7', () => {
@@ -1544,12 +1544,14 @@ describe('buildTestbench', () => {
         makeDecl({ name: 'reset', kind: 'input', direction: 'input' })
       ]
     });
-    const tb = buildTestbench(module, 'mips_tb', { profile: 'P7', interruptSchedule: [0x3010] });
+    const tb = buildTestbench(module, 'mips_tb', { profile: 'P7', interruptSchedule: [0x3010, 0x3020, 0x3010] });
 
     // The interrupt block is now active (uncommented) with the scheduled target_pc.
-    expect(tb).toMatch(/^\s*parameter target_pc = 32'h00003010;/m);
+    expect(tb).toContain("32'h3010: co_irq_index = 0;");
+    expect(tb).toContain("32'h3020: co_irq_index = 1;");
+    expect(tb).toContain('reg [1:0] co_irq_fired;');
     expect(tb).toMatch(/^\s*always @\(negedge clk\) begin/m);
-    expect(tb).toMatch(/^\s*assign fixed_macroscopic_pc = macroscopic_pc & 32'hfffffffc;/m);
+    expect(tb).toContain('case (macroscopic_pc)');
     expect(tb).toContain(`if (|m_int_byteen && (m_int_addr & 32'hfffffffc) == ${verilogHex32(p7ExternalInterruptAckAddress)}) begin`);
     expect(tb).toMatch(/^\s*interrupt = 1;/m);
     // No leftover commented interrupt scaffolding for the parameter line.
@@ -1583,9 +1585,8 @@ describe('buildTestbench', () => {
     expect(tb).toContain('co_p7_external_armed && fixed_macroscopic_pc == co_p7_external_target');
     expect(tb).not.toContain('co_p7_external_legacy && fixed_macroscopic_pc == co_p7_external_target');
     expect(tb).not.toContain('uut.');
-    expect(tb).toContain("32'h00003060: begin");
-    expect(tb).toContain('CO_P7_PROBE invalid_store_effect scenario=3');
-    expect(tb).toContain("m_data_byteen !== 4'b0000 || m_int_byteen !== 4'b0000");
+    expect(tb).not.toContain('invalid_store_effect source=interrupt_generator');
+    expect(tb).toContain("if (|m_int_byteen && (m_int_addr & 32'hfffffffc) == 32'h7f20)");
   });
 
   it('keeps legacy P7 probe external interrupt support behind legacy metadata', () => {

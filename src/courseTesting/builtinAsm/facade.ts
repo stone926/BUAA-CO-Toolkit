@@ -6,6 +6,8 @@ import {
 } from './randomBody';
 import { generateP7ProbeAsmTestCase } from './p7/probeEmitter';
 import { generateP7ReturnProbe } from './p7/probeReturnProgram';
+import { generateP7ArchitectureProbe } from './p7/probeArchitectureProgram';
+import { generateP7InstructionBoundaryProbe } from './p7/probeInstructionBoundaryProgram';
 import { avoidCustomP7RiCollisions } from '../p7RiWords';
 import { assertCustomGeneratorNativeDependencies, generatedSourceMnemonics } from './customGeneratorCompatibility';
 
@@ -47,7 +49,9 @@ export function generateBuiltinAsmTestCase(options: BuiltinAsmGeneratorOptions):
 function generateBuiltinAsmProgram(options: BuiltinAsmGeneratorOptions): BuiltinAsmGeneratorResult {
   const mode = options.profile === 'P7' ? (options.p7StressMode ?? 'anchor') : 'off';
   if (mode === 'probe') {
-    if (options.probeShard === 'return') return generateP7ReturnProbe(options);
+    if (options.probeShard === 'return' || options.probeShard === 'reset') return generateP7ReturnProbe(options);
+    if (options.probeShard === 'architecture') return generateP7ArchitectureProbe(options);
+    if (options.probeShard === 'im-boundaries') return generateP7InstructionBoundaryProbe(options);
     return generateP7ProbeAsmTestCase(options);
   }
   if (mode === 'off') {

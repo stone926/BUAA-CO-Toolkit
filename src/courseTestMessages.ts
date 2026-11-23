@@ -2,6 +2,8 @@ import { firstTraceDiffEntry, TraceDiffResult, TraceDiffStatus } from './languag
 
 const probeKindLabels = new Map<string, string>(Object.entries({
   'cp0-reset': 'CP0 复位',
+  'cp0-reset-sample': 'CP0 复位采样',
+  'cp0-reset-replay': 'CP0 启动采样重复提交',
   'return-boundary': '中断返回边界',
   tb: '测试平台接口',
   record: '异常记录',

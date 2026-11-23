@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { generateBuiltinAsmTestCase } from '../../courseTesting/builtinAsmGenerator';
 import { checkP7Probe } from '../../courseTesting/p7ProbeCheck';
+import { ordinaryProbeRecordSources } from '../../courseTesting/p7ProbeRecordSources';
 import { parseSimOutput } from '../../language/verilog/traceParser';
 import { assembleCourseSource } from '../../mips/core/assembler/assembler';
+import { courseInstructionImageHexText } from '../../mips/core/assembler/artifacts';
+import { createLegacyProgramImage } from '../../mips/replay/programImage';
 import { executeProgramForService } from '../../mips/core/machine/executeService';
 import {
   p7ProbeLogBase,
@@ -32,10 +35,26 @@ function timerPriorityProgram() {
   });
 }
 
+function externalPriorityProgram() {
+  return generateBuiltinAsmTestCase({
+    profile: 'P7', instructionText: '', instructionCount: 1118, seed: 'p7-external-priority-ri',
+    p7StressMode: 'probe', probeShard: 'core', probeScenarioCount: 5, interrupt: true,
+    externalInterruptIntensity: 1, timerInterrupt: false, exceptionTypes: []
+  });
+}
+
+function externalDiagnostics(program: ReturnType<typeof externalPriorityProgram>): string {
+  return program.probe!.scenarios.filter(scenario => scenario.kind === 'external').flatMap(scenario => [
+    `CO_P7_PROBE external_arm scenario=${scenario.id}`,
+    `CO_P7_PROBE external_raise scenario=${scenario.id}`,
+    `CO_P7_PROBE external_ack scenario=${scenario.id}`
+  ]).join('\n');
+}
+
 function executeProbe(program: ReturnType<typeof generateBuiltinAsmTestCase>, cyclesAt: (step: number) => number) {
   const assembled = assembleCourseSource({ id: 'priority-probe', text: program.text }, { profile: 'P7' });
   expect(assembled.ok, assembled.diagnostics.map((item) => item.message).join('\n')).toBe(true);
-  return executeProgramForService({
+  const executed = executeProgramForService({
     profile: 'P7',
     segments: assembled.image!.segments,
     entryPc: assembled.image!.entryPc,
@@ -53,6 +72,7 @@ function executeProbe(program: ReturnType<typeof generateBuiltinAsmTestCase>, cy
       .map((scenario) => ({ victimPc: scenario.triggerPc ?? scenario.waitPc!, occurrence: 1 })),
     collectTrace: true
   });
+  return { ...executed, image: assembled.image! };
 }
 
 describe('P7 deterministic interrupt/exception priority probes', () => {
@@ -66,7 +86,7 @@ describe('P7 deterministic interrupt/exception priority probes', () => {
     for (const cyclesAt of [() => 1, (step: number) => [1, 5, 2, 3][step % 4]]) {
       const executed = executeProbe(program, cyclesAt);
       const trace = executed.trace!.join('\n');
-      const checked = checkP7Probe(trace, parseSimOutput(trace), metadata);
+      const checked = checkP7Probe(trace, parseSimOutput(trace), metadata, executed.image);
       expect(executed).toMatchObject({ status: 'halted', haltReason: 'course-halt-loop' });
       expect(checked.failures).toEqual([]);
       expect(checked.records).toHaveLength(14);
@@ -85,32 +105,16 @@ describe('P7 deterministic interrupt/exception priority probes', () => {
   });
 
   it('takes an external interrupt at the RI raw word and retries RI only after acknowledging Int', () => {
-    const program = generateBuiltinAsmTestCase({
-      profile: 'P7',
-      instructionText: '',
-      instructionCount: 1118,
-      seed: 'p7-external-priority-ri',
-      p7StressMode: 'probe',
-      probeShard: 'core',
-      probeScenarioCount: 5,
-      interrupt: true,
-      externalInterruptIntensity: 1,
-      timerInterrupt: false,
-      exceptionTypes: []
-    });
+    const program = externalPriorityProgram();
     const scenario = program.probe!.scenarios.find((item) => item.variant === 'priority-ri')!;
     expect(scenario).toBeDefined();
     const executed = executeProbe(program, () => 1);
     expect(executed).toMatchObject({ status: 'halted', haltReason: 'course-halt-loop' });
     // The execution service supplies the architectural trace; the Verilog-only
     // arm/raise/ack observer diagnostics are supplied as a protocol fixture here.
-    const diagnostics = program.probe!.scenarios.flatMap((item) => [
-      `CO_P7_PROBE external_arm scenario=${item.id}`,
-      `CO_P7_PROBE external_raise scenario=${item.id}`,
-      `CO_P7_PROBE external_ack scenario=${item.id}`
-    ]).join('\n');
+    const diagnostics = externalDiagnostics(program);
     const trace = executed.trace!.join('\n');
-    const checked = checkP7Probe(diagnostics, parseSimOutput(trace), program.probe!);
+    const checked = checkP7Probe(diagnostics, parseSimOutput(trace), program.probe!, executed.image);
     expect(checked.failures).toEqual([]);
     expect(checked.records.find((item) => item.scenarioId === scenario.id)).toMatchObject({
       cause: 0x1000,
@@ -118,6 +122,27 @@ describe('P7 deterministic interrupt/exception priority probes', () => {
       aux0: 10 << 2,
       aux1: scenario.victimPc
     });
+  });
+
+  it.each([timerPriorityProgram, externalPriorityProgram])('binds the first IRQ samples even when packed values are repaired', generate => {
+    const program = generate();
+    const metadata = program.probe!;
+    const diagnostics = externalDiagnostics(program);
+    const executed = executeProbe(program, () => 1);
+    const image = createLegacyProgramImage(courseInstructionImageHexText(executed.image), []);
+    const pcs = Object.values(ordinaryProbeRecordSources(image, metadata).priorityCapture!);
+    const events = parseSimOutput(executed.trace!.join('\n'));
+    expect(checkP7Probe(diagnostics, events, metadata, image).failures).toEqual([]);
+    const isCapture = (event: typeof events[number]) => pcs.includes(Number.parseInt(event.pc, 16));
+    const corrupted = events.map(event => isCapture(event) ? { ...event, value: 'deadbeef' } : event);
+    expect(checkP7Probe(diagnostics, corrupted, metadata, image).failures).toContainEqual(expect.objectContaining({
+      observed: true, message: expect.stringContaining('首次中断样本与打包记录不一致')
+    }));
+    expect(checkP7Probe(diagnostics, events.filter(event => !isCapture(event)), metadata, image).failures)
+      .toContainEqual(expect.objectContaining({ observed: true, message: expect.stringContaining('依次写入首次中断') }));
+    const firstCapture = events.findIndex(isCapture);
+    const initial = checkP7Probe('', events.slice(0, firstCapture), metadata, image);
+    expect(initial.failures.find(failure => failure.message.includes('依次写入首次中断'))?.observed).toBeUndefined();
   });
 
   it('rejects wrong priority, stale IP, lost BD/EPC/EXL, premature victim commits and missing completion', () => {

@@ -108,6 +108,30 @@ ${storeContractBlock}
 
 ${interruptBlock}
 
+    // The macro PC may stay on an instruction during stalls. Observe a full
+    // branch / delay slot / branch traversal independently of its cycle count.
+    reg [31:0] co_halt_pc;
+    integer co_halt_phase;
+    integer co_observe_halt;
+    initial begin
+        co_observe_halt = $value$plusargs("co_halt_pc=%h", co_halt_pc);
+        co_halt_phase = 0;
+    end
+    always @(negedge clk) begin
+        if (reset) co_halt_phase = 0;
+        else if (co_observe_halt && co_halt_phase < 3) begin
+            if (macroscopic_pc === co_halt_pc) begin
+                if (co_halt_phase == 2) begin
+                    co_halt_phase = 3;
+                    $display("CO_P7_HALT pc=%08h", co_halt_pc);
+                    $finish;
+                end else co_halt_phase = 1;
+            end else if (macroscopic_pc === co_halt_pc + 4 && co_halt_phase != 0)
+                co_halt_phase = 2;
+            else co_halt_phase = 0;
+        end
+    end
+
     always #2 clk <= ~clk;
 
 endmodule

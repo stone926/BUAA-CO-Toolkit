@@ -1,7 +1,15 @@
+import type { P7ProbeScope } from './builtinAsm/types';
+
 export type ContinuousRunStatus = 'running' | 'passed' | 'failed' | 'error' | 'stopped';
 
 export interface ContinuousCaseLike {
   status: 'passed' | 'failed' | 'error';
+  probeScope?: P7ProbeScope;
+  cancelled?: boolean;
+}
+
+export function isCourseTestProblem(result: ContinuousCaseLike): boolean {
+  return !result.cancelled && result.probeScope !== 'special-timer-exl' && result.status !== 'passed';
 }
 
 export interface ContinuousCounts {
@@ -21,6 +29,8 @@ export function createContinuousCounts(): ContinuousCounts {
 }
 
 export function addContinuousResult(counts: ContinuousCounts, result: ContinuousCaseLike): ContinuousCounts {
+  // Advisory experiments retain their own case history and separate results table.
+  if (result.cancelled || result.probeScope === 'special-timer-exl') return counts;
   counts.total++;
   switch (result.status) {
     case 'passed':

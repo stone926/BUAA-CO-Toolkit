@@ -41,7 +41,8 @@ interface TestbenchOptions {
 }
 
 interface P7ProbeTestbenchMetadata {
-  returnBoundary?: { variant: string; ackPc: number };
+  shard?: string;
+  returnBoundary?: { variant: string };
   scenarios: Array<{
     id: number;
     kind: string;
@@ -50,6 +51,7 @@ interface P7ProbeTestbenchMetadata {
     armAddress?: number;
     armValue?: number;
     externalDelayCycles?: number;
+    forbiddenCommitPcs?: readonly number[];
     victimPc?: number;
     afterReturnOf?: { scenarioId: number; eretPc: number };
   }>;
@@ -253,21 +255,21 @@ function storeContractBlock(hasReset: boolean, instructionMemoryWords: number, d
 }
 
 function p7InterruptBlock(interruptSchedule?: number[]): string {
-  const target = interruptSchedule?.find((pc) => Number.isFinite(pc));
-  if (target === undefined) {
+  const targets = [...new Set(interruptSchedule?.filter(Number.isFinite))];
+  if (!targets.length) {
     return commentedP7InterruptBlock();
   }
-  const targetHex = (target >>> 0).toString(16).padStart(8, '0');
-  // Official tb_interrupt_demo.v interrupt block: raise `interrupt` once when the
-  // macroscopic (M-stage) PC reaches target_pc, clear it when the handler writes the P7 ack MMIO.
+  // Each target is eligible on its first visit, in execution order, just as in
+  // InterruptGeneratorDevice. A retry or a duplicate list entry is not another IRQ.
   return renderResourceTemplate('verilog/p7_interrupt_block.v', {
-    targetPcHex: targetHex,
+    lastTargetIndex: targets.length - 1,
+    targetCases: targets.map((pc, index) => `            ${verilogHex32(pc)}: co_irq_index = ${index};`).join('\n'),
     externalInterruptAckAddress: verilogHex32(p7ExternalInterruptAckAddress)
   });
 }
 
 function p7ProbeBlock(probe: P7ProbeTestbenchMetadata): string {
-  if (probe.returnBoundary) return buildP7ReturnInterruptBlock(probe.scenarios, probe.returnBoundary.ackPc);
+  if (probe.returnBoundary) return buildP7ReturnInterruptBlock(probe.scenarios, probe.shard === 'reset');
   const externalScenarios = probe.scenarios.filter((scenario) =>
     scenario.kind === 'external' && Number.isFinite(scenario.triggerPc ?? scenario.waitPc));
   const externalScenarioViews = externalScenarios.map((scenario, index) => p7ExternalScenarioView(scenario, index));
@@ -284,14 +286,12 @@ function p7ProbeBlock(probe: P7ProbeTestbenchMetadata): string {
       legacyFlag: scenario.legacy ? 1 : 0
     }))
     .join('\n');
-  const invalidStoreVictimCases = probe.scenarios
-    .filter((scenario) => scenario.kind === 'ades' && Number.isFinite(scenario.victimPc))
-    .map((scenario) => renderResourceTemplate('verilog/p7_probe_invalid_store_case.v', {
-      scenarioId: scenario.id,
-      victimPcHex: hex32NoPrefix(scenario.victimPc ?? 0)
-    }))
-    .join('\n');
+  const forbiddenPcs = [...new Set(probe.scenarios.flatMap(scenario => scenario.forbiddenCommitPcs ?? []))];
   return renderResourceTemplate('verilog/p7_probe_block.v', {
+    forbiddenCommitObserver: forbiddenPcs.length ? renderResourceTemplate('verilog/p7_probe_forbidden_commit.v', {
+      forbiddenPcs: forbiddenPcs.map(verilogHex32).join(', '),
+      dataMemoryWords: p7DataMemoryWords
+    }) : '',
     externalScenarioCases,
     externalInterruptAckAddress: verilogHex32(p7ExternalInterruptAckAddress),
     externalLegacyRaiseBlock: hasLegacyExternalScenario
@@ -306,10 +306,7 @@ function p7ProbeBlock(probe: P7ProbeTestbenchMetadata): string {
     mmioObserverBlock: renderResourceTemplate('verilog/p7_probe_mmio_observer.v', {
       timer0CtrlAddress: verilogHex32(p7Timer0Ctrl),
       externalInterruptMmioMaxAddress: verilogHex32(p7ExternalInterruptAckAddress + 0xf)
-    }),
-    invalidStoreObserverBlock: invalidStoreVictimCases
-      ? renderResourceTemplate('verilog/p7_probe_invalid_store_observer.v', { invalidStoreVictimCases })
-      : ''
+    })
   });
 }
 

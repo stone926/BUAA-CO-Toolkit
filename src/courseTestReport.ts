@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { p7ProbeKindLabel, probeFailureMessage, traceDifferenceMessage } from './courseTestMessages';
-import { continuousCounts, ContinuousCounts, ContinuousRunStatus } from './courseTesting/continuous';
+import { continuousCounts, ContinuousCounts, ContinuousRunStatus, isCourseTestProblem } from './courseTesting/continuous';
 import { P7ProbeCheckResult } from './courseTesting/p7ProbeCheck';
 import {
   NeutralTraceDiffSnapshot,
@@ -331,7 +331,7 @@ export function renderContinuousTraceMonitor(report: ContinuousTraceReport, _rep
   const visibleIterations = report.iterations.slice(0, continuousTraceMonitorMaxRows);
   const hiddenIterations = Math.max(0, totalIterations - visibleIterations.length);
   const rows = visibleIterations.map((iteration) => {
-    const firstProblemIndex = iteration.results.findIndex((item) => item.status !== 'passed');
+    const firstProblemIndex = iteration.results.findIndex(isCourseTestProblem);
     const firstProblem = firstProblemIndex >= 0 ? iteration.results[firstProblemIndex] : undefined;
     return {
       className: iteration.status,
@@ -356,11 +356,11 @@ export function renderContinuousTraceMonitor(report: ContinuousTraceReport, _rep
     ? html.raw(`<p class="muted">仅显示最近 ${html.text(visibleIterations.length)} / ${html.text(totalIterations)} 轮。</p>`)
     : html.raw('');
   const state = report.running ? (report.stopRequested ? '正在停止' : '运行中') : '已停止';
-  const problem = visibleIterations.flatMap(iteration => iteration.results).find(item => !item.cancelled && item.status !== 'passed');
+  const problem = visibleIterations.flatMap(iteration => iteration.results).find(isCourseTestProblem);
 
   return renderReportPage({
     title: '持续测试',
-    subtitle: '持续生成测试点并与参考结果比较；发现首个失败或错误时停止派发并取消其他运行中的测试点。',
+    subtitle: '常规测试的首个失败或错误会停止本轮。特殊压力场景单独报告，随后继续下一轮。',
     extraCss: 'table { min-width: 960px; } td:nth-child(7) { min-width: 160px; } td:last-child { min-width: 280px; }',
     script: 'continuous',
     actions: html.raw(`<button type="button" class="secondary" data-report-action="openHistory">查看测试历史</button>${report.running && !report.stopRequested
@@ -382,7 +382,7 @@ export function renderContinuousTraceMonitor(report: ContinuousTraceReport, _rep
   ${renderSpecialProbeResults(visibleIterations, report.running)}
   <div class="section-heading"><h2>最近测试轮次</h2><span class="muted">最新记录在前</span></div>
   ${hiddenNote}
-  ${renderTable(['轮次', '状态', '用例', '通过', '失败', '错误', '失败用例', '首个差异'], rows, {
+  ${renderTable(['轮次', '状态', '常规用例', '通过', '失败', '错误', '失败用例', '首个差异'], rows, {
     label: '最近测试轮次',
     emptyMessage: report.running ? '正在准备第一轮测试，结果将自动显示在这里。' : '本次测试尚未产生记录。'
   })}

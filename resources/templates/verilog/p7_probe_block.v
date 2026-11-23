@@ -68,4 +68,4 @@ ${externalArmObserverBlock}
 
 ${mmioObserverBlock}
 
-${invalidStoreObserverBlock}
+${forbiddenCommitObserver}

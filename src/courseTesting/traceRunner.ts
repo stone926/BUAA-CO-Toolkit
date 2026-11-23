@@ -7,7 +7,9 @@ import {
   type MipsEngineMode
 } from '../config';
 import { P7ProbeMetadata } from './builtinAsmGenerator';
+import { findCourseHaltPc } from '../mips/core/assembler/artifacts';
 import { checkP7Probe } from './p7ProbeCheck';
+import { concludeP7Probe, isP7ObservationLimit, observedP7Halt } from './p7ProbeCompletion';
 import { firstDmStoreDifference } from './dmStoreCheck';
 import {
   compareTraceIterables,
@@ -27,6 +29,7 @@ import {
 } from '../verilog/simulationRunner';
 import type { VerilogSimulationRunOutput } from '../verilog/simulationRunner';
 import { verilogSimulationFailureMessage } from '../verilog/simulationDiagnostic';
+import { privateDmStoreContractFailure } from '../verilog/dmStoreContractDiagnostic';
 import { AppServices } from '../types';
 import { readTextFile, workspaceFolderFor } from '../fsUtil';
 import { normalizePathKey } from '../pathUtils';
@@ -222,6 +225,25 @@ export async function runCourseTraceCase(
     services.output.appendLine(`外部中断目标 PC: ${interruptSchedule.map((pc) => `0x${(pc >>> 0).toString(16)}`).join(', ')}`);
   }
   const probe = resolveCaseProbeMetadataFromCase(asmCase);
+  const haltPc = manifestMachineCodeOf(asmCase.manifest)?.haltPc
+    ?? (probe && asmCase.manifest.version === 1 && dump.image ? findCourseHaltPc(dump.image, 'P7') : undefined);
+  if (haltPc === undefined || !Number.isSafeInteger(haltPc)) {
+    return failedCase(item, 'assemble', '测试中止：最终导出的用户 .text 段未记录已验证的标准停机 PC', asmCase.machineCode, undefined, asmCase);
+  }
+  if (!dump.image) {
+    return failedCase(item, 'assemble', '测试中止：汇编器未返回权威程序映像（ProgramImage）', asmCase.machineCode, undefined, asmCase);
+  }
+  const imagePolicyIssues = pipeline.validateProgram(profile, dump.image, haltPc);
+  if (imagePolicyIssues.length) {
+    return failedCase(
+      item,
+      'assemble',
+      `测试中止：程序映像（ProgramImage）不符合课程硬件约定：[${imagePolicyIssues[0].code}] ${imagePolicyIssues[0].message}`,
+      asmCase.machineCode,
+      undefined,
+      asmCase
+    );
+  }
   if (probe) {
     if (enginePlan.mode === 'verify-both') {
       return failedCase(
@@ -244,19 +266,26 @@ export async function runCourseTraceCase(
       simOutputFileName: simOutputFileNameForCase(item),
       simOutputUri: caseOutputMode ? asmCaseArtifactUri(asmCase, 'verilog', simOutputFileNameForCase(item)) : undefined,
       p7Probe: probe,
+      p7HaltPc: haltPc,
       simTime: courseTraceSimulationTime(p7ProbeExecutionInstructionBudget),
       nonInteractive: true,
       automaticRunSlot: options.automaticRunSlot,
       signal: options.signal
     });
-    if (!dut?.simResult?.ok || !dut.simOut) {
+    if (!dut?.simResult || !dut.simOut
+      || (!dut.simResult.ok && (!isP7ObservationLimit(dut.simResult.stopReason) || options.signal?.aborted))) {
       return failedDutCaseResult(item, asmCase, dut, undefined, options.signal);
     }
     // The runner has already persisted this exact bounded stdout as simOut. Reuse the
     // retained process text instead of reading and decoding a trace of up to 16 MiB again.
-    const simText = dut.simResult.stdout;
+    const limited = !dut.simResult.ok;
+    const raw = dut.simResult.stdout;
+    const simText = limited ? raw.slice(0, raw.lastIndexOf('\n') + 1) : raw;
     const simEvents = parseSimOutput(simText);
-    const probeResult = checkP7Probe(simText, simEvents, probe);
+    const probeResult = concludeP7Probe(checkP7Probe(simText, simEvents, probe, dump.image), simText, haltPc, limited);
+    if (limited && !probeResult.failures.length) {
+      return failedDutCaseResult(item, asmCase, dut, undefined, options.signal);
+    }
     const uncovered = probeResult.failures.length === 0 && probeResult.coverage?.find(item => !item.covered);
     return {
       asm: asm.fsPath,
@@ -305,24 +334,6 @@ export async function runCourseTraceCase(
     manifestSource.kind === 'builtin',
     machineCodeText
   );
-  const haltPc = manifestMachineCodeOf(asmCase.manifest)?.haltPc;
-  if (haltPc === undefined || !Number.isSafeInteger(haltPc)) {
-    return failedCase(item, 'assemble', '测试中止：最终导出的用户 .text 段未记录已验证的标准停机 PC', asmCase.machineCode, undefined, asmCase);
-  }
-  if (!dump.image) {
-    return failedCase(item, 'assemble', '测试中止：汇编器未返回权威程序映像（ProgramImage）', asmCase.machineCode, undefined, asmCase);
-  }
-  const imagePolicyIssues = pipeline.validateProgram(profile, dump.image, haltPc);
-  if (imagePolicyIssues.length) {
-    return failedCase(
-      item,
-      'assemble',
-      `测试中止：程序映像（ProgramImage）不符合课程硬件约定：[${imagePolicyIssues[0].code}] ${imagePolicyIssues[0].message}`,
-      asmCase.machineCode,
-      undefined,
-      asmCase
-    );
-  }
   if (!automatic) {
     services.output.appendLine('参考引擎已设置执行步数上限，并要求验证标准停机尾');
   }
@@ -476,6 +487,7 @@ export async function runCourseTraceCase(
     simOutputFileName: simOutputFileNameForCase(item),
     simOutputUri: caseOutputMode ? asmCaseArtifactUri(asmCase, 'verilog', simOutputFileNameForCase(item)) : undefined,
     interruptSchedule,
+    ...(profile === 'P7' ? { p7HaltPc: haltPc } : {}),
     simTime: courseTraceSimulationTime(maxSteps),
     nonInteractive: true,
     automaticRunSlot: options.automaticRunSlot,
@@ -500,7 +512,8 @@ export async function runCourseTraceCase(
       asmCase.machineCode, oracle.outputFile, asmCase);
   }
 
-  if (!diff.summary.oracleEvents || !diff.summary.dutEvents) {
+  const haltObserved = profile === 'P7' && observedP7Halt(simText, haltPc);
+  if (!haltObserved && (!diff.summary.oracleEvents || !diff.summary.dutEvents)) {
     const emptyTraceMessage = !diff.summary.oracleEvents && !diff.summary.dutEvents
       ? '参考结果与待测 CPU 均无可解析的写回事件，现有观测结果无法判定 CPU 是否实际执行了程序'
       : '参考结果与待测 CPU 中有一方没有可解析的写回事件';
@@ -523,19 +536,24 @@ export async function runCourseTraceCase(
     };
   }
 
+  const firstDiff = storeDifference ?? (diff.matched ? undefined : firstTraceDiffSnapshot(diff));
+  const haltUnobserved = profile === 'P7' && !haltObserved
+    && (!firstDiff || firstDiff.status === 'oracle-only');
   return {
     asm: asm.fsPath,
     stdin: item.stdin?.fsPath,
     ...caseResultFields(asmCase),
-    status: diff.matched && !storeDifference ? 'passed' : 'failed',
+    status: haltUnobserved ? 'error' : diff.matched && !storeDifference ? 'passed' : 'failed',
     stage: 'compare',
-    message: storeDifference?.reason ?? diffMessage(diff),
+    message: haltUnobserved
+      ? `未覆盖：在观测预算内未看到宏观 PC 完成 0x${haltPc.toString(16)} 处的停机循环`
+      : storeDifference?.reason ?? diffMessage(diff),
     machineCode: asmCase.machineCode.fsPath,
     oracleOut: oracle.outputFile.fsPath,
     dutOut: dut.simOut.fsPath,
     dutBackend: dut.backend,
     firstDiffIndex: diff.firstDiffIndex >= 0 ? diff.firstDiffIndex : undefined,
-    firstDiff: storeDifference ?? firstTraceDiffSnapshot(diff),
+    firstDiff,
     oracleEvents: diff.summary.oracleEvents,
     dutEvents: diff.summary.dutEvents,
     matchedEvents: diff.summary.matchedEvents,
@@ -566,20 +584,22 @@ function failedDutCaseResult(
   oracleOutput: vscode.Uri | undefined,
   signal: AbortSignal | undefined
 ): NeutralCourseTraceCaseResult {
-  const failure = verilogSimulationFailure(
-    dut,
-    workspaceFolderFor(item.asm)?.uri.fsPath
-  );
+  const workspaceRoot = workspaceFolderFor(item.asm)?.uri.fsPath;
+  const contractFailure = privateDmStoreContractFailure(dut, workspaceRoot);
+  const failure = contractFailure ?? verilogSimulationFailure(dut, workspaceRoot);
+  const diagnosis = verilogSimulationFailureMessage(failure, dut?.backend);
   return {
     ...failedCase(
       item,
       'dut',
-      `测试中止：${verilogSimulationFailureMessage(failure, dut?.backend)}`,
+      contractFailure ? diagnosis : `测试中止：${diagnosis}`,
       asmCase.machineCode,
       oracleOutput,
       asmCase,
       engineRunWasCancelled(verilogSimulationTerminalResult(dut), signal)
     ),
+    ...(contractFailure ? { status: 'failed' } : {}),
+    ...(dut?.simOut ? { dutOut: dut.simOut.fsPath } : {}),
     ...(dut?.backend ? { dutBackend: dut.backend } : {}),
     dutFailure: failure
   };

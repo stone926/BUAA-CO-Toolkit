@@ -1,12 +1,14 @@
 export type P7StressMode = 'anchor' | 'probe' | 'hybrid' | 'off';
 export type P7ProbeReturnVariant = 'direct' | 'load-jr' | 'branch-delay' | 'jal-delay' | 'mdu';
 export type P7ProbeShard = 'all' | 'core' | 'timer' | 'mmio' | 'priority' | 'mdu' | 'hazard'
-  | 'return' | 'special-priority' | 'special-mdu' | 'special-hazard';
+  | 'return' | 'reset' | 'architecture' | 'im-boundaries' | 'special-priority' | 'special-mdu' | 'special-hazard';
 export type P7ProbeScope = 'standard' | 'special-timer-exl';
 export type P7ProbeScenarioKind = 'external' | 'timer0' | 'timer1' | 'adel' | 'ades' | 'syscall' | 'ri' | 'ov' | 'internal';
 
 export interface P7ProbeExpectedRecord {
   expectedIpMask: number;
+  /** Architecturally visible SR before entry. The checker sets EXL for the handler sample. */
+  statusBeforeException?: number;
   /** Alternative exact Cause.IP values when the source is architecturally pulse-shaped. */
   allowedIpMasks?: number[];
   expectedExcCode?: number;
@@ -27,6 +29,28 @@ export interface P7ProbeCommitExpectation {
   target: number;
   value: number;
 }
+
+export interface P7ProbeRegisterSample {
+  pc: number;
+  register: number;
+}
+
+export type P7ProbeTimerObservation = {
+  kind: 'disable-reload';
+  activeCount: [P7ProbeRegisterSample, P7ProbeRegisterSample];
+  stoppedCount: [P7ProbeRegisterSample, P7ProbeRegisterSample];
+  reloadedCount: P7ProbeRegisterSample;
+} | {
+  kind: 'mode1';
+  count: P7ProbeRegisterSample;
+  stoppedCount?: P7ProbeRegisterSample;
+  ipSampling?: { sample: P7ProbeRegisterSample; attempts: number; exhausted: P7ProbeCommitExpectation };
+  firstCapture: {
+    statusPc: number;
+    causePc: number;
+    epcPc: number;
+  };
+};
 
 export interface P7ProbeHandlerCommitExpectation {
   pc: number;
@@ -51,6 +75,7 @@ export interface P7ProbeScenario {
   triggerPc?: number;
   waitPc?: number;
   timerPreset?: number;
+  timerObservation?: P7ProbeTimerObservation;
   armAddress?: number;
   armValue?: number;
   externalDelayCycles?: number;
@@ -86,7 +111,8 @@ export interface P7ProbeMetadata {
     variant: P7ProbeReturnVariant;
     mainCommits: P7ProbeCommitExpectation[];
     handlerCommits: P7ProbeHandlerCommitExpectation[];
-    ackPc: number;
+    /** Historical metadata. The IG port has no instruction-PC association. */
+    ackPc?: number;
     /** A jal retried because BD=1 may legitimately write the same link more than once. */
     replayedLink?: P7ProbeCommitExpectation;
   };

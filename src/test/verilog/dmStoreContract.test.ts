@@ -5,10 +5,14 @@ import * as path from 'path';
 import { spawnSync } from 'child_process';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { TextDocument } from 'vscode-languageserver-textdocument';
+import { URI } from 'vscode-uri';
 import { buildTestbench, parseModules } from '../../language/verilog/parser';
 import { parseSimOutput } from '../../language/verilog/traceParser';
 import { renderResourceTemplate } from '../../templates/templateRegistry';
 import { createVerilogSimulationFailure, verilogSimulationFailureMessage } from '../../verilog/simulationDiagnostic';
+import { privateDmStoreContractFailure } from '../../verilog/dmStoreContractDiagnostic';
+import type { TestbenchResolution } from '../../verilog/testbenchResolver';
+import { automaticRuntimeTestbenchName, generatedRuntimeTestbenchText, p7AutoRuntimeTestbenchName } from '../../verilogSimulationFiles';
 
 const extensionRoot = path.resolve(__dirname, '../../..');
 const executableSuffix = process.platform === 'win32' ? '.exe' : '';
@@ -87,6 +91,7 @@ const vectors: StoreVector[] = [
 
 describe.skipIf(!runtimeAvailable)('public DM store contract with bundled Icarus', () => {
   let workDir: string;
+  const privateTestbenches = new Map<string, TestbenchResolution>();
 
   beforeAll(() => {
     workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'co-dm-store-contract-'));
@@ -96,25 +101,31 @@ describe.skipIf(!runtimeAvailable)('public DM store contract with bundled Icarus
       const source = scriptedDut(profile);
       fs.writeFileSync(path.join(workDir, `${profile}.v`), source);
       const document = TextDocument.create(`${profile}.v`, 'verilog', 1, source);
-      const checked = buildTestbench(parseModules(document, source)[0], 'contract_tb', { profile });
+      const moduleName = profile === 'P7' ? p7AutoRuntimeTestbenchName : automaticRuntimeTestbenchName;
+      const checked = buildTestbench(parseModules(document, source)[0], moduleName, { profile });
       expect(checked).not.toContain('uut.');
       const contract = renderResourceTemplate('verilog/dm_store_contract.v', {
         activeCondition: '!reset && ', userTextBase: "32'h3000", instructionMemoryWords: 4096, dataMemoryBytes: 12288,
         customInstructionPredicate: "1'b0"
       });
       expect(checked).toContain(contract);
-      const custom = buildTestbench(parseModules(document, source)[0], 'contract_tb', { profile,
+      const custom = buildTestbench(parseModules(document, source)[0], moduleName, { profile,
         customInstructionEncodings: [{ mask: 0xfc000000, value: 0xfc000000 }]
       });
-      const override = buildTestbench(parseModules(document, source)[0], 'contract_tb', { profile,
+      const override = buildTestbench(parseModules(document, source)[0], moduleName, { profile,
         customInstructionEncodings: [{ mask: 0xfc000000, value: 0xa0000000 }]
       });
       for (const [suffix, testbench] of [['checked', checked], ['original', checked.replace(contract, '')], ['custom', custom], ['override', override]]) {
         const file = `${profile}-${suffix}`;
-        fs.writeFileSync(path.join(workDir, `${file}.v`), testbench);
+        const tbPath = path.join(workDir, suffix === 'checked' ? `${moduleName}.v` : `${file}.v`);
+        const generatedText = generatedRuntimeTestbenchText(testbench);
+        fs.writeFileSync(tbPath, generatedText);
+        if (suffix === 'checked') privateTestbenches.set(profile, {
+          moduleName, kind: profile === 'P7' ? 'p7-auto' : 'generated', generatedText, generatedUri: URI.file(tbPath)
+        });
         const result = spawnSync(compiler, [
-          '-B', path.join(runtimeRoot, 'lib', 'ivl'), '-g2005', '-s', 'contract_tb',
-          '-o', `${file}.vvp`, `${profile}.v`, `${file}.v`
+          '-B', path.join(runtimeRoot, 'lib', 'ivl'), '-g2005', '-s', moduleName,
+          '-o', `${file}.vvp`, `${profile}.v`, tbPath
         ], { cwd: workDir, encoding: 'utf8', timeout: testToolTimeoutMs });
         expect(result.error).toBeUndefined();
         expect(result.status, result.stderr).toBe(0);
@@ -171,12 +182,19 @@ describe.skipIf(!runtimeAvailable)('public DM store contract with bundled Icarus
         if (vector.failure) {
           expect(result.status).not.toBe(0);
           expect(result.stdout).toContain(`CO_DM_CONTRACT ${vector.failure}`);
-          const failure = createVerilogSimulationFailure('iverilog', 'simulate', {
+          const simResult = {
             ok: false, exitCode: result.status, commandLine: simulator, cwd: workDir,
             stdout: result.stdout, stderr: result.stderr, timedOut: false, stopped: false
-          }, workDir);
+          };
+          const failure = createVerilogSimulationFailure('iverilog', 'simulate', simResult, workDir);
           expect(verilogSimulationFailureMessage(failure, 'iverilog')).toContain(`CO_DM_CONTRACT ${vector.failure}`);
           expect(failure.diagnostic?.message.toLowerCase()).toContain(`addr=${vector.address}`);
+          expect(privateDmStoreContractFailure({
+            testbench: privateTestbenches.get(profile)!,
+            compileResult: { ...simResult, ok: true, exitCode: 0 }, simResult
+          }, workDir)).toMatchObject({
+            phase: 'simulate', reason: 'dm-store-contract', exitCode: 1, diagnostic: failure.diagnostic
+          });
         } else {
           expect(result.status, result.stdout + result.stderr).toBe(0);
           expect(result.stdout).not.toContain('CO_DM_CONTRACT');

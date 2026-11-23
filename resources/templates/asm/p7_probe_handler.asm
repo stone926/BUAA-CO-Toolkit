@@ -13,23 +13,14 @@ _co_probe_handler:
     andi $26, $22, ${probeFlagRepeatTimerCaptured}
     bne $26, $0, _co_probe_check_repeat_timer_fresh
     nop
+_co_probe_capture_first_timer_irq:
     sw $25, ${stateFirstStatusHex}($0)
     sw $24, ${stateFirstCauseHex}($0)
     sw $23, ${stateFirstEpcHex}($0)
     ori $22, $22, ${probeFlagRepeatTimerCaptured}
     sw $22, ${stateFlagsHex}($0)
-    lw $27, ${stateKindHex}($0)
-    ori $26, $0, ${probeKindTimer1}
-    beq $27, $26, _co_probe_mask_repeat_timer1
-    nop
-    ori $26, $0, 3
-    sw $26, ${timer0CtrlHex}($0)
-    beq $0, $0, _co_probe_resume_repeat_timer_followup
-    nop
-_co_probe_mask_repeat_timer1:
-    ori $26, $0, 3
-    sw $26, ${timer1CtrlHex}($0)
-_co_probe_resume_repeat_timer_followup:
+    andi $26, $25, 0xfffe
+    mtc0 $26, $12
     lw $23, ${stateDonePcHex}($0)
     mtc0 $23, $14
     eret

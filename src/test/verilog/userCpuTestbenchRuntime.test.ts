@@ -88,6 +88,94 @@ describe.skipIf(!runtimeAvailable)('generated user CPU testbench with bundled Ic
       }
     });
   }
+
+  it('consumes an IG ACK only while IRQ is pending and never attributes a held enable to an AdES PC', () => {
+    const ports = syntheticDut('P7').split('    assign m_data_addr')[0];
+    const dut = `${ports}
+    reg [31:0] ig_addr = 0;
+    reg [3:0] ig_mask = 0;
+    assign m_data_addr = 0, m_data_wdata = 0, m_data_byteen = 0;
+    assign m_inst_addr = 32'h3000, macroscopic_pc = 32'h3040;
+    assign w_grf_we = 0, w_grf_addr = 0, w_grf_wdata = 0, w_inst_addr = 0;
+    assign m_int_addr = ig_addr, m_int_byteen = ig_mask;
+    initial begin
+        i_inst_addr = 32'h3000;
+        @(negedge reset);
+        #1 ig_addr = 32'h7f24; ig_mask = 4'hf;
+        #4 ig_addr = 32'h7f20; ig_mask = 4'h1;
+        #2 ig_mask = 0;
+        #2 ig_mask = 4'bx000;
+        #4 ig_addr = {30'h1fc8, 2'bxz}; ig_mask = 4'bx001;
+        #8 $finish;
+    end
+endmodule
+`;
+    const module = parseModules(TextDocument.create('ades.v', 'verilog', 1, dut), dut)[0];
+    const tb = buildTestbench(module, 'mips_tb', { profile: 'P7', finishDelay: false,
+      p7Probe: { scenarios: [{ id: 1, kind: 'external', waitPc: 0x3040 }, { id: 2, kind: 'ades', victimPc: 0x3000 }] } });
+    fs.writeFileSync(path.join(workDir, 'ades-dut.v'), dut);
+    fs.writeFileSync(path.join(workDir, 'ades-tb.v'), tb);
+    fs.writeFileSync(path.join(workDir, 'code.txt'), 'ac000001\n');
+    const runtime = resolveIverilogRuntime(extensionRoot);
+    const environment = buildIverilogEnvironment(runtime);
+    const options = { cwd: workDir, env: environment, encoding: 'utf8', timeout: testToolTimeoutMs } as const;
+    const compile = spawnSync(compiler, [...buildIverilogRuntimeArgs(runtime), '-g2005', '-s', 'mips_tb',
+      '-o', 'ades.vvp', 'ades-dut.v', 'ades-tb.v'], options);
+    expect(compile.status, compile.stdout + compile.stderr).toBe(0);
+    const run = spawnSync(simulator, ['-N', 'ades.vvp'], options);
+    expect(run.status, run.stdout + run.stderr).toBe(0);
+    expect(run.stdout.match(/^CO_P7_PROBE external_ack.*$/gm)).toEqual(['CO_P7_PROBE external_ack scenario=1 time=36']);
+    expect(run.stdout).not.toContain('invalid_store_effect');
+  });
+});
+
+describe.skipIf(!runtimeAvailable)('P7 automatic interrupt schedule and completion', () => {
+  it('observes targets in dynamic order, suppresses retries, and requires a full halt traversal', () => {
+    const runtime = resolveIverilogRuntime(extensionRoot);
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'co-p7-anchor-'));
+    try {
+      const dut = syntheticDut('P7').split('    assign m_data_addr')[0] + `
+    reg [31:0] pc;
+    reg ack;
+    assign macroscopic_pc = pc, m_int_addr = 32'h7f20, m_int_byteen = {3'b0,ack};
+    assign m_data_addr = 0, m_data_byteen = 0, m_data_wdata = 0, m_inst_addr = 0;
+    assign w_grf_we = 0, w_grf_addr = 0, w_grf_wdata = 0, w_inst_addr = 0;
+    task visit;
+        input [31:0] address; input respond; input expect_irq;
+        begin
+            @(posedge clk); #1; pc = address; ack = respond;
+            @(negedge clk); #1; if (interrupt !== expect_irq) $fatal(1, "incorrect IRQ");
+        end
+    endtask
+    initial begin
+        pc = 32'h3000; i_inst_addr = 32'h3040; ack = 0;
+        @(negedge reset);
+        visit('h3010,0,1); visit('h4180,1,0); visit('h3010,0,0);
+        visit('h3020,0,1); visit('h4180,1,0); visit('h3020,0,0);
+        repeat (7) visit('h3040,0,0);
+        visit('h3044,0,0); visit('h3030,0,0);
+        visit('h3040,0,0); repeat (4) visit('h3044,0,0);
+        $display("READY_FOR_HALT");
+        visit('h3040,0,0); $fatal(1, "halt loop not observed");
+    end
+endmodule`;
+      const module = parseModules(TextDocument.create('dut.v', 'verilog', 1, dut), dut)[0];
+      fs.writeFileSync(path.join(directory, 'dut.v'), dut);
+      fs.writeFileSync(path.join(directory, 'tb.v'), buildTestbench(module, 'tb', {
+        profile: 'P7', interruptSchedule: [0x3020, 0x3010, 0x3020]
+      }));
+      fs.writeFileSync(path.join(directory, 'code.txt'), '00000000\n');
+      const options = { cwd: directory, env: buildIverilogEnvironment(runtime), encoding: 'utf8', timeout: testToolTimeoutMs } as const;
+      const compiled = spawnSync(runtime.iverilogPath, [...buildIverilogRuntimeArgs(runtime), '-g2005', '-s', 'tb',
+        '-o', 'case.vvp', 'dut.v', 'tb.v'], options);
+      expect(compiled.status, compiled.stderr).toBe(0);
+      const run = spawnSync(runtime.vvpPath, ['-N', 'case.vvp', '+co_halt_pc=3040'], options);
+      expect(run.status, run.stdout + run.stderr).toBe(0);
+      expect(run.stdout).toMatch(/READY_FOR_HALT\r?\nCO_P7_HALT pc=00003040/);
+    } finally {
+      fs.rmSync(directory, { recursive: true, force: true });
+    }
+  });
 });
 
 function resetProbeDut(profile: 'P4' | 'P5' | 'P6' | 'P7'): string {

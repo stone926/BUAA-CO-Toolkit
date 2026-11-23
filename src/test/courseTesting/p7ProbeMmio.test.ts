@@ -7,6 +7,8 @@ import { Random, hashSeed } from '../../courseTesting/random';
 import { p7UserTextBaseAddress } from '../../courseTesting/p7Hardware';
 import { parseSimOutput } from '../../language/verilog/traceParser';
 import { assembleCourseSource } from '../../mips/core/assembler/assembler';
+import { courseInstructionImageHexText } from '../../mips/core/assembler/artifacts';
+import { createLegacyProgramImage } from '../../mips/replay/programImage';
 import { CourseTimerDevice, TimerState } from '../../mips/core/devices/timer';
 import { executeProgramForService } from '../../mips/core/machine/executeService';
 
@@ -105,6 +107,32 @@ describe('P7 Timer MMIO exception probes', () => {
     }
   });
 
+  it('rejects the wrong auxiliary handler stores even when both Timer samples match', () => {
+    const { generated, trace, checked, image } = executeExceptionProbe('ades');
+    const probe = generated.probe!;
+    const scenario = probe.scenarios.find(item => item.variant === 'timer0-ctrl-byte-store')!;
+    const record = checked.records.find(item => item.scenarioId === scenario.id)!;
+    expect([record.aux0, record.aux1]).toEqual([0, 0]);
+    const first = probe.logBase + record.index * probe.recordWords * 4 + 24;
+    const legacy = createLegacyProgramImage(courseInstructionImageHexText(image), []);
+    for (const code of [image, legacy]) {
+      expect(checkP7Probe(trace, parseSimOutput(trace), probe, code).failures).toEqual([]);
+      for (const [label, distance] of [['_co_probe_internal_aux_zero', 4], ['_co_probe_internal_aux_timer1_ctrl', 8]] as const) {
+        const differentPathPc = image.symbols.find(symbol => symbol.name === label)!.value!;
+        const corrupted = parseSimOutput(trace).map(event => {
+          if (event.kind !== 'dm') return event;
+          const address = Number.parseInt(event.target, 16);
+          if (address === first) return { ...event, pc: hex8(differentPathPc) };
+          if (address === first + 4) return { ...event, pc: hex8(differentPathPc + distance) };
+          return event;
+        });
+        expect(checkP7Probe(trace, corrupted, probe, code).failures).toContainEqual(expect.objectContaining({
+          scenarioId: scenario.id, observed: true, message: expect.stringContaining('辅助字段来自错误')
+        }));
+      }
+    }
+  });
+
   it.each(countStoreCases)('stabilizes $variant from every official timer state before reading Count', (testCase) => {
     const plan = planInternalExceptionVictim('ades', testCase.variant, new Random(hashSeed(testCase.variant)), 'done');
     const stopIndex = plan.instructions.indexOf(`sw $0, 0x${(testCase.address - 8).toString(16)}($0)`);
@@ -164,9 +192,9 @@ function executeExceptionProbe(kind: 'adel' | 'ades') {
   });
   expect(executed).toMatchObject({ status: 'halted', haltReason: 'course-halt-loop' });
   const trace = (executed.trace ?? []).join('\n');
-  const checked = checkP7Probe(trace, parseSimOutput(trace), generated.probe!);
+  const checked = checkP7Probe(trace, parseSimOutput(trace), generated.probe!, assembled.image);
   expect(checked.failures).toEqual([]);
-  return { generated, trace, checked };
+  return { generated, trace, checked, image: assembled.image! };
 }
 
 function scenarioBlock(text: string, id: number): string {

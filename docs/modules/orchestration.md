@@ -1,4 +1,4 @@
-# orchestration | src/ | 66 files
+# orchestration | src/ | 67 files
 
 扩展宿主层：生命周期、命令注册、配置读取、Profile 推断、UI、工具链、MIPS/Verilog/Logisim 操作命令与用例存储。**不含**语言智能逻辑（在 `src/language/` 的 LSP Server 端）。这一层只做 VS Code glue，业务逻辑必须落在下面的领域模块里。
 
@@ -43,7 +43,7 @@
 - `verilog/automaticCompilePool.ts` — 每工作区 8 个稳定共享编译目录，按私有 TB 内容分配；VVP 读租约阻止目录复用与同 TB 的源变化重编译覆盖，等待/取消可释放，空闲工作区池有界
 - `verilog/iverilogCompileCache.ts` / `verilog/iverilogCompileCacheIo.ts` — 每 workspace/runtime-directory 单条 content-verified 编译缓存（8-workspace LRU，每工作区最多 9 条），依赖闭包与 VVP 产物每次命中按内容复验，目录级失效互不驱逐
 - `verilog/iverilogIncludeResolution.ts` — literal `include` 纯解析与 shadow 负依赖验证，不可验证时 fail-open
-- `verilog/iverilogDiagnostics.ts` / `verilog/simulationDiagnostic.ts` — stderr 解析与结构化失败报告（工作区相对路径、脱敏、限长）
+- `verilog/iverilogDiagnostics.ts` / `verilog/simulationDiagnostic.ts` / `verilog/dmStoreContractDiagnostic.ts` — stderr 解析与结构化失败报告（工作区相对路径、脱敏、限长）
 - `verilog/simulationRunner.ts` — 通用仿真入口，固定使用 bundled Icarus
 - `verilog/simulationInputs.ts` — 机器码源定位、复制与 `code.txt` alias
 - `verilog/testbenchResolver.ts` — 三种 TB 来源（私有课程 TB / `.co/tb` 模板 / 自建 `*_tb.v`、`*_testbench.v`、`tb.v` 或 `testbench.v`），各阶段都不回退私有 TB

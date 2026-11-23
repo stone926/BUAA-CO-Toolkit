@@ -14,9 +14,11 @@ export const p7ProbeFlagRepeatTimerCaptured = 1 << 10;
 export const p7ProbeFlagRepeatTimerFreshArmed = 1 << 11;
 
 /**
- * Written only when the Mode-1 protocol observes a stale timer request before
- * its software follow-up has explicitly armed the fresh period.  The probe
- * checker treats this value as an unconditional failure marker.
+ * The repeat handler writes this when it is entered again before the next
+ * interrupt is armed. Historical probes also use it for an invalid read-back.
  */
 export const p7ProbeMode1FailureMarker = 0xbad1_0001;
 export const p7ProbeMode1DeassertMarkerBase = 0x7100;
+export const p7ProbeMode1UnobservedMarkerBase = 0x7200;
+export const p7ProbeTimerDisablePreset = 0x4000_0000;
+export const p7ProbeTimerReloadPreset = 0x8000_0000;

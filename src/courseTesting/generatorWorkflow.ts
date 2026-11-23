@@ -332,6 +332,9 @@ function builtinGenerationSpecs(setup: BuiltinGeneratorRunSetup): BuiltinGenerat
   const ordered = [
     ...probes.filter(spec => !isSpecialTimerExlShard(spec.probeShard)),
     ...returnProbes,
+    ...(['architecture', 'im-boundaries', 'reset'] as const).map(probeShard => ({
+      mode: 'probe' as const, probeShard
+    })),
     ...probes.filter(spec => isSpecialTimerExlShard(spec.probeShard))
   ];
   return setup.p7StressMode === 'hybrid'

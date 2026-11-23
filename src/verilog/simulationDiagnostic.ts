@@ -7,6 +7,7 @@ export type VerilogSimulationFailurePhase = 'prepare' | 'compile' | 'simulate' |
 export type VerilogSimulationFailureReason =
   | 'unavailable'
   | 'exit'
+  | 'dm-store-contract'
   | 'timeout'
   | 'cancelled'
   | 'output-limit'
@@ -109,6 +110,9 @@ export function verilogSimulationFailureMessage(
       break;
     case 'exit':
       summary = `${tool} ${operation}失败${normalized.exitCode === undefined ? '' : `（退出码 ${normalized.exitCode}）`}`;
+      break;
+    case 'dm-store-contract':
+      summary = '待测 CPU 违反 DM 写接口约定';
       break;
   }
   return normalized.diagnostic
@@ -261,6 +265,7 @@ function validPhase(value: string): value is VerilogSimulationFailurePhase {
 function validReason(value: string): value is VerilogSimulationFailureReason {
   return value === 'unavailable'
     || value === 'exit'
+    || value === 'dm-store-contract'
     || value === 'timeout'
     || value === 'cancelled'
     || value === 'output-limit'

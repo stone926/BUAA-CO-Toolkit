@@ -21,9 +21,11 @@ function run(variant: P7ProbeReturnVariant, second: 'entry' | 'delay' | 'none' =
       ...(second === 'none' ? [] : [{ victimPc: second === 'delay' ? first.triggerPc! : first.allowedEpc[0], occurrence: 2 }])
     ] });
   expect(executed.status, JSON.stringify(executed.diagnostic)).toBe('halted');
+  const secondPc = (second === 'delay' ? first.triggerPc! : first.allowedEpc[0]).toString(16).padStart(8, '0');
+  const eretPc = generated.probe!.scenarios[1].afterReturnOf!.eretPc.toString(16).padStart(8, '0');
   const diagnostics = ['external_arm scenario=1', 'external_raise scenario=1', 'external_ack scenario=1',
-    'return_ack_store',
-    ...(second === 'none' ? [] : ['return_seen scenario=2', 'return_exit scenario=2', 'external_raise scenario=2', 'external_ack scenario=2', 'return_ack_store'])]
+    ...(second === 'none' ? [] : [`return_seen scenario=2 pc=${eretPc}`, `return_exit scenario=2 pc=${secondPc}`,
+      `external_raise scenario=2 pc=${secondPc}`, 'external_ack scenario=2'])]
     .map(text => `CO_P7_PROBE ${text}`).join('\n');
   return { generated, executed, diagnostics, events: parseSimOutput(executed.trace!.join('\n')) };
 }
@@ -87,6 +89,47 @@ describe('real handler return boundary probes', () => {
     expect(result.passed).toBe(false);
   });
 
+  it('recognizes an illegal raw return PC even when the second request did not fire', () => {
+    const fixture = run('direct', 'none');
+    const metadata = fixture.generated.probe!;
+    const eret = metadata.scenarios[1].afterReturnOf!.eretPc.toString(16).padStart(8, '0');
+    const seen = `${fixture.diagnostics}\nCO_P7_PROBE return_seen scenario=2 pc=${eret}`;
+    expect(checkP7Probe(seen, fixture.events, metadata).failures).toEqual([]);
+    for (const pc of ['00003000', '000041c8', '0000304x', '0000304z', '00003045']) {
+      const invalid = `${seen}\nCO_P7_PROBE return_exit scenario=2 pc=${pc}`;
+      expect(checkP7Probe(invalid, fixture.events, metadata).failures
+        .some(failure => failure.observed && failure.message.includes('非法返回地址'))).toBe(true);
+    }
+  });
+
+  it('binds raw second-request PC to EPC and the actual delay slot, including old TB output', () => {
+    const fixture = run('direct');
+    const metadata = fixture.generated.probe!;
+    const historical = fixture.diagnostics.replace(/(external_raise scenario=2) pc=[0-9a-f]+/, '$1');
+    expect(checkP7Probe(historical, fixture.events, metadata).passed).toBe(true);
+    const badPc = fixture.diagnostics.replace(/(external_raise scenario=2) pc=[0-9a-f]+/, '$1 pc=00003000');
+    expect(checkP7Probe(badPc, fixture.events, metadata).failures
+      .some(failure => failure.message.includes('原始宏观 PC'))).toBe(true);
+    const cause = metadata.returnBoundary!.handlerCommits.find(commit => commit.kind === 'grf' && commit.value === 'cause')!;
+    const causeReads = fixture.events.filter(event => parseInt(event.pc, 16) === cause.pc);
+    const wrongBd = fixture.events.map(event => event === causeReads[1]
+      || (event.kind === 'dm' && parseInt(event.target, 16) === metadata.logBase + 32 + 16)
+      ? { ...event, value: '80001000' } : event);
+    expect(checkP7Probe(fixture.diagnostics, wrongBd, metadata).failures
+      .some(failure => failure.message.includes('实际分支延迟槽'))).toBe(true);
+  });
+
+  it('rejects unknown architectural words whose known hexadecimal prefix resembles the expected value', () => {
+    const fixture = run('direct');
+    const metadata = fixture.generated.probe!;
+    const donePc = metadata.scenarios[1].donePc;
+    for (const value of ['0000002x', '0000002z', '100000002']) {
+      const events = fixture.events.map(event => parseInt(event.pc, 16) === donePc ? { ...event, value } : event);
+      expect(checkP7Probe(fixture.diagnostics, events, metadata).failures
+        .some(failure => failure.message.includes(`主程序在 PC 0x${donePc.toString(16)}`))).toBe(true);
+    }
+  });
+
   it('rejects protocol reversal, out-of-path EPC and unplanned partial record writes', () => {
     const fixture = run('direct');
     const metadata = fixture.generated.probe!;
@@ -98,8 +141,13 @@ describe('real handler return boundary probes', () => {
     const partial = { ...fixture.events[0], pc: '00004000', kind: 'dm' as const,
       target: (metadata.logBase + 64).toString(16), value: 'c0a70001' };
     expect(checkP7Probe(fixture.diagnostics, [...fixture.events, partial], metadata).passed).toBe(false);
-    expect(checkP7Probe(fixture.diagnostics + '\nCO_P7_PROBE return_ack_store', fixture.events, metadata).passed).toBe(false);
-    expect(checkP7Probe(fixture.diagnostics + '\nCO_P7_PROBE invalid_store_effect source=interrupt_generator', fixture.events, metadata).passed).toBe(false);
+    const early = fixture.diagnostics + '\nCO_P7_PROBE external_ack_early scenario=1 time=100';
+    expect(checkP7Probe(early, fixture.events, metadata).failures).toContainEqual(expect.objectContaining({
+      scenarioId: 1, observed: true, message: expect.stringContaining('完成 DM 记录之前')
+    }));
+    const oldLevelObservations = fixture.diagnostics + '\nCO_P7_PROBE return_ack_store'
+      + '\nCO_P7_PROBE invalid_store_effect source=interrupt_generator';
+    expect(checkP7Probe(oldLevelObservations, fixture.events, metadata).passed).toBe(true);
   });
 
   it('binds handler fields and all register writes to their own instruction PCs', () => {

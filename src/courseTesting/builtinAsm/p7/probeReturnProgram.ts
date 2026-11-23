@@ -40,6 +40,7 @@ export function generateP7ReturnProbe(options: BuiltinAsmGeneratorOptions): Buil
   };
   const poison = () => { forbidden.push(main.pc()); main.emit(`sw $0, ${p7ProbeEretPoisonAddress}($0)`); };
   main.raw('# Built-in BUAA CO P7 return-boundary probe');
+  if (options.probeShard === 'reset') main.raw('# The first armed IRQ coincides with synchronous reset. The program restarts before the two-interrupt check.');
   main.raw('# scope: standard; real interrupt handler; public macroscopic-PC return transition');
   main.raw(`# variant: ${variant}`);
   main.raw(`# seed: ${seed}`);
@@ -139,7 +140,7 @@ export function generateP7ReturnProbe(options: BuiltinAsmGeneratorOptions): Buil
   recordStore(27, 8, p7ProbeKindExternal);
   recordStore(25, 12, 'status'); recordStore(24, 16, 'cause'); recordStore(23, 20, 'epc');
   recordStore(0, 24, 0); recordStore(0, 28, 0);
-  const ackPc = handler.pc(); handler.emit(`sb $0, ${p7ExternalInterruptAckAddress}($0)`);
+  handler.emit(`sb $0, ${p7ExternalInterruptAckAddress}($0)`);
   handlerCommit(`addi $21, $21, ${p7ProbeRecordWords * 4}`, {
     kind: 'grf', target: 21, value: p7ProbeLogBase + p7ProbeRecordWords * 4, valueStride: p7ProbeRecordWords * 4
   });
@@ -166,8 +167,8 @@ export function generateP7ReturnProbe(options: BuiltinAsmGeneratorOptions): Buil
     seed, profile: 'P7', instructionSet: instructionSet.mnemonics,
     instructionCount: main.count(), usedInstructions: ['addi', 'ori', 'lui', 'add', 'sw', 'lw', 'sb', 'mfc0', 'mtc0', 'eret', 'beq', 'jal', 'jr', 'div', 'mfhi', 'mflo', 'nop'],
     interruptSchedule: [], mode: 'probe',
-    probe: { version: 1, shard: 'return', scope: 'standard', logBase: p7ProbeLogBase,
+    probe: { version: 1, shard: options.probeShard === 'reset' ? 'reset' : 'return', scope: 'standard', logBase: p7ProbeLogBase,
       recordWords: p7ProbeRecordWords, initialCp0, scenarios: [first, second],
-      returnBoundary: { variant, mainCommits: commits, handlerCommits, ackPc, ...(replayedLink ? { replayedLink } : {}) } }
+      returnBoundary: { variant, mainCommits: commits, handlerCommits, ...(replayedLink ? { replayedLink } : {}) } }
   };
 }

@@ -9,7 +9,7 @@ import {
   resolveBuiltinInstructionSet
 } from '../randomBody';
 import { ProgramWriter } from '../programWriter';
-import { P7ProbeCommitExpectation, P7ProbeMetadata, P7ProbeScenario, P7ProbeScenarioKind, P7ProbeShard } from '../types';
+import { P7ProbeCommitExpectation, P7ProbeMetadata, P7ProbeScenario, P7ProbeScenarioKind, P7ProbeShard, P7ProbeTimerObservation as P7TimerProtocol } from '../types';
 import {
   p7CauseExcCodeMask,
   p7CauseIpExternalMask,
@@ -88,6 +88,7 @@ import {
 import { emitInterruptPriorityScenario } from './probePriorityScenarios';
 import { emitTimerPendingWritesScenario } from './probeTimerWriteScenario';
 import { emitTimerMode1RepeatScenario } from './probeTimerMode1Scenario';
+import { emitTimerDisableReloadScenario } from './probeTimerDisableScenario';
 import { emitHazardScenario } from './probeHazardScenarios';
 import {
   ProbePaddingProfile,
@@ -147,12 +148,15 @@ export function generateP7ProbeAsmTestCase(options: BuiltinAsmGeneratorOptions):
     main.raw('# 此构造的课程官方保证范围尚未确认；单凭该场景失败不能判定课程 CPU 不合格。');
   }
   const initialCp0 = emitProbePrologue(main);
+  const handler = renderProbeHandler();
+  const firstTimerCapturePc = handlerLabelPc(handler, '_co_probe_capture_first_timer_irq');
+  const firstTimerCapture = { statusPc: firstTimerCapturePc, causePc: firstTimerCapturePc + 4, epcPc: firstTimerCapturePc + 8 };
 
   const occurrences = new Map<P7ProbeScenarioKind, number>();
   scenarioKinds.forEach((kind, index) => {
     const occurrence = occurrences.get(kind) ?? 0;
     occurrences.set(kind, occurrence + 1);
-    const scenario = emitScenario(main, index + 1, kind, occurrence, rng, padding, shard);
+    const scenario = emitScenario(main, index + 1, kind, occurrence, rng, padding, shard, firstTimerCapture);
     scenarios.push(scenario);
   });
 
@@ -185,7 +189,7 @@ export function generateP7ProbeAsmTestCase(options: BuiltinAsmGeneratorOptions):
   }
   const text = [
     ...main.render(),
-    ...renderProbeHandler()
+    ...handler
   ].join('\n') + '\n';
 
   return {
@@ -257,7 +261,8 @@ function emitScenario(
   occurrence: number,
   rng: Random,
   padding: ProbePaddingProfile,
-  shard: P7ProbeShard
+  shard: P7ProbeShard,
+  firstTimerCapture: Extract<P7TimerProtocol, { kind: 'mode1' }>['firstCapture']
 ): P7ProbeScenario {
   const variant = probeVariantAt(kind, occurrence, shard);
   writer.raw('');
@@ -288,10 +293,10 @@ function emitScenario(
     return emitExternalRetryScenario(writer, id, variant!, rng, padding);
   }
   if ((kind === 'timer0' || kind === 'timer1') && (variant === 'mode1-repeat' || variant === 'mode1-stopped')) {
-    return emitTimerMode1RepeatScenario(writer, id, kind, variant, rng, padding);
+    return emitTimerMode1RepeatScenario(writer, id, kind, variant, rng, padding, firstTimerCapture);
   }
   if ((kind === 'timer0' || kind === 'timer1') && variant === 'disable-reload') {
-    return emitTimerDisableReloadScenario(writer, id, kind, variant, rng, padding);
+    return emitTimerDisableReloadScenario(writer, id, kind, rng, padding);
   }
   if ((kind === 'timer0' || kind === 'timer1') && variant === 'pending-writes') {
     return emitTimerPendingWritesScenario(writer, id, kind, rng, padding);
@@ -405,8 +410,8 @@ function emitMaskedExternalScenario(
   emitLoadImmediate(writer, '$8', markerValue);
   const markerPc = writer.pc();
   writer.emit(`sw $8, 0x${p7ProbeMaskedInterruptMarkerAddress.toString(16)}($0)`);
-  const enableWritePc = writer.pc() + 4;
   emitEnableInterrupts(writer);
+  const firstEligiblePc = writer.pc();
   writer.emit('nop');
   writer.emit('nop');
   const waitPc = writer.pc();
@@ -425,7 +430,7 @@ function emitMaskedExternalScenario(
     variant,
     triggerPc,
     waitPc,
-    allowedEpc: pcRange(enableWritePc, waitPc),
+    allowedEpc: pcRange(firstEligiblePc, waitPc),
     armAddress: p7ProbeExternalArmAddress,
     armValue: id,
     externalDelayCycles: 0,
@@ -473,7 +478,6 @@ function emitInterruptScenario(
     emitStoreImmediate(writer, id, p7ProbeExternalArmAddress);
   }
 
-  const enableStartPc = writer.pc();
   emitEnableInterrupts(writer);
   const safeWindowStart = writer.pc();
   emitPaddingCount(writer, rng, safeWindowLength);
@@ -486,7 +490,7 @@ function emitInterruptScenario(
   emitPadding(writer, rng, padding.postMin, padding.postMax);
 
   const scenario = scenarioWithLocations(id, kind, waitPc, donePc);
-  const allowedEpc = interruptAllowedEpcs(kind, enableStartPc, safeWindowStart, waitPc);
+  const allowedEpc = kind === 'external' ? [waitPc] : pcRange(safeWindowStart, waitPc);
   const pulseIpMask = kind === 'timer0'
     ? p7CauseIpTimer0Mask
     : kind === 'timer1'
@@ -507,6 +511,7 @@ function emitInterruptScenario(
     ...scenario,
     variant,
     allowedEpc,
+    ...(kind === 'external' ? { expectedBd: false } : {}),
     timerPreset,
     armAddress: kind === 'external' ? p7ProbeExternalArmAddress : undefined,
     armValue: kind === 'external' ? id : undefined,
@@ -527,94 +532,6 @@ function timerPresetForVariant(variant: string | undefined, rng: Random): number
     return Math.max(p7ProbeTimerPresetMin, 4);
   }
   return rng.int(p7ProbeTimerPresetMin, p7ProbeTimerPresetMax);
-}
-
-/**
- * Prove that Mode 1 really starts a new period instead of merely keeping IRQ
- * asserted.  The first handler entry masks the device at CTRL (IM=0), captures
- * CP0, and redirects EPC here.  User code then observes two COUNT reloads while
- * CPU interrupts are off, re-enables the device interrupt, proves the old IP is
- * gone through Cause, and only then arms the handler to accept a fresh IRQ.
- */
-function emitTimerDisableReloadScenario(
-  writer: ProgramWriter,
-  id: number,
-  kind: 'timer0' | 'timer1',
-  variant: 'disable-reload',
-  rng: Random,
-  padding: ProbePaddingProfile
-): P7ProbeScenario {
-  const ctrl = kind === 'timer0' ? p7Timer0Ctrl : p7Timer1Ctrl;
-  const preset = kind === 'timer0' ? p7Timer0Preset : p7Timer1Preset;
-  const count = kind === 'timer0' ? p7Timer0Count : p7Timer1Count;
-  const badLabel = `_co_probe_s${id}_bad_timer_state`;
-  const afterBadLabel = `_co_probe_s${id}_after_bad_timer_state`;
-
-  emitDisableInterrupts(writer);
-  emitStoreImmediate(writer, 32, preset);
-  emitStoreImmediate(writer, 1, ctrl);
-  for (let i = 0; i < 8; i++) {
-    writer.emit('nop');
-  }
-  writer.emit(`sw $0, 0x${ctrl.toString(16)}($0)`);
-  for (let i = 0; i < 4; i++) {
-    writer.emit('nop');
-  }
-  writer.emit(`lw $10, 0x${count.toString(16)}($0)`);
-  writer.emit('nop');
-  writer.emit('nop');
-  for (let i = 0; i < 8; i++) {
-    writer.emit('nop');
-  }
-  writer.emit(`lw $11, 0x${count.toString(16)}($0)`);
-  writer.emit('nop');
-  writer.emit('nop');
-  writer.emit(`bne $10, $11, ${badLabel}`);
-  writer.emit('nop');
-
-  emitStoreImmediate(writer, 0x100, preset);
-  emitStoreImmediate(writer, 1, ctrl);
-  for (let i = 0; i < 8; i++) {
-    writer.emit('nop');
-  }
-  writer.emit(`lw $11, 0x${count.toString(16)}($0)`);
-  writer.emit('nop');
-  writer.emit('nop');
-  writer.emit('sltu $12, $10, $11');
-  writer.emit(`beq $12, $0, ${badLabel}`);
-  writer.emit('nop');
-  writer.emit(`sw $0, 0x${ctrl.toString(16)}($0)`);
-  emitEnableInterrupts(writer);
-
-  const resumePc = writer.pc() + 3 * 4;
-  emitStoreImmediate(writer, resumePc, p7ProbeStateDonePc);
-  const victimPc = writer.pc();
-  writer.emit('syscall');
-  if (writer.pc() !== resumePc) {
-    throw new BuiltinAsmGeneratorError(`Internal generator error: P7 timer reload scenario ${id} return PC was miscalculated.`);
-  }
-  writer.label(`_co_probe_s${id}_done`);
-  const completionPc = writer.pc();
-  writer.emit(`ori $1, $0, ${id}`);
-  writer.emit(`beq $0, $0, ${afterBadLabel}`);
-  writer.emit('nop');
-  writer.label(badLabel);
-  writer.emit(`beq $0, $0, ${badLabel}`);
-  writer.emit('nop');
-  writer.label(afterBadLabel);
-  emitPadding(writer, rng, padding.postMin, padding.postMax);
-
-  return {
-    ...scenarioWithLocations(id, kind, victimPc, completionPc),
-    variant,
-    expectedIpMask: 0,
-    expectedExcCode: expectedExcCode('syscall'),
-    expectedBd: false,
-    allowedEpc: [victimPc],
-    victimPc,
-    timerPreset: 32,
-    requireCompletion: true
-  };
 }
 
 function pcRange(startPc: number, endPc: number): number[] {
@@ -642,20 +559,6 @@ function emitProbeGuardSubroutine(writer: ProgramWriter): void {
   writer.emit(`sw $0, 0x${p7ProbeStateFlags.toString(16)}($0)`);
   writer.emit('jr $31');
   writer.emit('nop');
-}
-
-function interruptAllowedEpcs(kind: P7ProbeScenarioKind, enableStartPc: number, safeWindowStart: number, waitPc: number): number[] {
-  if (kind === 'external') {
-    return [waitPc];
-  }
-  const startPc = kind === 'timer0' || kind === 'timer1'
-    ? enableStartPc
-    : safeWindowStart;
-  const result: number[] = [];
-  for (let pc = startPc; pc <= waitPc; pc += 4) {
-    result.push(pc);
-  }
-  return result;
 }
 
 function renderProbeHandler(): string[] {
@@ -708,6 +611,13 @@ function renderProbeHandler(): string[] {
     timer1PresetHex: asmHex(p7Timer1Preset)
   });
   return ['', ...rendered.trimEnd().split(/\r?\n/)];
+}
+
+function handlerLabelPc(lines: readonly string[], label: string): number {
+  const index = lines.indexOf(`${label}:`);
+  if (index < 0) throw new BuiltinAsmGeneratorError(`P7 probe handler label ${label} is missing.`);
+  const instructionCount = lines.slice(0, index).filter(line => /^\s+[a-z]/i.test(line)).length;
+  return p7ExceptionHandlerAddress + 4 * instructionCount;
 }
 
 function emitInstructionTemplate(writer: ProgramWriter, relativePath: string, values: Record<string, string | number>): void {

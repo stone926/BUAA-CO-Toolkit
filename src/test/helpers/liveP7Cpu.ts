@@ -4,7 +4,10 @@ import * as path from 'path';
 import { createHash } from 'crypto';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import type { P7ProbeMetadata } from '../../courseTesting/builtinAsmGenerator';
+import type { ProgramImage } from '../../mips/core/api';
+import { createLegacyProgramImage } from '../../mips/replay/programImage';
 import { checkP7Probe } from '../../courseTesting/p7ProbeCheck';
+import { concludeP7Probe, observedP7Halt } from '../../courseTesting/p7ProbeCompletion';
 import { courseTraceSimulationTime, p7ProbeExecutionInstructionBudget } from '../../courseTesting/pipeline/executionBudget';
 import { buildTestbench, parseModules } from '../../language/verilog/parser';
 import type { CustomInstructionEncodingMask } from '../../language/verilog/moduleUtils';
@@ -16,13 +19,12 @@ import { runProcessCore } from '../../processCore';
 export interface LiveP7CpuProbeOptions {
   cpuRoot: string;
   machineCodeText: string;
+  programImage?: ProgramImage;
   sourceAsm: string;
   probe: P7ProbeMetadata;
   haltPc: number;
   evidenceDir?: string;
   customInstructionEncodings?: readonly CustomInstructionEncodingMask[];
-  /** Test-only public-bus completion observer; the production watchdog remains enabled. */
-  observeHalt?: boolean;
 }
 
 /** Run production probe observation on an isolated copy of a flat course CPU source directory. */
@@ -47,42 +49,30 @@ export async function runLiveP7CpuProbe(options: LiveP7CpuProbeOptions) {
       customInstructionEncodings: options.customInstructionEncodings
     }));
     await fs.writeFile(path.join(directory, 'watchdog.v'), buildIverilogWatchdog('co_live_p7_watchdog'));
-    const observeHalt = options.observeHalt !== false;
-    if (observeHalt) {
-      // Only public TB buses are observed; no CPU internals or fixed pipeline timing.
-      await fs.writeFile(path.join(directory, 'finish.v'), `module co_live_p7_finish;
-integer visits = 0;
-always @(posedge co_live_p7_tb.clk) begin
-  if (!co_live_p7_tb.reset && co_live_p7_tb.i_inst_addr === 32'h${options.haltPc.toString(16)}
-      && co_live_p7_tb.i_inst_rdata === 32'h1000ffff) begin
-    visits = visits + 1;
-    if (visits == 16) begin $display("CO_LIVE_PROBE observed_halt_fetches=16"); $finish; end
-  end
-end
-endmodule\n`);
-    }
     await fs.writeFile(path.join(directory, 'defaults.f'), iverilogSimulationDefaults);
     const runtime = resolveIverilogRuntime(process.cwd());
     const compiled = await runProcessCore(runtime.iverilogPath, buildIverilogCompileArgs({
       runtime, testbenchModule: 'co_live_p7_tb', watchdogModule: 'co_live_p7_watchdog',
       outputFile: 'cpu.vvp', dependencyFile: 'dependencies.txt', defaultsFile: 'defaults.f', workspaceRoot: directory,
-      sourceFiles: [...sourceNames.filter(file => /\.v$/i.test(file)), 'private_tb.v'], watchdogFile: 'watchdog.v',
-      ...(observeHalt ? { extraTopModules: [{ moduleName: 'co_live_p7_finish', file: 'finish.v' }] } : {})
+      sourceFiles: [...sourceNames.filter(file => /\.v$/i.test(file)), 'private_tb.v'], watchdogFile: 'watchdog.v'
     }), { cwd: directory, env: buildIverilogEnvironment(runtime), timeoutMs: 30_000,
       maxStdoutBytes: 4 * 1024 * 1024, maxStderrBytes: 4 * 1024 * 1024 });
     if (!compiled.ok) throw new Error(`Live P7 compile failed: ${compiled.stderr}`);
     const budget = verilogDurationToPicoseconds(courseTraceSimulationTime(p7ProbeExecutionInstructionBudget))!;
-    const simulated = await runProcessCore(runtime.vvpPath, ['-N', 'cpu.vvp', `+co_watchdog_limit_ps=${budget}`], {
+    const simulated = await runProcessCore(runtime.vvpPath, ['-N', 'cpu.vvp', `+co_watchdog_limit_ps=${budget}`,
+      `+co_halt_pc=${options.haltPc.toString(16)}`], {
       cwd: directory, env: buildIverilogEnvironment(runtime), timeoutMs: 30_000,
       maxStdoutBytes: 16 * 1024 * 1024, maxStderrBytes: 2 * 1024 * 1024
     });
-    const checked = checkP7Probe(simulated.stdout, parseSimOutput(simulated.stdout), options.probe);
-    const observedHalt = simulated.stdout.includes('CO_LIVE_PROBE observed_halt_fetches=16');
+    const image = options.programImage ?? createLegacyProgramImage(options.machineCodeText, []);
+    const text = simulated.ok ? simulated.stdout : simulated.stdout.slice(0, simulated.stdout.lastIndexOf('\n') + 1);
+    const checked = concludeP7Probe(checkP7Probe(text, parseSimOutput(text), options.probe, image), text, options.haltPc, !simulated.ok);
+    const observedHalt = observedP7Halt(text, options.haltPc);
     if (options.evidenceDir) {
       await fs.mkdir(options.evidenceDir, { recursive: true });
       const digest = (text: string) => createHash('sha256').update(text).digest('hex');
       await Promise.all([
-        ...['program.asm', 'code.txt', 'private_tb.v', 'watchdog.v', ...(observeHalt ? ['finish.v'] : [])]
+        ...['program.asm', 'code.txt', 'private_tb.v', 'watchdog.v']
           .map(file => fs.copyFile(path.join(directory, file), path.join(options.evidenceDir!, file))),
         fs.writeFile(path.join(options.evidenceDir, 'trace.out'), simulated.stdout),
         fs.writeFile(path.join(options.evidenceDir, 'result.json'), JSON.stringify({

@@ -122,10 +122,10 @@ describe('public automatic outcome diagnosis', () => {
   it('keeps state precedence, generic fallbacks, and the special scope notice once', () => {
     const probe = {
       passed: false, records: [], diagnostics: [], failures: [],
-      coverage: [{ covered: false, message: 'window missing' }]
+      coverage: [{ covered: false, message: 'P7 定时器场景 3 未覆盖：未观测到 Cause.IP 去断言' }]
     };
     expect(publicAutomaticDiagnosticMessage(result({ status: 'error', probe })))
-      .toBe('[AUTO-COVERAGE] 未覆盖：返回后中断触发窗口未观测，无法判定');
+      .toBe('[AUTO-COVERAGE] P7 定时器场景 3 未覆盖：未观测到 Cause.IP 去断言');
     expect(publicAutomaticDiagnosticMessage(result({ status: 'failed', probe })))
       .toBe('[AUTO-PROBE] P7 定向检查未通过');
     expect(publicAutomaticDiagnosticMessage(result({ status: 'passed', probe }))).toBe('通过');

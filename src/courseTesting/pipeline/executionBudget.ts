@@ -14,7 +14,12 @@ const maximumCourseTraceSimulationTimeUs = 5_000;
  * 可覆盖最慢的课程 MDU 停顿及流水线填充/排空，且 4094 条最强 payload
  * 不再被公共的 200us 波形仿真默认值截断。
  */
-const nanosecondsPerCourseExecutionStep = 64;
+const nanosecondsPerCourseClock = 4;
+const nanosecondsPerCourseExecutionStep = 16 * nanosecondsPerCourseClock;
+
+/** Conservatively include either boundary edge of the private watchdog. */
+export const maximumCourseTraceClocks =
+  Math.ceil(maximumCourseTraceSimulationTimeUs * 1_000 / nanosecondsPerCourseClock) + 1;
 
 /**
  * 从已经由 provider-neutral policy 计算的 maxSteps 派生自动 Verilog 仿真时间。

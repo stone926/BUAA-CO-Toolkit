@@ -56,18 +56,39 @@ describe('P7 audit regressions', () => {
         && Number.parseInt(event.target, 16) === sample.target).length).toBeGreaterThan(1);
       const missing = events.filter((event) => event !== original);
       const nonzero = { ...original, value: '00000004' };
-      for (const corrupted of [
-        events.map((event) => event === original ? nonzero : event),
-        missing, [...events, original], [...events, nonzero],
-        [...missing, { ...original, lineNumber: events[events.length - 1].lineNumber + 1 }]
-      ]) {
+      for (const [corrupted, kind] of [
+        [events.map((event) => event === original ? nonzero : event), 'cp0-reset'],
+        [missing, 'cp0-reset-sample'],
+        [[...events, original], 'cp0-reset-replay'],
+        [[...events, nonzero], 'cp0-reset-replay'],
+        [[...missing, { ...original, lineNumber: events[events.length - 1].lineNumber + 1 }], 'cp0-reset-sample']
+      ] as const) {
         expect(checkP7Probe('', corrupted, metadata).failures.some((failure) =>
-          failure.kind === 'cp0-reset' && failure.message.includes(name === 'status' ? 'Status' : name === 'cause' ? 'Cause' : 'EPC'))).toBe(true);
+          failure.kind === kind && failure.message.includes(name === 'status' ? 'Status' : name === 'cause' ? 'Cause' : 'EPC'))).toBe(true);
       }
     }
     // Historical manifests carry no raw-reset observations and stay replayable.
     const { initialCp0: _initialCp0, ...historical } = metadata;
     expect(checkP7Probe('', events, historical).failures).toEqual([]);
+  });
+
+  it('binds ordinary record fields to assembled stores and rejects writes to unused record slots', () => {
+    const generated = syscallProbe();
+    const metadata = generated.probe!;
+    const image = assembleCourseSource({ id: 'audit-record-probe', text: generated.text }, { profile: 'P7' }).image!;
+    const events = execute(generated.text, 0x3000 + (generated.instructionCount - 2) * 4);
+    expect(checkP7Probe('', events, metadata, image).failures).toEqual([]);
+    const firstField = events.find(event => event.kind === 'dm' && parseInt(event.target, 16) === metadata.logBase)!;
+    const nextField = events.find(event => event.kind === 'dm' && parseInt(event.target, 16) === metadata.logBase + 4)!;
+    for (const pc of [nextField.pc, '00003000', '0000418x']) {
+      const corrupted = events.map(event => event === firstField ? { ...event, pc } : event);
+      expect(checkP7Probe('', corrupted, metadata, image).failures
+        .some(failure => failure.message.includes('错误的存储指令'))).toBe(true);
+    }
+    for (const address of [metadata.logBase - 4, metadata.logBase + metadata.scenarios.length * 32, 0x2ffc, 0x3000]) {
+      const extra = { ...nextField, target: address.toString(16), lineNumber: events.length + 1 };
+      expect(checkP7Probe('', [...events, extra], metadata, image).failures.some(failure => failure.kind === 'record')).toBe(true);
+    }
   });
 
   it('accepts complete already-started younger MDU results and rejects torn or corrupt halves', () => {

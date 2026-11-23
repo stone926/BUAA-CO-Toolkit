@@ -1,4 +1,4 @@
-# course-testing | src/courseTesting/ | 84 files + host adapters
+# course-testing | src/courseTesting/ | 94 files + host adapters
 
 P3–P7 自动化测试：生成 ASM → 内置 TS assembler/ProgramImage → 内置 TS 课程 oracle → Verilog（bundled Icarus）或 Logisim 仿真 Trace → 对比/Probe 检查 → HTML/JSON 报告。通用 Verilog 仿真与自动 DUT lane 固定使用扩展内置 Icarus，运行目录 `.co/iverilog`。
 
@@ -12,23 +12,23 @@ P3–P7 自动化测试：生成 ASM → 内置 TS assembler/ProgramImage → �
 
 **具体目标公平调度。** 冒险规划按两次具体指令/端口目标、一次类别目标交替服务；具体层再按生产者类别×消费者类别×端口桶轮转，某类别尚未补齐不会阻止其它具体指令获得预算。生成期单独记录助记符×端口×间隔，不能用省略端口的课程计分键提前关闭目标。`$ra` 连续写加入旧/新间隔 0/0、0/1、1/0 和 `sub.rt` 消费；P5 发完整时机矩阵，P6/P7 按种子轮换附加时机组，保留基础组、随机余量及原 IM 上限。`add → lw → add` 双端口的旧值竞争也有独立可观察见证。
 
-**P7 双通道。** 自动固定 `hybrid`：`anchor`（TS 课程 oracle 精确对拍 + 中断注入）与 `probe`（DM 探针黑盒检查）同时覆盖。正常 probe 分为 core / MMIO / Timer / MDU / hazard，另逐轮生成 5 个真实中断返回后再次中断的独立程序，最后执行 3 个特殊 Timer 分片。首轮加独立 GPR 共 15 点，后续 14 点；随机 payload 预算保持 1118。原 130 个变体全部保留，新增 4 个 older-MDU 变体、2 个 Mode1 停止态变体与 5 个返回程序；每个程序的用户文本留在 0x4180 之前、DM 记录不超过 64 个。**probe 是 DUT-only，不能冒充 full-stack reference evidence**；mode、分片与变体均不是公共设置。
+**P7 自动测试。** 首轮 18 点含 15 个常规点和 3 个特殊 Timer 压力点。独立 GPR 点每会话一次，后续每轮 17 点。常规点包括 1118 条 payload 的随机对拍、core / MMIO / Timer / MDU / hazard、五种真实双中断返回、同步复位与 IRQ 同拍、CP0 与精确异常、物理 IM 边界。随机对拍以课程参考引擎核对写回及 DM 事务。外部中断应答后，同步异常的 handler 逐次读出 Cause 和 EPC，便于从写回定位异常类型串线。定向探针用公开端口和程序的 DM 记录判分。
 
-**特殊测试说明。** 原软件设置 EXL/EPC、通过 `jal→eret` 释放 pending Timer 的 36 个变体单独放入 special-priority（14）/special-mdu（12）/special-hazard（10），保持实际检查与失败状态。ASM、manifest、运行输出、HTML/JSON 报告和历史都标明其官方保证范围尚未确认，单凭此失败不能判定课程 CPU 不合格；旧混合点按实际 scenario 类型推断同样的说明。正常测试与新返回点先运行，特殊点随后运行，不新增配置开关。
+**特殊 Timer 实验。** special-priority、special-mdu、special-hazard 分别包含 14、12、10 个软件构造 EXL/EPC 后通过 `jal → eret` 释放 Timer 的变体。其官方保证范围尚未确认。每项的真实结果写入独立表和用例历史，课程统计及停止条件只计常规测试。旧用例按既有元数据识别。
 
-**真实返回边界。** return 程序通过真实外部 IRQ 进入只有一个 eret 出口的 handler。公开 TB 先确认首次应答，观察 eret 成为宏观指令，再在宏观 PC 离开时产生第二次 IRQ；保留原始 PC、不对齐掩码、不读取内部层次，也不固定 CP0 级或周期偏移。这依赖官方宏观 PC 的架构边界契约，不声称独立测得错误 DUT 的内部 EXL。未观察到触发边界时单列“未覆盖”，作为检测 error 停止本轮，不计 CPU 功能失败或通过。Checker 绑定全部主程序/handler 提交与记录来源，校验 EPC/BD 与提交先后，只允许被 BD/EPC 证明的 jal link 重放。中断发生器事务在官方下降沿消费点观察；毒写已经构成公开反例后提前结束，保留当前边沿 trace。
+**精确边界。** 外部 IRQ 依据宏观 PC 触发。挂起时只有下降沿命中应答地址且字节使能有效才消费应答。双中断返回点和外部 IRQ 屏蔽点以公开 DM 写入顺序检测提前应答。双中断返回将第二次 IRQ 的原始 PC 与 EPC、BD 和实际分支位置核对。允许由 BD/EPC 解释的 jal 重放。reset 点先污染 GPR 和 SR，再在首个受害 PC 将 IRQ 与同步复位一起施加，复位后重新执行整个双中断程序。每个 P7 点验证宏观 PC 穿过标准停机分支、延迟槽并返回该分支。预算截止时按实际观测到的违例判失败，只有缺失后缀则报告未覆盖或工具中止。
 
-**证据诚实。** probe 在首次 mtc0/异常前用 mfc0 读取 SR/Cause/EPC 并把原始值写入 DM，metadata 把样本绑定到各自的 store PC 并严格检查初值零、唯一、早于 handler 记录。MDU 黑盒结果无法区分产生相同完整结果的合法早启动与非法晚启动，因此**不**宣称为内部启动时刻的证明。报告也说明"通过"只对应本次可观察结果，完整无写回执行、课程周期与结构仍需独立验证。
+**观测证据。** CP0 复位值、启动采样是否被重放和记录字段的实际写指令分别检查。MDU 验证课程允许的完整 HI/LO 结果。P7 黑盒测试覆盖本次输入的公开功能行为，课程要求的内部结构和课堂周期范围仍需独立验证。
 
 **引擎边界。** 随机生成点使用 builtin 与冻结 JS/TS 定义；没有脚本绑定时，用户 ASM 的 auto 在未知指令汇编失败后、执行前选择 custom，显式 Mars 直接使用自定义参考。prepare 与 oracle 必须复用最终 CourseEnginePlan 及相同 JS/TS 或 Jar/class 快照。机器码校验保留课程布局、容量、零 DM 初态与停机要求，custom 编码由实际加载的注册表授权。P7 probe 继续走现有 DUT-only 黑盒检查，不经过 Mars Timer 时钟推断。历史重跑保留原 CPU/ASM 上下文并核实参考依赖版本，不静默换引擎。
 
-**有界并发、失败即停。** 会话启动时快照并发量；P3–P6 每轮生成对应数量的独立随机点，P7 保留原有 14 点套件。GPR / 常规 / 特殊测试之间有完成屏障，同一 manifest 的 stdin 变体互斥，空闲槽立即接新点。首个失败或错误立即停止派发并 abort 同批任务，等待所有在途任务（含进程退出、manifest 写入）完成后才清理或释放会话；取消不计 error，已完成结果和失败证据保存。并发量 1 维持串行顺序，轮间零延迟主动 yield 保持扩展宿主响应。报告写入仍串行合并，caseIndex 保持原测试点编号，activeCases 展示多个活动点并兼容旧 activeCase。
+**有界并发、失败即停。** 会话启动时快照并发量；P3–P6 每轮生成对应数量的独立随机点，P7 使用上述固定套件。GPR / 常规 / 特殊测试之间有完成屏障，同一 manifest 的 stdin 变体互斥，空闲槽立即接新点。首个常规点失败或错误立即停止派发并 abort 同批任务，等待所有在途任务（含进程退出、manifest 写入）完成后才清理或释放会话；取消不计 error，已完成结果和失败证据保存。并发量 1 维持串行顺序，轮间零延迟主动 yield 保持扩展宿主响应。报告写入仍串行合并，caseIndex 保持原测试点编号，activeCases 展示多个活动点并兼容旧 activeCase。
 
 **有界留存。** 同一工作区的全部历史合计只保留按创建时间最新的 10 个通过测试点及其完整用例与产物，跨会话、跨项目统一计算，失败和错误点不参与清理。持续测试启动时定向读取 `.co/cases` 一次，每批 drain 后增量更新；历史重跑通过后也应用同一策略。留存清理对同一 manifest 串行，复验通过终态、目录/manifest identity 与内容指纹后原子移入受控 `.co/trash`；状态冲突或路径不确定时保留，清理失败不会挤掉最新 10 点。
 
-**中文诊断。** P7 定向检查、普通写回差异、DM 写事务与 Logisim 检查在诊断来源生成中文消息；持续测试报告使用中文类别、参考/待测标签和复现编号。旧报告中已知的 CP0 复位及写回差异英文消息在展示时兼容转换，原始记录不改写。机器状态码、协议标记、寄存器/信号名和外部工具原始诊断保持原样。
+**中文诊断。** P7 定向检查、普通写回差异、DM 写事务与 Logisim 检查在诊断来源生成中文消息；持续测试报告使用中文类别、参考/待测标签和复现编号。旧报告中已知的 CP0 复位及写回差异英文消息在展示时兼容转换，原始记录不改写。私有 P6/P7 TB 报告 DM 接口违例时，按本次编译文件、模块和实际 $fatal 行确认故障来源，保留 PC、访问地址和字节使能。
 
-**特殊点结果可见。** 特殊范围说明不替代测试判定：历史保存具体首个失败（场景、PC、期望与实际等有界摘要），显示通过/失败/错误；无明确终态时显示“无结果”或“已取消”，不从测试类别或产物推断通过。历史面板仅在打开时监视本工作区 `.co/cases/*/case.json`，合并变更后串行刷新。持续页在特殊点开始/结束时立即刷新，并在轮次表上方展示最近含特殊点的一轮及其真实结果；运行中的点尚无正误判定，首失败停止策略不变。
+**特殊点结果可见。** 特殊范围说明不替代测试判定：历史保存具体首个失败（场景、PC、期望与实际等有界摘要），显示通过/失败/错误；无明确终态时显示“无结果”或“已取消”，不从测试类别或产物推断通过。历史面板仅在打开时监视本工作区 `.co/cases/*/case.json`，合并变更后串行刷新。持续页在特殊点开始/结束时立即刷新，并在轮次表上方展示最近含特殊点的一轮及其真实结果；运行中的点尚无正误判定，特殊点的失败或工具错误不会中断其余测试。
 
 ## Pipeline
 
@@ -81,10 +81,17 @@ P3–P7 自动化测试：生成 ASM → 内置 TS assembler/ProgramImage → �
 - `builtinAsm/p7/probeExternalScenarios.ts`、`builtinAsm/p7/probePriorityScenarios.ts`、`builtinAsm/p7/probeMduScenarios.ts`、`builtinAsm/p7/probeMduOperations.ts`、`builtinAsm/p7/probeTimerWriteScenario.ts`、`builtinAsm/p7/probeAsm.ts`、`builtinAsm/p7/constants.ts` — 外部受害路径、中断优先级序列、MDU 组合、Timer pending-writes 稳定态与共用原语/常量
 - `builtinAsm/p7/probeHazardScenarios.ts` — 中断重试 load→branch/jr 和延迟槽 load-use；AdEL/AdES/Ov 与依赖链交叉；Timer 的软件 EXL 返回链作为特殊场景保留
 - `builtinAsm/p7/probeReturnProgram.ts` — 5 个带种子数据/布局变化的真实双 IRQ 程序：direct、load-jr、branch-delay、jal-delay、MDU；整个程序均有精确可观察提交义务
-- `builtinAsm/p7/probeTimerMode1Scenario.ts` — mode1-repeat 保持 Enable=1/PRESET 不变，验证 COUNT 重载及第二次自然 IRQ；恢复 IM 后在 IE=0 下轮询并保留实际零样本，不假定后续采样相位。额外 mode1-stopped 用 CTRL=2/0xa 建立停止态稳定观察，允许最后一次 LOAD 瞬态，再显式启动新周期。COUNT/IP 采样仍受混叠限制，未命中不能单凭 watchdog 证明 Timer 错误
+- `builtinAsm/p7/probeTimerMode1Scenario.ts` — mode1-repeat 保持 Enable=1、设备 IM 与 PRESET 不变，要求两次自然 IRQ 且两次之间在 CPU IE=0 时实际读到 Cause.IP=0。只允许 IRQ 落在各自开启 IE 后的等待分支或延迟槽。未采样到 IP 去断言时保留首次 IRQ 与轮询证据并报告未覆盖。mode1-stopped 用 CTRL=0xa 建立停止态，通过分隔的 COUNT/IP 样本检查稳定性，再显式启动新周期
+- `builtinAsm/p7/probeTimerDisableScenario.ts`、`p7TimerProbeCheck.ts` — disable-reload 从活动、停用和重新启动后的公开 COUNT 样本检查递减、冻结以及新 PRESET 装载。两个 PRESET 的合法计数范围按私有 watchdog 最多 1,250,001 个设备时钟确定，避免用固定 NOP 间隔推定 COUNT。检查器也将 Mode 1 首次 handler 样本与打包记录和轮询阶段绑定
+- `builtinAsm/p7/directedProbeProgram.ts`、`builtinAsm/p7/probeArchitectureProgram.ts` — IE=0 同步异常、相邻异常分别记录并重试、CP0 屏蔽、双 Timer 稳定待决、DM 最后一字节与 MMIO 译码边界。
+- `builtinAsm/p7/probeInstructionBoundaryProgram.ts` — 4096 字 IM 中的首末有效指令、顺序进入 0x4180、错误取指时屏蔽所取字的译码异常。
+- `p7ProbeCommits.ts` — 将程序承诺的寄存器和 DM 写入绑定到 PC、目标、值和异常前后顺序。
+- `p7ProbeCompletion.ts` — 用实际停机边界和正面反例区分完成、确定失败及未完成的轨迹。
 - `p7ProbeScope.ts` — 特殊压力场景范围判定与统一用户说明，兼容旧混合 metadata 和早期工具错误
 - `testOutcomeDiagnostic.ts` — 历史与持续测试共用的有界中文结果摘要，保留探针首失败、结构化写回/DM 事务差异及工具诊断；脱敏后附独立范围说明
 - `p7ReturnCheck.ts` — 返回协议、全部 main/handler 事务、记录字段来源、EPC/BD 提交边界与合法 jal link 重放检查；未覆盖与功能失败分别记录
+- `p7ProbeRecordSources.ts` / `p7ProbeTraceWord.ts` — 依据本次仿真的机器码绑定记录字段及重入 Status 样本的存储 PC，严格解码架构写回的 32 位值
+- `p7ProbeCapture.ts` — 校验优先级和 Mode 1 打包记录的首次 CP0 样本，核对同一场景内按顺序执行的三个公开 DM 写入
 - `p7ProbeCheck.ts` — DUT-only 黑盒精确检查：重建完整 DM 记录并校验 CP0/EPC/Timer 前后状态与 handler 前后精确 commit；按 PC 一次索引提交，older 必须早于记录首字段，取消的 younger/错误路径提交即失败
 
 ## Oracle 与观察

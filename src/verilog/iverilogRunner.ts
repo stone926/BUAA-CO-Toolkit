@@ -11,6 +11,7 @@ import {
   getTestbench
 } from '../config';
 import { automaticExternalToolTimeoutMs } from '../courseTesting/automaticTestPolicy';
+import { isP7ObservationLimit } from '../courseTesting/p7ProbeCompletion';
 import type { P7ProbeMetadata } from '../courseTesting/builtinAsmGenerator';
 import {
   ensureDirectory,
@@ -102,6 +103,8 @@ export interface IverilogRunOptions {
   simOutputFileName?: string;
   simOutputUri?: vscode.Uri;
   interruptSchedule?: number[];
+  /** Validated branch PC of an exact-trace P7 program. Kept outside the compile cache key. */
+  p7HaltPc?: number;
   p7Probe?: P7ProbeMetadata;
   /** Registered encodings own lane semantics; unmatched words retain native store checks. */
   customInstructionEncodings?: TestbenchResolutionOptions['customInstructionEncodings'];
@@ -537,14 +540,15 @@ async function runIverilogInWorkspace(
     const simResult = await runTool(preflight.runtime.vvpPath, [
       '-N',
       compiled.fsPath,
-      `+co_watchdog_limit_ps=${watchdogLimitPs}`
+      `+co_watchdog_limit_ps=${watchdogLimitPs}`,
+      ...(options.p7HaltPc === undefined ? [] : [`+co_halt_pc=${options.p7HaltPc.toString(16)}`])
     ], {
       ...processOptions,
       maxStdoutBytes: maximumIverilogSimulationOutputBytes,
       maxStderrBytes: maximumIverilogSimulationOutputBytes
     });
     let simOut: vscode.Uri | undefined;
-    if (simResult.ok) {
+    if (simResult.ok || (options.p7Probe && simResult.stdout && isP7ObservationLimit(simResult.stopReason))) {
       const simFileName = options.simOutputUri
         ? path.basename(options.simOutputUri.fsPath)
         : simulationOutputFileName(testbench.moduleName, options.simOutputFileName);
@@ -582,10 +586,11 @@ async function runIverilogInWorkspace(
           await writeAsmCaseArtifact(asmCase, 'verilog', simFileName, simResult.stdout, 'simOut');
         }
       }
-      if (showMessages && options.announceSuccess !== false) {
+      if (simResult.ok && showMessages && options.announceSuccess !== false) {
         vscode.window.showInformationMessage('Icarus Verilog 仿真完成，输出见 .co/out');
       }
-    } else {
+    }
+    if (!simResult.ok) {
       await persistIverilogFailureLog(services, asmCase, 'simulation', simResult);
       if (showMessages) {
         vscode.window.showErrorMessage(verilogSimulationFailureMessage(

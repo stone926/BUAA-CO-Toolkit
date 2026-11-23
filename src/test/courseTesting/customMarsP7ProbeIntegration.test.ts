@@ -13,12 +13,13 @@ vi.mock('vscode', async () => {
 const cpuRoot = process.env.CO_P7_CPU_ROOT;
 const evidenceRoot = process.env.CO_P7_PROBE_EVIDENCE_DIR;
 const probes: ReadonlyArray<{ shard: P7ProbeShard; count: number }> = [
-  { shard: 'timer', count: 12 }, { shard: 'mmio', count: 26 }, { shard: 'return', count: 2 }
+  { shard: 'timer', count: 12 }, { shard: 'mmio', count: 26 }, { shard: 'return', count: 2 },
+  { shard: 'architecture', count: 18 }, { shard: 'im-boundaries', count: 11 }
 ];
 
 /** Optional live-RTL evidence. The external oracle is intentionally absent from the DUT-only probe lane. */
 describe.runIf(Boolean(cpuRoot))('real P7 CPU retains its Timer and interrupt black-box probe lane', () => {
-  it.each(probes)('checks live $shard probe records with Timer enabled', async ({ shard, count }) => {
+  it.each(probes)('checks live $shard probe records', async ({ shard, count }) => {
     const generated = generateBuiltinAsmTestCase({
       profile: 'P7', instructionText: '', instructionCount: 1118,
       seed: `live-real-cpu-${shard}-timer-enabled`, p7StressMode: 'probe', probeShard: shard,
@@ -38,6 +39,7 @@ describe.runIf(Boolean(cpuRoot))('real P7 CPU retains its Timer and interrupt bl
     expect(haltPc).toBeDefined();
     const { simulated, checked, observedHalt } = await runLiveP7CpuProbe({
       cpuRoot: cpuRoot!, machineCodeText: wordsToHexText(courseInstructionImageWords(assembled.image!)),
+      programImage: assembled.image,
       sourceAsm: generated.text, probe: metadata, haltPc: haltPc!,
       ...(evidenceRoot ? { evidenceDir: path.join(evidenceRoot, shard) } : {}),
       // Exercise the custom-aware contract while preserving all standard opcodes.

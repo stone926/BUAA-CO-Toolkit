@@ -17,6 +17,8 @@ import {
 } from '../../asmCaseStore';
 import { executeWithPreflight } from '../../mips/providers/providerResolver';
 import { runVerilogSimulation } from '../../verilog/simulationRunner';
+import { automaticRuntimeTestbenchName, generatedRuntimeTestbenchText, p7AutoRuntimeTestbenchName } from '../../verilogSimulationFiles';
+import { publicAutomaticDiagnosticMessage } from '../../courseTesting/testOutcomeDiagnostic';
 import { readTextFile } from '../../fsUtil';
 import { compareTraceIterables } from '../../language/mips/traceCompare';
 import {
@@ -145,6 +147,7 @@ function makeAsmCase(overrides: Partial<AsmCaseManifest> | AsmCaseManifestV2 = {
 describe('course trace runner orchestration', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(getProfile).mockReturnValue('P5');
     vi.mocked(recordAsmCaseOracleResult).mockResolvedValue(undefined);
     vi.mocked(readAsmCaseStdinSnapshot).mockResolvedValue(undefined);
     vi.mocked(asmCaseSourceSnapshotIssue).mockResolvedValue(undefined);
@@ -388,6 +391,21 @@ describe('course trace runner orchestration', () => {
     );
   });
 
+  it.each([
+    ['', 'error'], ['CO_P7_HALT pc=00003008\r\n', 'error'],
+    ['CO_P7_HALT pc=00003004\r\n', 'passed']
+  ] as const)('requires the validated P7 halt loop even after all expected writes match (%s)', async (marker, expected) => {
+    vi.mocked(getProfile).mockReturnValueOnce('P7');
+    const simulate = vi.mocked(runVerilogSimulation).getMockImplementation()!;
+    vi.mocked(runVerilogSimulation).mockImplementationOnce(async (...args) => {
+      const run = await simulate(...args);
+      return { ...run!, simResult: createTestRunResult({ stdout: 'trace\n' + marker }) };
+    });
+    const result = await runCourseTraceCase(services(), { asm: URI.file('E:/work/src/test.asm') });
+    expect(result.status).toBe(expected);
+    expect(runVerilogSimulation).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ p7HaltPc: 0x3004 }));
+  });
+
   it('executes only the manifest-bound case-local stdin snapshot', async () => {
     const currentCase = makeAsmCase({
       stdin: {
@@ -605,6 +623,33 @@ describe('course trace runner orchestration', () => {
     expect(result).not.toHaveProperty('marsOut');
   });
 
+  it.each(['P6', 'P7'] as const)('reports a verified %s DM interface violation with the original bus evidence', async (profile) => {
+    vi.mocked(getProfile).mockReturnValue(profile);
+    const isProbe = profile === 'P7';
+    const probe = { version: 1, logBase: 0x2800, recordWords: 8, scenarios: [] };
+    const current = makeAsmCase({ profile, ...(isProbe ? { p7: { probe } as never } : {}) });
+    vi.mocked(createAsmCaseFromAsm).mockResolvedValueOnce(current);
+    const moduleName = isProbe ? p7AutoRuntimeTestbenchName : automaticRuntimeTestbenchName;
+    const file = URI.file(`E:/work/.co/iverilog/shared/${moduleName}.v`);
+    const message = 'CO_DM_CONTRACT byte_enable pc=00003000 instruction=a0010001 addr=00000001 byteen=1111 expected=0010 wdata=00001100';
+    vi.mocked(runVerilogSimulation).mockResolvedValueOnce({
+      backend: 'iverilog',
+      testbench: { moduleName, kind: isProbe ? 'p7-auto' : 'generated', generatedUri: file,
+        generatedText: generatedRuntimeTestbenchText('$fatal(1, "CO_DM_CONTRACT byte_enable pc=%h", pc);') },
+      compileResult: createTestRunResult(),
+      simResult: createTestRunResult({ ok: false, exitCode: 1, stdout:
+        `FATAL: ${file.fsPath}:3: ${message}\n       Time: 26000  Scope: ${moduleName}\n` })
+    } as never);
+    const result = await runCourseTraceCase(services(), { asm: URI.file('E:/work/src/test.asm') });
+    expect(result).toMatchObject({
+      status: 'failed', stage: 'dut', caseId: 'case-1', caseManifest: current.manifestUri.fsPath,
+      dutFailure: { phase: 'simulate', reason: 'dm-store-contract', exitCode: 1, diagnostic: { line: 3, message } }
+    });
+    if (!isProbe) expect(result.oracleOut).toContain('oracle.out');
+    expect(publicAutomaticDiagnosticMessage(result)).toContain('待测 CPU 违反 DM 写接口约定');
+    expect(publicAutomaticDiagnosticMessage(result)).toContain('addr=00000001 byteen=1111 expected=0010');
+  });
+
   it('preserves a path-safe Icarus compile diagnostic for the automatic report', async () => {
     vi.mocked(runVerilogSimulation).mockResolvedValueOnce({
       backend: 'iverilog',
@@ -723,6 +768,25 @@ describe('course trace runner orchestration', () => {
     }));
     expect(checkP7Probe).toHaveBeenCalled();
     expect(executeWithPreflight).not.toHaveBeenCalled();
+  });
+
+  it.each([true, false])('keeps only observed functional violations from a bounded P7 trace, observed=%s', async observed => {
+    const currentCase = makeAsmCase({ p7: { probe: { version: 1, logBase: 0x2800, recordWords: 8, scenarios: [] } } } as never);
+    const simulate = vi.mocked(runVerilogSimulation).getMockImplementation()!;
+    vi.mocked(runVerilogSimulation).mockImplementationOnce(async (...args) => ({
+      ...(await simulate(...args))!,
+      simResult: createTestRunResult({ ok: false, stdout: 'complete line\ntruncated', stopReason: 'stdout-limit' })
+    }));
+    vi.mocked(checkP7Probe).mockReturnValueOnce({
+      passed: false, records: [], diagnostics: [], failures: [
+        { scenarioId: 1, kind: 'record', message: 'missing at cutoff' },
+        ...(observed ? [{ scenarioId: 1, kind: 'ades', message: 'forbidden write', observed: true as const }] : [])
+      ]
+    });
+    const result = await runCourseTraceCase(services(), { asm: currentCase.asm, asmCase: currentCase });
+    expect(vi.mocked(checkP7Probe).mock.calls[0][0]).toBe('complete line\n');
+    expect(result.status).toBe(observed ? 'failed' : 'error');
+    if (observed) expect(result.message).toBe('forbidden write');
   });
 
   it.each(['mars', 'verify-both'] as const)(

@@ -32,6 +32,20 @@ const baseMetadata: P7ProbeMetadata = {
 };
 
 describe('P7 probe checker', () => {
+  it('uses a completion write as evidence that an absent exception record was skipped', () => {
+    const metadata: P7ProbeMetadata = {
+      ...baseMetadata,
+      scenarios: [{ id: 1, kind: 'syscall', expectedIpMask: 0, expectedExcCode: 8,
+        allowedEpc: [0x3020], donePc: 0x3024, requireCompletion: true }]
+    };
+    expect(checkP7Probe('', [], metadata).failures.every(failure => !failure.observed)).toBe(true);
+    const output = '20@00003024: $1 <= 00000001';
+    const complete = checkP7Probe(output, parseSimOutput(output), metadata);
+    expect(complete.failures).toContainEqual(expect.objectContaining({
+      observed: true, message: expect.stringContaining('已提交完成标记')
+    }));
+  });
+
   it('requires an independent second Status sample inside its packed record', () => {
     const metadata: P7ProbeMetadata = {
       version: 1, logBase: p7ProbeLogBase, recordWords: p7ProbeRecordWords,
@@ -73,6 +87,27 @@ describe('P7 probe checker', () => {
 
     expect(result.passed).toBe(true);
     expect(result.records).toHaveLength(2);
+  });
+
+  it('detects a consumed external ACK before the software witness under either mask', () => {
+    for (const variant of ['masked-ie', 'masked-im2']) {
+      const scenario = { ...baseMetadata.scenarios[0], variant,
+        requiredPreHandlerCommits: [{ pc: 0x3010, kind: 'dm' as const, target: 0x27dc, value: 0x6001 }] };
+      const metadata = { ...baseMetadata, scenarios: [scenario] };
+      const output = [
+        'CO_P7_PROBE external_arm scenario=1 time=20',
+        'CO_P7_PROBE external_raise scenario=1 time=24',
+        '40@00003010: *000027dc <= 00006001',
+        ...recordLines(0, [p7ProbeMagic, 1, 1, 0x1c03, 0x1000, 0x3020, 0, 0])
+          .map(line => line.replace(/^10@/, '90@')),
+        'CO_P7_PROBE external_ack scenario=1 time=100'
+      ].join('\n');
+      expect(checkP7Probe(output, parseSimOutput(output), metadata).passed).toBe(true);
+      const early = output.replace('time=100', 'time=36');
+      expect(checkP7Probe(early, parseSimOutput(early), metadata).failures).toContainEqual(expect.objectContaining({
+        observed: true, message: expect.stringContaining('在软件启用前已应答')
+      }));
+    }
   });
 
   it('accepts a wait-loop delay-slot interrupt with BD set and branch EPC', () => {
@@ -623,7 +658,9 @@ describe('P7 probe checker', () => {
     const result = checkP7Probe(sim, parseSimOutput(sim), metadata);
 
     expect(result.passed).toBe(false);
-    expect(result.failures.some((failure) => failure.kind === 'timer' && failure.message.includes('残留中断请求'))).toBe(true);
+    expect(result.failures).toContainEqual(expect.objectContaining({
+      kind: 'timer', observed: true, message: expect.stringContaining('意外中断或状态错误')
+    }));
   });
 
   it('checks one-shot timer CTRL/COUNT before the handler clears CTRL', () => {
@@ -754,7 +791,7 @@ describe('P7 probe checker', () => {
       failure.message.includes('Timer1 非法存储前后的 PRESET') && failure.message.includes('观测值不符'))).toBe(true);
   });
 
-  it('rejects repeated record-field writes and invalid AdES output enables', () => {
+  it('rejects repeated records and actual AdES DM writes without treating the IG level as a transaction', () => {
     const metadata: P7ProbeMetadata = {
       version: 1,
       logBase: p7ProbeLogBase,
@@ -779,8 +816,14 @@ describe('P7 probe checker', () => {
       ...lines,
       'CO_P7_PROBE invalid_store_effect scenario=1 pc=00003020 data_byteen=f int_byteen=0 time=100'
     ].join('\n');
-    expect(checkP7Probe(invalidEnable, parseSimOutput(invalidEnable), metadata).failures
-      .some((failure) => failure.message.includes('invalid_store_effect'))).toBe(true);
+    expect(checkP7Probe(invalidEnable, parseSimOutput(invalidEnable), metadata).passed).toBe(true);
+    const invalidIg = [...lines,
+      'CO_P7_PROBE invalid_store_effect source=interrupt_generator scenario=1 pc=00003020 addr=00007f20 byteen=0001 time=100'
+    ].join('\n');
+    expect(checkP7Probe(invalidIg, parseSimOutput(invalidIg), metadata).passed).toBe(true);
+    const invalidDm = [...lines, '20@00003020: *00000000 <= 12345678'].join('\n');
+    expect(checkP7Probe(invalidDm, parseSimOutput(invalidDm), metadata).failures
+      .some((failure) => failure.message.includes('触发异常的指令'))).toBe(true);
 
     const outOfRange = [...lines, '20@00003020: *00003000 <= 12345678'].join('\n');
     expect(checkP7Probe(outOfRange, parseSimOutput(outOfRange), metadata).failures

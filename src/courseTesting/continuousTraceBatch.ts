@@ -7,7 +7,7 @@ import {
   type ContinuousTraceIteration, type CourseTraceCaseResult
 } from '../courseTestReport';
 import { normalizePathKey } from '../pathUtils';
-import { addContinuousResult } from './continuous';
+import { addContinuousResult, isCourseTestProblem } from './continuous';
 import { runConcurrentCases } from './concurrentCases';
 import { markContinuousAsmCaseCancelled } from './continuousCaseRetention';
 import { serializeFailureEvidence } from './failureEvidence';
@@ -102,7 +102,7 @@ export async function runContinuousTraceBatch<T extends ContinuousTraceCaseLike>
           ...(probeScope ? { probeScope } : {})
         };
       },
-      shouldStop: result => options.stopOnFailure && !result.cancelled && result.status !== 'passed',
+      shouldStop: result => options.stopOnFailure && isCourseTestProblem(result),
       completed: async result => {
         const ownedCase = result.caseManifest
           ? options.ownedCases.get(normalizePathKey(result.caseManifest)) : undefined;
