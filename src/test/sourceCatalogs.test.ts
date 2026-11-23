@@ -13,16 +13,16 @@ describe('language registration source', () => {
     execFileSync(process.execPath, ['scripts/generate-languages.mjs', '--check'], { cwd: root, stdio: 'pipe' });
     const pkg = read('package.json');
     const selectors = languageDocumentSelector();
-    for (const language of pkg.contributes.languages) {
-      expect(selectors.some((selector) => selector.language === language.id)).toBe(language.id !== 'systemverilog');
-    }
-    expect(languageDocumentSelector(true).map((selector) => selector.language)).toEqual(['mipsasm', 'verilog']);
+    expect(pkg.contributes.languages).toContainEqual(expect.objectContaining({ id: languageIds.mipsInstructionPreview, extensions: [] }));
+    expect(selectors.filter((selector) => selector.language).map((selector) => selector.language)).toEqual([languageIds.mips, languageIds.verilog]);
+    expect(languageDocumentSelector(true).map((selector) => selector.language)).toEqual([languageIds.mips, languageIds.verilog]);
     expect(selectors).toContainEqual({ scheme: 'file', pattern: '**/*.circ' });
   });
 
-  it('preserves extension-based circuit routing and excludes syntax-only SystemVerilog', () => {
+  it('preserves extension-based circuit routing and excludes syntax-only languages', () => {
     expect(languageServiceForDocument({ languageId: 'xml', uri: 'file:///C:/课程%20设计/CPU.CIRC?revision=1' })).toBe(languageIds.logisim);
     expect(languageServiceForDocument({ languageId: 'systemverilog', uri: 'file:///cpu.sv' })).toBeUndefined();
+    expect(languageServiceForDocument({ languageId: languageIds.mipsInstructionPreview, uri: 'untitled:instruction-preview' })).toBeUndefined();
     expect(languageServiceForDocument({ languageId: 'xml', uri: 'file:///cpu.circ.xml' })).toBeUndefined();
     expect(isLanguageFileName('C:\\课程\\CPU.VH', languageIds.verilog)).toBe(true);
     expect(isLanguageFileName('CPU.svh', languageIds.verilog)).toBe(false);
