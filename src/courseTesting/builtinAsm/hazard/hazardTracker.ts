@@ -13,7 +13,7 @@ interface PendingRecord {
   readonly assess?: HazardObservationValues['assess'];
   readonly previous: number | undefined;
   readonly hiLoPrevious: { hi: number; lo: number };
-  victim: boolean;
+  exceptionCycles?: number;
   values?: HazardObservationValues;
 }
 
@@ -43,23 +43,17 @@ export class HazardTracker {
       opaque: customFacts === null,
       assess,
       previous: destination ? this.state.regValue(destination) : undefined,
-      hiLoPrevious: { hi: this.state.hi, lo: this.state.lo },
-      victim: false
+      hiLoPrevious: { hi: this.state.hi, lo: this.state.lo }
     };
   }
 
-  markVictim(index: number): void {
-    if (this.pending?.index === index) {
-      this.pending.victim = true;
-      return;
+  markVictim(index: number, elapsedCycles: number): void {
+    const record = this.pending?.index === index ? this.pending : this.group?.find((item) => item.index === index);
+    if (record) {
+      record.exceptionCycles = elapsedCycles;
+    } else {
+      this.model.flush(elapsedCycles);
     }
-    const grouped = this.group?.find((record) => record.index === index);
-    if (grouped) {
-      grouped.victim = true;
-      return;
-    }
-    // Already observed: the handler still drains the pipeline before execution resumes.
-    this.model.flush();
   }
 
   /** Instructions recorded until `endGroup` execute in a caller-specified dynamic order. */
@@ -101,11 +95,11 @@ export class HazardTracker {
   }
 
   private feed(record: PendingRecord): void {
-    if (record.executed && record.opaque) {
-      this.model.flush();
+    if (record.exceptionCycles !== undefined) {
+      this.model.flush(record.exceptionCycles);
       return;
     }
-    if (record.victim) {
+    if (record.executed && record.opaque) {
       this.model.flush();
       return;
     }

@@ -12,7 +12,7 @@ export interface OperandSteer {
   readonly address?: number;
   /** Destinations an unbound choice must avoid, so a hazard register survives its gap. */
   readonly avoidWrites?: ReadonlySet<string>;
-  /** Draw unbound sources from small values (address bases, overflow-free arithmetic). */
+  /** Favor small source values when building a reachable course DM address. */
   readonly preferSmallReads?: boolean;
   /** Required property of the produced value (before `$0` discards it) for a destination. */
   readonly accept?: (value: number, destination: string) => boolean;

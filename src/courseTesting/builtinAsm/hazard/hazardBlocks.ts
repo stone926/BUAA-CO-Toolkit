@@ -1,6 +1,6 @@
 // @index hazard-blocks — 实现冒险目标：生产者→无关指令×间隔→消费者，含 JR/JALR 精确地址配方、JAL 调用返回、$0 写、转发优先级与 HI/LO 块
 import { CpuState } from '../../cpuState';
-import { branchMnemonics, CpuProfile, linkBranchMnemonics } from '../../mnemonicSets';
+import { branchMnemonics, linkBranchMnemonics } from '../../mnemonicSets';
 import { alignDown } from '../../mipsUtil';
 import { Random } from '../../random';
 import { branchTaken } from '../instructionSemantics';
@@ -14,7 +14,6 @@ export interface HazardEmitHost {
   readonly state: CpuState;
   readonly rng: Random;
   readonly allowed: ReadonlySet<string>;
-  readonly profile: CpuProfile;
   /** Registers a block may claim for producers, copies and setup values. */
   readonly hazardRegisters: readonly string[];
   remaining(): number;
@@ -576,8 +575,7 @@ export class HazardBlockEmitter {
 
   private needsSmallValue(consumer: string, role: SourceRole): boolean {
     const consumerClass = hazardClassOf(consumer);
-    return (role === 'rs' && (consumerClass === 'load' || consumerClass === 'store')) ||
-      (this.host.profile === 'P7' && (consumer === 'add' || consumer === 'sub' || consumer === 'addi'));
+    return role === 'rs' && (consumerClass === 'load' || consumerClass === 'store');
   }
 
   /** Whether `value` is a legal operand for the consumer that a stale `stale` would change. */
@@ -600,7 +598,7 @@ export class HazardBlockEmitter {
       return branchTaken(consumer, value, 0) !== branchTaken(consumer, stale, 0);
     }
     if ((consumer === 'div' || consumer === 'divu') && role === 'rt') {
-      return value !== 0 && !(this.host.profile === 'P7' && consumer === 'div' && value === -1);
+      return value !== 0;
     }
     return true;
   }

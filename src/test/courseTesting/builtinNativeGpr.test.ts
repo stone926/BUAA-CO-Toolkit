@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { generateBuiltinAsmTestCase } from '../../courseTesting/builtinAsmGenerator';
 import { CpuState } from '../../courseTesting/cpuState';
+import { p7CourseInstructionCountMaximum } from '../../courseTesting/p7Hardware';
 import { decodeHazardInstruction } from '../../hazardAnalysis/hazardInstruction';
 import { HazardPipelineModel } from '../../hazardAnalysis/hazardPipeline';
 import { assembleCourseSource } from '../../mips/core/assembler/assembler';
@@ -10,7 +11,7 @@ import { CourseProfile } from '../../mips/core/generated/isaCatalog';
 import { prepareCourseExecution } from '../../mips/core/machine/executeService';
 import { runCourseProgram } from '../../mips/core/machine/execution';
 
-const profiles = ['P3', 'P4', 'P5', 'P6'] as const;
+const profiles = ['P3', 'P4', 'P5', 'P6', 'P7'] as const;
 const nonzeroRegisters = Array.from({ length: 31 }, (_, index) => index + 1);
 const highRegisters = nonzeroRegisters.filter((register) => register >= 26);
 const linkBranches = ['bgezal', 'bltzal'];
@@ -49,12 +50,13 @@ function execute(text: string, profile: CourseProfile) {
   };
 }
 
-describe('native P3–P6 signed arithmetic operands', () => {
+describe('native P3–P7 signed arithmetic operands', () => {
   it.each(profiles)('executes full-width signed arithmetic inputs on %s', (profile) => {
+    const hasDivision = profile === 'P6' || profile === 'P7';
     const { text } = generateBuiltinAsmTestCase({
       profile,
-      instructionText: profile === 'P6' ? 'lui add sub addi div mfhi mflo' : 'lui add sub',
-      instructionCount: 2048,
+      instructionText: hasDivision ? 'lui add sub addi div mfhi mflo' : 'lui add sub',
+      instructionCount: profile === 'P7' ? p7CourseInstructionCountMaximum : 2048,
       seed: 'native-gpr-signed-operands'
     });
     const { payload, decode } = execute(text, profile);
@@ -76,7 +78,7 @@ describe('native P3–P6 signed arithmetic operands', () => {
       for (const { register, value } of event.gprWrites) registers[register] = value | 0;
     }
     const expected = ['add.rs', 'add.rt', 'sub.rs', 'sub.rt'];
-    if (profile === 'P6') expected.push('addi.rs', 'div.rs', 'div.rt');
+    if (hasDivision) expected.push('addi.rs', 'div.rs', 'div.rt');
     expect(wideInputs).toEqual(new Set(expected));
   });
 
@@ -97,10 +99,12 @@ describe('native P3–P6 signed arithmetic operands', () => {
   });
 });
 
-describe('native P3–P6 random register operands', () => {
+describe('native P3–P7 random register operands', () => {
   it.each(profiles)('writes and reads all 31 GPRs through both %s ALU ports', (profile) => {
     const { text } = generateBuiltinAsmTestCase({
-      profile, instructionText: 'ori addu', instructionCount: 2048, seed: 'native-gpr-alu-ports'
+      profile, instructionText: 'ori addu',
+      instructionCount: profile === 'P7' ? p7CourseInstructionCountMaximum : 2048,
+      seed: 'native-gpr-alu-ports'
     });
     const { payload, gpr, decode } = execute(text, profile);
     const registers = Array<number>(32).fill(0);
@@ -136,13 +140,13 @@ describe('native P3–P6 random register operands', () => {
   });
 
   it.each(profiles)('executes high registers in %s memory and control operands', (profile) => {
-    const delaySlots = profile === 'P5' || profile === 'P6';
+    const delaySlots = profile === 'P5' || profile === 'P6' || profile === 'P7';
     const instructionText = 'ori lui addu lw sw bgtz blez bgezal bltzal j jalr nop';
     const { text } = generateBuiltinAsmTestCase({
       profile,
       instructionText: profile === 'P3' ? instructionText : `${instructionText} jal jr`,
-      instructionCount: 3000,
-      seed: 'native-gpr-memory-control'
+      instructionCount: profile === 'P7' ? p7CourseInstructionCountMaximum : 3000,
+      seed: profile === 'P7' ? 'native-gpr-memory-control-p7-g' : 'native-gpr-memory-control'
     });
     const { payload, decode } = execute(text, profile);
     const pipeline = new HazardPipelineModel();

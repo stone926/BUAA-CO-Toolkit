@@ -7,11 +7,15 @@ import { generatorInstructionCatalog } from '../../courseTesting/generatorInstru
 import { CpuState } from '../../courseTesting/cpuState';
 import { signExtend16, signed32 } from '../../courseTesting/mipsUtil';
 import { p7RiWordCatalog, p7RiWordDirective } from '../../courseTesting/p7RiWords';
+import { p7InterruptAnchorPairIssue } from '../../courseTesting/p7InterruptAnchor';
 import { checkP7Probe } from '../../courseTesting/p7ProbeCheck';
 import { parseSimOutput } from '../../language/verilog/traceParser';
 import { assembleCourseSource } from '../../mips/core/assembler/assembler';
+import { findCourseHaltPc } from '../../mips/core/assembler/artifacts';
+import { CommitEvent } from '../../mips/core/events/commitEvent';
 import { executeProgramForService, prepareCourseExecution, projectCourseExecutionOutcome } from '../../mips/core/machine/executeService';
 import { runCourseProgram } from '../../mips/core/machine/execution';
+import { courseExceptionCodes } from '../../mips/core/profiles/profile';
 import { CourseTimerDevice } from '../../mips/core/devices/timer';
 import {
   p7ExceptionHandlerAddress,
@@ -265,26 +269,32 @@ describe('built-in ASM generator', () => {
     expect(outcomes.get('movz')).toEqual(new Set([false, true]));
   });
 
-  it('covers both raising and non-raising outcomes for explicitly selected P7 traps', () => {
+  it('executes focused optional P7 traps with one external interrupt', () => {
+    const traps = ['teq', 'tne', 'teqi', 'tnei'];
     const result = generateBuiltinAsmTestCase({
       profile: 'P7',
-      instructionText: 'ori teq tne teqi tnei mfc0 mtc0 eret',
+      instructionText: ['ori', ...traps].join(' '),
       instructionCount: 300,
-      seed: 'trap-outcomes'
+      seed: 'trap-outcomes',
+      interrupt: true,
+      exceptionRate: 0
     });
-    const body = executableLines(beforeKernelText(result.text));
-    const teq = body.filter((line) => /^teq\b/.test(line));
-    const tne = body.filter((line) => /^tne\b/.test(line));
+    const { events } = executeP7Anchor(result.text, result.interruptSchedule);
+    expect(events.flatMap((event) => event.trap ? [event.trap.name] : [])).toEqual(['int']);
+    for (const mnemonic of traps) {
+      expect(events.some((event) => event.kind === 'instruction' && event.mnemonic === mnemonic), mnemonic).toBe(true);
+    }
+  });
 
-    expect(result.text).toContain(`.ktext ${p7Hex(p7ExceptionHandlerAddress)}`);
-    expect(teq.some(hasEqualTrapRegisters)).toBe(true);
-    expect(teq.some((line) => !hasEqualTrapRegisters(line))).toBe(true);
-    expect(tne.some(hasEqualTrapRegisters)).toBe(true);
-    expect(tne.some((line) => !hasEqualTrapRegisters(line))).toBe(true);
-    expect(body).toContain('teqi $0, 0');
-    expect(body).toContain('teqi $0, 1');
-    expect(body).toContain('tnei $0, 1');
-    expect(body).toContain('tnei $0, 0');
+  it('executes a one-instruction optional P7 trap program without a handler', () => {
+    const result = generateBuiltinAsmTestCase({
+      profile: 'P7', instructionText: 'tnei', instructionCount: 1, seed: 'trap-only-no-handler'
+    });
+    expect(result.text).not.toMatch(/^\.ktext\b/m);
+    expect(result.interruptSchedule).toEqual([]);
+    const { events } = executeP7Anchor(result.text);
+    expect(events[0]).toMatchObject({ kind: 'instruction', mnemonic: 'tnei' });
+    expect(events.some((event) => event.trap)).toBe(false);
   });
 
   it('keeps signed arithmetic non-overflowing in every random profile', () => {
@@ -408,54 +418,87 @@ describe('built-in ASM generator', () => {
     expect(eretOnly.usedInstructions).toEqual(['nop']);
   });
 
-  it('schedules one external interrupt at a safe PC and installs the SR prologue', () => {
+  it('acknowledges one external interrupt and skips syscalls with either $27 value', () => {
     const result = generateBuiltinAsmTestCase({
       profile: 'P7',
-      instructionText: '',
-      instructionCount: 200,
+      instructionText: 'ori syscall',
+      instructionCount: 24,
       seed: 'p7-interrupt',
       interrupt: true
     });
 
     expect(result.interruptSchedule).toHaveLength(1);
-    const target = result.interruptSchedule[0];
-    expect(target % 4).toBe(0);
-    expect(target).toBeGreaterThan(p7UserTextBaseAddress);
-    // SR prologue enables the external interrupt before any body instruction.
-    expect(result.text).toContain('ori $k0, $0, 0x1001');
-    expect(result.text).toContain('mtc0 $k0, $12');
-    // The first handler entry is the pre-anchor external interrupt, so it must not read full Cause
-    // before acknowledging: MARS and legal CPUs may differ in Cause.IP visibility.
-    const handler = result.text.slice(result.text.indexOf(`.ktext ${p7Hex(p7ExceptionHandlerAddress)}`));
-    const firstEntryFlag = handler.indexOf('    ori $k1, $0, 1');
-    const branchToException = handler.indexOf('    bne $k1, $0, _co_excep_skip');
-    const interruptAck = handler.indexOf(`    sb $0, ${p7Hex(p7ExternalInterruptAckAddress)}($0)`);
-    const exceptionPath = handler.indexOf('_co_excep_skip:');
-    expect(handler.slice(0, exceptionPath)).not.toContain('    mfc0 $k0, $13');
-    expect(handler.slice(exceptionPath)).toContain('    mfc0 $k0, $13\n    mfc0 $k0, $14');
-    expect(branchToException).toBeGreaterThanOrEqual(0);
-    expect(firstEntryFlag).toBeGreaterThan(branchToException);
-    expect(interruptAck).toBeGreaterThan(firstEntryFlag);
-    expect(handler).toContain(`    sb $0, ${p7Hex(p7ExternalInterruptAckAddress)}($0)`);
-    expect(exceptionPath).toBeGreaterThan(interruptAck);
-    expect(handler).toContain('    mtc0 $k0, $14');
+    const [target] = result.interruptSchedule;
+    const targetIndex = (target - p7UserTextBaseAddress) / 4;
+    // Keep the generated prologue, anchor, halt and handler. Supply both possible
+    // payload values of $27 immediately before syscalls and read them again on return.
+    const beforeMain = result.text.split('main:\n')[0];
+    const anchor = instructionSlotLines(beforeGeneratedHalt(result.text)).slice(0, targetIndex + 1);
+    const tail = result.text.slice(result.text.indexOf('_co_test_end:'));
+    const syscallInputs = [0, 0x5a5a];
+    const payload = syscallInputs.flatMap((value, index) => [
+      `ori $27, $0, ${value}`, 'syscall', `ori $${index + 1}, $27, 0`
+    ]);
+    const text = `${beforeMain}main:\n${[...anchor, ...payload].map((line) => `    ${line}`).join('\n')}\n${tail}`;
+    const { events, words } = executeP7Anchor(text, result.interruptSchedule);
+    expect(p7InterruptAnchorPairIssue(words, target)).toBeUndefined();
+    const traps = events.filter((event) => event.trap);
+    expect(traps.map((event) => event.trap?.name)).toEqual(['int', 'syscall', 'syscall']);
+    expect(traps[0].trap).toMatchObject({ victimPc: target, epc: target, branchDelay: false });
+    expect(events[events.indexOf(traps[0]) - 1].pcBefore).toBe(target - 4);
+    expect(events.flatMap((event) => event.deviceEvents.filter(({ kind }) => kind === 'interrupt-generator-ack')))
+      .toEqual([{ kind: 'interrupt-generator-ack', device: 'interrupt-generator', address: p7ExternalInterruptAckAddress, value: 1 }]);
+
+    for (const [index, trap] of traps.entries()) {
+      const trapIndex = events.indexOf(trap);
+      const returnIndex = events.findIndex((event, eventIndex) => eventIndex > trapIndex && event.mnemonic === 'eret');
+      expect(returnIndex).toBeGreaterThan(trapIndex);
+      const handler = events.slice(trapIndex + 1, returnIndex + 1);
+      const epc = trap.pcBefore;
+      const irq = index === 0;
+      const resumePc = irq ? epc : epc + 4;
+      expect(handler.at(-1)?.pcAfter).toBe(resumePc);
+      expect(events[returnIndex + 1]).toMatchObject({ kind: 'instruction', pcBefore: resumePc });
+      const writes = handler.flatMap((event) => event.gprWrites);
+      expect(writes.every(({ register }) => register === 26)).toBe(true);
+      expect(writes.at(-1)).toEqual({ register: 26, value: irq ? 0 : resumePc });
+      const causeReads = handler.filter(readsCause);
+      if (irq) {
+        expect(causeReads).toEqual([]);
+        expect(handler.flatMap((event) => event.memoryWrites)).toEqual([
+          expect.objectContaining({ address: p7ExternalInterruptAckAddress, byteMask: 1, rawValue: 0 })
+        ]);
+        expect(events.filter((event) => event.kind === 'instruction' && event.pcBefore === target)).toHaveLength(1);
+      } else {
+        const input = syscallInputs[index - 1];
+        expect(events[trapIndex - 1].gprWrites).toEqual([{ register: 27, value: input }]);
+        expect(causeReads.map(({ gprWrites }) => gprWrites)).toEqual([[{ register: 26, value: courseExceptionCodes.syscall << 2 }]]);
+        expect(handler.flatMap((event) => event.memoryWrites)).toEqual([]);
+        expect(events[returnIndex + 1].gprWrites).toEqual([{ register: index, value: input }]);
+      }
+    }
   });
 
-  it('keeps the Cause.ExcCode branch for P7 exception-only tests', () => {
+  it('samples Cause and advances EPC without acknowledging for P7 exception-only tests', () => {
     const result = generateBuiltinAsmTestCase({
       profile: 'P7',
-      instructionText: '',
-      instructionCount: 200,
+      instructionText: 'syscall',
+      instructionCount: 8,
       seed: 'p7-exception-handler',
       interrupt: false,
-      exceptionRate: 0.2
+      exceptionRate: 0
     });
-    const handler = result.text.slice(result.text.indexOf(`.ktext ${p7Hex(p7ExceptionHandlerAddress)}`));
-    const causeRead = handler.indexOf('    mfc0 $k0, $13');
-    const branchToException = handler.indexOf('    bne $k1, $0, _co_excep_skip');
-
-    expect(causeRead).toBeGreaterThanOrEqual(0);
-    expect(branchToException).toBeGreaterThan(causeRead);
+    const { events, gpr } = executeP7Anchor(result.text);
+    const victims = events.filter((event) => event.trap?.name === 'syscall');
+    expect(victims.length).toBeGreaterThan(0);
+    const returns = events.filter((event) => event.mnemonic === 'eret');
+    expect(returns.map((event) => event.pcAfter)).toEqual(victims.map((event) => event.pcBefore + 4));
+    expect(events.filter(readsCause).map((event) => event.gprWrites)).toEqual(
+      victims.map(() => [{ register: 26, value: courseExceptionCodes.syscall << 2 }])
+    );
+    expect(events.flatMap((event) => event.deviceEvents).some(({ kind }) => kind === 'interrupt-generator-ack')).toBe(false);
+    expect(gpr[26]).toBe(returns.at(-1)?.pcAfter);
+    expect(gpr[27]).toBe(courseExceptionCodes.syscall << 2);
   });
 
   it('keeps P7 external interrupt targets out of the internal-exception flush shadow', () => {
@@ -521,11 +564,7 @@ describe('built-in ASM generator', () => {
     expect(bodyLines).toContain('syscall');
     expect(bodyLines).toEqual(expect.arrayContaining(p7RiWordCatalog.map(p7RiWordDirective)));
     expect(result.text).not.toContain('_co_internal_unknown_instruction');
-    expect(bodyLines.some((line) =>
-      /\baddi\s+\$\d+,\s+\$24,\s+-1\b/.test(line) ||
-      /\badd\s+\$\d+,\s+\$24,\s+\$24\b/.test(line) ||
-      /\bsub\s+\$\d+,\s+\$24,\s+\$23\b/.test(line)
-    )).toBe(true);
+    expect(executeP7Anchor(result.text).events.some((event) => event.trap?.name === 'ov')).toBe(true);
   });
 
   it('honors configured P7 exception classes', () => {
@@ -1490,7 +1529,27 @@ function probeScenarioBlock(text: string, scenarioId: number): string {
   return start >= 0 ? text.slice(start, end) : '';
 }
 
-function hasEqualTrapRegisters(line: string): boolean {
-  const match = /^t(?:eq|ne)\s+(\$\d+),\s*(\$\d+)$/.exec(line);
-  return Boolean(match && match[1] === match[2]);
+function executeP7Anchor(text: string, interruptSchedule: readonly number[] = []) {
+  const assembled = assembleCourseSource({ id: 'p7-anchor', text }, { profile: 'P7' });
+  expect(assembled.ok, assembled.diagnostics.map((item) => item.message).join('\n')).toBe(true);
+  const image = assembled.image!;
+  const prepared = prepareCourseExecution({
+    profile: 'P7',
+    enabledLayers: ['required', 'commonExtensions', 'marsCompatibility'],
+    segments: image.segments,
+    entryPc: image.entryPc,
+    haltPc: findCourseHaltPc(image, 'P7'),
+    maxSteps: 32_768,
+    externalInterrupts: interruptSchedule.map((victimPc) => ({ victimPc, occurrence: 1 }))
+  });
+  const events: CommitEvent[] = [];
+  const executed = runCourseProgram(prepared.session, {
+    onEvents: (slice) => events.push(...slice), finalSnapshotLevel: 'registers'
+  });
+  expect(executed, executed.diagnostic?.message).toMatchObject({ status: 'halted', haltReason: 'course-halt-loop' });
+  return { events, words: image.segments.find((segment) => segment.name === 'text')!.words, gpr: executed.finalSnapshot.gpr };
+}
+
+function readsCause(event: CommitEvent): boolean {
+  return event.mnemonic === 'mfc0' && ((event.instructionWord! >>> 11) & 31) === 13;
 }

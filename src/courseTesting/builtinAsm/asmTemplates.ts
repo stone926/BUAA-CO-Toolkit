@@ -8,11 +8,13 @@ import { renderResourceTemplate } from '../../templates/templateRegistry';
  * 模板变量约定（驼峰命名，不含 `$` 前缀）：
  *  - ${exceptionHandlerHex} — P7 异常处理程序入口的十六进制
  *  - ${intAckHex} — 中断确认地址的十六进制
+ *  - ${negatedInterruptAnchorHex} — 外部中断受害指令 PC 的负十六进制
  */
-export function renderP7ExceptionHandler(intAckAddress: number, exceptionHandlerAddress: number): string[] {
+export function renderP7ExceptionHandler(intAckAddress: number, exceptionHandlerAddress: number, interruptAnchorPc: number): string[] {
   return renderAsmTemplate('asm/p7_exception_handler.asm', {
     exceptionHandlerHex: `0x${exceptionHandlerAddress.toString(16)}`,
-    intAckHex: `0x${intAckAddress.toString(16)}`
+    intAckHex: `0x${intAckAddress.toString(16)}`,
+    negatedInterruptAnchorHex: `-0x${interruptAnchorPc.toString(16)}`
   });
 }
 

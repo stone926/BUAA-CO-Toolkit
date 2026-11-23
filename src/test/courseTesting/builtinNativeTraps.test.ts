@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { generateBuiltinAsmTestCase } from '../../courseTesting/builtinAsmGenerator';
+import { p7CourseInstructionCountMaximum } from '../../courseTesting/p7Hardware';
 import { assembleCourseSource } from '../../mips/core/assembler/assembler';
 import { findCourseHaltPc } from '../../mips/core/assembler/artifacts';
 import { executeProgramForService } from '../../mips/core/machine/executeService';
@@ -9,14 +10,15 @@ const immediateTraps = ['teqi', 'tnei', 'tgei', 'tgeiu', 'tlti', 'tltiu'];
 const trapMnemonics = [...registerTraps, ...immediateTraps];
 const allRegisters = new Set(Array.from({ length: 32 }, (_, index) => `$${index}`));
 
-describe('native P3-P6 trap operands', () => {
-  it.each(['P3', 'P4', 'P5', 'P6'] as const)('executes non-raising traps across all %s GPRs', (profile) => {
+describe('native P3-P7 trap operands', () => {
+  it.each(['P3', 'P4', 'P5', 'P6', 'P7'] as const)('executes non-raising traps across all %s GPRs', (profile) => {
     const { text } = generateBuiltinAsmTestCase({
       profile,
       instructionText: ['ori', 'addiu', 'lui', ...trapMnemonics].join(' '),
-      instructionCount: 2048,
+      instructionCount: profile === 'P7' ? p7CourseInstructionCountMaximum : 2048,
       seed: 'native-trap-registers'
     });
+    expect(text).not.toMatch(/^\.ktext\b/m);
     const registerSources = new Set<string>();
     const registerTargets = new Set<string>();
     const immediateSources = new Set<string>();

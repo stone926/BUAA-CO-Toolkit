@@ -314,12 +314,12 @@ export class HazardPipelineModel {
     return result;
   }
 
-  /** The pipeline drained (exception entry): nothing older can forward to later instructions. */
-  flush(): void {
+  /** Drain pending forwards and let an already-started MDU operation age across the elapsed cycles. */
+  flush(elapsedCycles = pipelineStages.length): void {
     this.writes = [];
     this.zeroWrites = [];
     this.hiLoWrites.clear();
-    this.nextDecodeCycle += pipelineStages.length;
+    this.nextDecodeCycle += elapsedCycles;
   }
 
   /** Newest-first GPR writers that have not left W before `decodeCycle`. */

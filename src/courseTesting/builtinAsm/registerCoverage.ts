@@ -41,8 +41,7 @@ export function emitGeneralRegisterCoverage(
     writer.emit('sw', `sw ${register}, ${address}($0)`);
     state.memory.set(address, state.regValue(register));
   }
-  // $26 is the poison destination; P7's first-interrupt handler also requires $27 == 0.
-  // This block executes before interrupts are enabled and never relies on either value later.
+  // Restore the directed check's final scratch-register values after the observations.
   for (const register of ['$26', '$27']) {
     writer.emit('ori', `ori ${register}, $0, 0`);
     state.setRegister(register, 0);

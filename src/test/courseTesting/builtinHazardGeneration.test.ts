@@ -1,16 +1,18 @@
 import { describe, expect, it, vi } from 'vitest';
 import { automaticTestPolicy } from '../../courseTesting/automaticTestPolicy';
-import { generateBuiltinAsmTestCase } from '../../courseTesting/builtinAsmGenerator';
+import { BuiltinAsmGeneratorOptions, BuiltinAsmGeneratorResult, generateBuiltinAsmTestCase } from '../../courseTesting/builtinAsmGenerator';
 import { forwardTupleKey, stallTupleKey } from '../../hazardAnalysis/hazardCoverage';
 import { decodeHazardInstruction } from '../../hazardAnalysis/hazardInstruction';
 import { HazardObservation, HazardPipelineModel } from '../../hazardAnalysis/hazardPipeline';
+import { HazardTracker } from '../../courseTesting/builtinAsm/hazard/hazardTracker';
 import { predictForwardTuples } from '../../courseTesting/builtinAsm/hazard/hazardTargets';
-import { CpuState } from '../../courseTesting/cpuState';
+import { courseDataByteLength, CpuState } from '../../courseTesting/cpuState';
+import { p7ExceptionHandlerAddress } from '../../courseTesting/p7Hardware';
 import { assembleCourseSource } from '../../mips/core/assembler/assembler';
 import { findCourseHaltPc } from '../../mips/core/assembler/artifacts';
-import { CourseProfile } from '../../mips/core/generated/isaCatalog';
+import { CommitEvent } from '../../mips/core/events/commitEvent';
 import { runCourseProgram } from '../../mips/core/machine/execution';
-import { prepareCourseExecution, projectCourseExecutionOutcome } from '../../mips/core/machine/executeService';
+import { prepareCourseExecution } from '../../mips/core/machine/executeService';
 
 function run(model: HazardPipelineModel, program: Array<[string, number?]>): HazardObservation[] {
   let previous = 0;
@@ -73,57 +75,89 @@ describe('course AT hazard model', () => {
 });
 
 describe('hazard-directed generation', () => {
-  const profiles = ['P5', 'P6', 'P7'] as const;
+  const profiles = ['P3', 'P4', 'P5', 'P6', 'P7'] as const;
 
-  it.each(['P3', 'P4', ...profiles] as const)('matches the %s execution engine on modeled GPRs and DM', (profile) => {
+  it.each(profiles)('matches the %s execution engine on all modeled GPRs and DM', (profile) => {
     for (const seed of ['a', 'b', 'c']) {
-      let modelState: CpuState | undefined;
-      const original = CpuState.prototype.setRegister;
-      const spy = vi.spyOn(CpuState.prototype, 'setRegister').mockImplementation(function (this: CpuState, register, value) {
-        modelState ??= this;
-        return original.call(this, register, value);
+      const { generated, events } = expectModeledState({
+        ...automaticTestPolicy(profile), profile, instructionText: '', seed: `hazard-model-${seed}`,
+        p7StressMode: profile === 'P7' ? 'anchor' : 'off'
       });
-      let generated: ReturnType<typeof generateBuiltinAsmTestCase>;
-      try {
-        generated = generateBuiltinAsmTestCase({
-          ...automaticTestPolicy(profile), profile, instructionText: '', seed: `hazard-model-${seed}`,
-          p7StressMode: profile === 'P7' ? 'anchor' : 'off'
-        });
-      } finally {
-        spy.mockRestore();
-      }
-      const assembled = assembleCourseSource({ id: 'hazard', text: generated.text }, { profile: profile as CourseProfile });
-      expect(assembled.ok, assembled.diagnostics.map((item) => item.message).join('\n')).toBe(true);
-      const prepared = prepareCourseExecution({
-        profile,
-        segments: assembled.image!.segments,
-        entryPc: assembled.image!.entryPc,
-        haltPc: findCourseHaltPc(assembled.image!, profile),
-        maxSteps: 65_536,
-        externalInterrupts: generated.interruptSchedule.map((victimPc) => ({ victimPc, occurrence: 1 }))
-      });
-      const result = projectCourseExecutionOutcome(prepared,
-        runCourseProgram(prepared.session, { collectTrace: true, finalSnapshotLevel: 'full' }));
-      expect(result, result.diagnostic?.message).toMatchObject({ status: 'halted', haltReason: 'course-halt-loop' });
-      const registers = profile === 'P7'
-        ? [...Array.from({ length: 24 }, (_, index) => index + 1), 31]
-        : Array.from({ length: 32 }, (_, index) => index);
-      for (const register of registers) {
-        const expected = `0x${(modelState!.regValue(`$${register}`) >>> 0).toString(16).padStart(8, '0')}`;
-        expect(result.finalState.gpr[register], `${profile}/${seed} $${register}`).toBe(expected);
-      }
-      // $25 finally holds the static completion marker.
-      expect(result.finalState.gpr[25]).toBe('0x00006d6e');
-      for (const word of result.finalState.dataWords) {
-        const address = Number(word.address);
-        if (address < 0x3000) {
-          const expected = `0x${(modelState!.wordAt(address) >>> 0).toString(16).padStart(8, '0')}`;
-          expect(word.value, `${profile}/${seed} DM ${word.address}`).toBe(expected);
-        }
+      if (profile === 'P7') {
+        expect(events.filter((event) => event.kind === 'interrupt')).toHaveLength(1);
+        expect(events.some((event) => event.kind === 'exception')).toBe(true);
       }
       if (profile === 'P3' || profile === 'P4') expect(generated.hazardCoverage).toBeUndefined();
       else expect(generated.hazardCoverage?.stallTuples).toBeGreaterThan(0);
     }
+  });
+
+  it.each(['sync-only', 'handlerless'] as const)('matches all P7 modeled GPRs and DM in a %s program', (variant) => {
+    const syncOnly = variant === 'sync-only';
+    const policy = automaticTestPolicy('P7');
+    const { generated, events } = expectModeledState({
+      ...policy, profile: 'P7', p7StressMode: 'anchor', interrupt: false, seed: `hazard-model-${variant}`,
+      instructionText: syncOnly ? '' : 'ori lui add sub addi div mfhi mflo lw sw beq jr jalr',
+      exceptionRate: syncOnly ? policy.exceptionRate : 0
+    });
+    expect(generated.interruptSchedule).toEqual([]);
+    expect(events.some((event) => event.pcBefore >= p7ExceptionHandlerAddress)).toBe(syncOnly);
+    expect(events.some((event) => event.kind === 'exception')).toBe(syncOnly);
+  });
+
+  it('clears in-flight producers across P7 interrupt and synchronous handler returns', () => {
+    const { generated, observations } = observeGenerated({
+      profile: 'P7', interrupt: true, instructionText: 'ori syscall',
+      instructionCount: 256, seed: 'p7-handler-hazard-boundary'
+    });
+    const { events, haltPc } = executeGenerated(generated);
+    const payload = events.filter((event) => event.kind === 'instruction' && event.pcBefore < haltPc);
+    expect(observations.map(({ mnemonic }) => mnemonic)).toEqual(payload.map(({ mnemonic }) => mnemonic));
+    const traps = events.filter((event) => event.trap);
+    expect(new Set(traps.map((event) => event.kind))).toEqual(new Set(['interrupt', 'exception']));
+    for (const trap of traps) {
+      // Consecutive syscalls can enter the handler again before any payload instruction commits.
+      const index = payload.findIndex((event) => event.sequence > trap.sequence);
+      expect(index).toBeGreaterThanOrEqual(0);
+      const { pending, observation } = observations[index];
+      expect(pending, `in-flight writes across ${trap.trap!.name} at 0x${trap.pcBefore.toString(16)}`).toBe(0);
+      expect(observation.forwards).toEqual([]);
+      expect(observation.stallCauses).toEqual([]);
+    }
+  });
+
+  it.each([
+    { interrupt: true, seed: 'mdubound88', victimPc: 0x3020, consumerPc: 0x3038, register: 25, source: 'M', gap: 1, handlerCount: 9 },
+    { interrupt: false, seed: 'mdubound20', victimPc: 0x3238, consumerPc: 0x3248, register: 11, source: 'W', gap: 2, handlerCount: 8 }
+  ])('ages DIV while the P7 synchronous handler executes (interrupt=$interrupt)', ({
+    interrupt, seed, victimPc, consumerPc, register, source, gap, handlerCount
+  }) => {
+    const { generated, observations } = observeGenerated({
+      profile: 'P7', interrupt, instructionText: 'div syscall mflo jr jalr addi',
+      instructionCount: 256, exceptionRate: 0, seed
+    });
+    const { events, haltPc } = executeGenerated(generated);
+    const victimIndex = events.findIndex((event) => event.trap?.name === 'syscall' && event.pcBefore === victimPc);
+    expect(victimIndex).toBeGreaterThanOrEqual(2);
+    expect(events.slice(victimIndex - 2, victimIndex).map(({ mnemonic }) => mnemonic)).toContain('div');
+    const handler = events.slice(victimIndex + 1, victimIndex + 1 + handlerCount);
+    expect(handler.every(({ pcBefore }) => pcBefore >= p7ExceptionHandlerAddress)).toBe(true);
+    expect(handler.at(-1)).toMatchObject({ mnemonic: 'eret', pcAfter: victimPc + 4 });
+
+    const payload = events.filter((event) => event.kind === 'instruction' && event.pcBefore < haltPc);
+    expect(observations.map(({ mnemonic }) => mnemonic)).toEqual(payload.map(({ mnemonic }) => mnemonic));
+    const consumerIndex = payload.findIndex((event) => event.pcBefore === consumerPc);
+    const producerIndex = consumerIndex - gap - 1;
+    expect(producerIndex).toBeGreaterThanOrEqual(0);
+    expect(payload[producerIndex]).toMatchObject({
+      mnemonic: 'addi', gprWrites: [expect.objectContaining({ register })]
+    });
+    expect(payload.slice(producerIndex + 1, consumerIndex).map(({ mnemonic }) => mnemonic))
+      .toEqual(Array(gap).fill('mflo'));
+    expect(observations[consumerIndex].observation.forwards).toContainEqual(expect.objectContaining({
+      producer: 'addi', consumer: 'addi', register: `$${register}`, role: 'rs',
+      gap, source, destination: 'D', valid: true
+    }));
   });
 
   it('reaches most course forward and stall tuples in one default P6 program', () => {
@@ -144,3 +178,80 @@ describe('hazard-directed generation', () => {
     expect(generated.text).not.toContain('hazard_coverage');
   });
 });
+
+function observeGenerated(options: BuiltinAsmGeneratorOptions) {
+  const observations: Array<{ mnemonic: string; pending: number; observation: HazardObservation }> = [];
+  const record = HazardTracker.prototype.record;
+  const observe = HazardPipelineModel.prototype.observe;
+  let generatorModel: HazardPipelineModel | undefined;
+  const recordSpy = vi.spyOn(HazardTracker.prototype, 'record').mockImplementation(function (this: HazardTracker, ...args) {
+    generatorModel = this.model;
+    record.apply(this, args);
+  });
+  const observeSpy = vi.spyOn(HazardPipelineModel.prototype, 'observe').mockImplementation(function (
+    this: HazardPipelineModel, instruction, values
+  ) {
+    const pending = this === generatorModel ? this.pendingProducers().length : 0;
+    const observation = observe.call(this, instruction, values);
+    if (this === generatorModel) observations.push({ mnemonic: instruction.mnemonic, pending, observation });
+    return observation;
+  });
+  try {
+    return { generated: generateBuiltinAsmTestCase(options), observations };
+  } finally {
+    observeSpy.mockRestore();
+    recordSpy.mockRestore();
+  }
+}
+
+function expectModeledState(options: BuiltinAsmGeneratorOptions) {
+  let modelState: CpuState | undefined;
+  const original = CpuState.prototype.setRegister;
+  const spy = vi.spyOn(CpuState.prototype, 'setRegister').mockImplementation(function (this: CpuState, register, value) {
+    modelState ??= this;
+    return original.call(this, register, value);
+  });
+  let generated: BuiltinAsmGeneratorResult;
+  try {
+    generated = generateBuiltinAsmTestCase(options);
+  } finally {
+    spy.mockRestore();
+  }
+  expect(modelState).toBeDefined();
+  const { events, snapshot } = executeGenerated(generated);
+  const label = `${options.profile}/${options.seed}`;
+  for (let register = 0; register < 32; register++) {
+    expect(snapshot.gpr[register], `${label} $${register}`).toBe(modelState!.regValue(`$${register}`) >>> 0);
+  }
+  const expectedDm = [];
+  for (let address = 0; address < courseDataByteLength; address += 4) {
+    const value = modelState!.wordAt(address) >>> 0;
+    if (value !== 0) expectedDm.push({ address, value });
+  }
+  expect(snapshot.dataWords?.filter(({ address }) => address < courseDataByteLength), `${label} DM`)
+    .toEqual(expectedDm);
+  return { generated, events };
+}
+
+function executeGenerated(generated: BuiltinAsmGeneratorResult) {
+  const { profile, text } = generated;
+  const assembled = assembleCourseSource({ id: 'hazard', text }, { profile });
+  expect(assembled.ok, assembled.diagnostics.map((item) => item.message).join('\n')).toBe(true);
+  const image = assembled.image!;
+  const haltPc = findCourseHaltPc(image, profile)!;
+  const prepared = prepareCourseExecution({
+    profile,
+    enabledLayers: ['required', 'commonExtensions', 'marsCompatibility'],
+    segments: image.segments,
+    entryPc: image.entryPc,
+    haltPc,
+    maxSteps: 65_536,
+    externalInterrupts: generated.interruptSchedule.map((victimPc) => ({ victimPc, occurrence: 1 }))
+  });
+  const events: CommitEvent[] = [];
+  const outcome = runCourseProgram(prepared.session, {
+    onEvents: (slice) => events.push(...slice), finalSnapshotLevel: 'full'
+  });
+  expect(outcome, outcome.diagnostic?.message).toMatchObject({ status: 'halted', haltReason: 'course-halt-loop' });
+  return { events, snapshot: outcome.finalSnapshot, haltPc };
+}

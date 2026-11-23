@@ -17,11 +17,12 @@ const profiles = ['P3', 'P4', 'P5', 'P6', 'P7'] as const;
 const allowed = new Set(['ori', 'add', 'sub', 'sw', 'lw', 'jr', 'nop']);
 
 function prepare(text: string, profile: CourseProfile, interruptSchedule: readonly number[] = []) {
-  const assembled = assembleCourseSource({ id: 'register-coverage', text }, { profile });
+  const assembled = assembleCourseSource({ id: 'register-coverage', text }, { profile, layers: ['required'] });
   expect(assembled.ok, assembled.diagnostics.map((item) => item.message).join('\n')).toBe(true);
   const image = assembled.image!;
   const prepared = prepareCourseExecution({
     profile,
+    enabledLayers: ['required'],
     segments: image.segments,
     entryPc: image.entryPc,
     haltPc: findCourseHaltPc(image, profile),
@@ -89,14 +90,6 @@ describe('directed architectural register coverage', () => {
       for (const gap of [0, 1, 2]) {
         const pc = sourceLabelPc(generated.text, `_co_jr_${producer}_gap${gap}`);
         expect(result.trace!.some((line) => line.startsWith(`@${hex(pc)}: $22 <=`)), `${producer} -> jr, gap ${gap}`).toBe(true);
-      }
-    }
-    if (profile === 'P7') {
-      const body = generated.text.split('main:\n')[1].split('.ktext')[0];
-      for (const line of body.split(/\r?\n/)) {
-        const registers = line.match(/\$\d+\b/g) ?? [];
-        expect(registers.slice(1), line).not.toContain('$26');
-        expect(registers.slice(1), line).not.toContain('$27');
       }
     }
   });
