@@ -1,6 +1,6 @@
 // @index mips-core — Validate declarative generation, access and timing facts before registration
 import type { CustomInstructionDefinition } from './api';
-import type { CustomEncodingField } from './registry';
+import type { CustomEncodingField } from './encoding';
 
 export function validateCustomMetadata(definition: CustomInstructionDefinition, fields: readonly CustomEncodingField[]): void {
   const fail = (message: string): never => { throw new Error(`${definition.mnemonic}: ${message}`); };

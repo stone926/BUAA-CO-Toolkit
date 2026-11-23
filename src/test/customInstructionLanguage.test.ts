@@ -35,6 +35,27 @@ describe('workspace custom instruction editor facts', () => {
     expect(getMipsDiagnostics(document('xori_custom $1,$0,65536'), settings, state).some(item => String(item.message).includes('65535'))).toBe(true);
   });
 
+  it('shows the exact script encoding segments in hover, completion and signature help', () => {
+    const source = document('bds $1, $2');
+    setCustomInstructionFacts(root, [{
+      apiVersion: 1, mnemonic: 'bds', modes: ['P5'], override: true,
+      encoding: '000000 rs:5 rt:5 00000 00000 001010',
+      operands: [{ kind: 'register', field: 'rs' }, { kind: 'register', field: 'rt' }]
+    }]);
+    const table = [
+      '| 位号 | 31–26 | 25–21 | 20–16 | 15–11 | 10–6 | 5–0 |',
+      '| --- | :---: | :---: | :---: | :---: | :---: | :---: |',
+      '| 编码 | `000000` | `rs` | `rt` | `00000` | `00000` | `001010` |',
+      '| 位宽 | 6 | 5 | 5 | 5 | 5 | 6 |'
+    ].join('\n');
+    const preview = { value: `\`\`\`mipsasm-instruction\nbds $rs, $rt\n\`\`\`\n\n${table}` };
+    expect(getMipsHover(source, { line: 0, character: 1 }, settings, state)?.contents).toMatchObject(preview);
+    const completion = getMipsCompletions(document('bd'), { line: 0, character: 2 }, settings, state).find(item => item.label === 'bds');
+    expect(completion?.documentation).toMatchObject(preview);
+    expect(getMipsSignatureHelp(source, { line: 0, character: 9 }, settings, state)?.signatures[0].documentation)
+      .toMatchObject({ value: expect.stringContaining(table) });
+  });
+
   it('recognizes the registered MARS template without accepting unrelated unknown instructions', () => {
     const source = document('bds $1, $2\nunknown_mnemonic $1, $2');
     const unknowns = (input: TextDocument) => getMipsDiagnostics(input, settings, state).filter(item => item.code === 'unknown-instruction');

@@ -7,7 +7,7 @@ MIPS、Verilog 与 SystemVerilog 的 TextMate 词法高亮，以及与 LSP seman
 - TextMate — 注释、字符串/字符/转义、数字、关键字、directive、系统任务、操作符、标点，以及可由局部语法确定的名称
 - Semantic — 指令类别、寄存器、宏/符号引用，以及 Verilog 模块/端口/信号/参数/实例/task/function 等上下文角色
 - MIPS macro bodies — each physical body line gets the same instruction/directive/operand scopes as top-level code; `%parameter:` label placeholders retain parameter coloring, while real macro-local labels remain symbol-colored
-- 自定义 MIPS 指令的悬停和补全预览使用 `mipsasm-instruction`，将助记符标为指令并复用 MIPS 操作数规则。该语言仅用于预览，无文件关联或语言服务。
+- 自定义 MIPS 指令的悬停和补全预览使用 `mipsasm-instruction`，将助记符标为指令，复用 MIPS 操作数规则，并将 `$rs` 等寄存器占位符按寄存器着色。该语言仅用于预览，无文件关联或语言服务。
 - 约束 — semantic provider 不重复发送整段注释、字符串、数字或关键字，避免覆盖主题的嵌套 TextMate scope
 - Verilog/SystemVerilog 编译指令与宏引用将反引号和名称作为完整 token 着色，后方参数保留各自类别；Verilog 宏的 semantic token 同样覆盖反引号。
 - Verilog/SystemVerilog 普通标识符提供 TextMate 基础着色（含格式化系统任务的参数及嵌套括号），保证非活动条件编译分支也有高亮；活动分支的角色仍由 semantic tokens 细分。

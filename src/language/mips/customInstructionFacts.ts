@@ -13,6 +13,10 @@ interface Facts {
   mars: ReadonlyMap<string, MipsInstruction>;
   revision: number;
 }
+export interface MipsCustomInstruction extends MipsInstruction {
+  readonly encoding?: string;
+}
+
 export type CustomInstructionFactsUpdate = { rootUri: string } & ({ removed: true } | {
   instructions: readonly CustomInstructionMetadata[];
   marsInstructions: readonly CustomInstructionEncoding[];
@@ -45,13 +49,13 @@ function factsFor(uri: string): Facts | undefined {
 }
 function modeFor(profile: string): CustomInstructionMode { return /^P[3-7]$/.test(profile) ? profile as CustomInstructionMode : 'mars'; }
 export function customInstructionFactsRevision(uri: string): number { return factsFor(uri)?.revision ?? 0; }
-export function customInstructionDisplayFor(uri: string, profile: string, mnemonic: string): MipsInstruction | undefined {
+export function customInstructionDisplayFor(uri: string, profile: string, mnemonic: string): MipsCustomInstruction | undefined {
   const facts = factsFor(uri);
   const name = mnemonic.toLowerCase();
   const script = facts?.registry.get(name, modeFor(profile));
   return script ? scriptInstructionDisplay(script, name) : facts?.mars.get(name);
 }
-export function* customInstructionDisplays(uri: string, profile: string): Iterable<MipsInstruction> {
+export function* customInstructionDisplays(uri: string, profile: string): Iterable<MipsCustomInstruction> {
   const facts = factsFor(uri);
   if (!facts) return;
   const mode = modeFor(profile);
@@ -63,10 +67,10 @@ export function* customInstructionDisplays(uri: string, profile: string): Iterab
     if (!facts.registry.get(name, mode)) yield display;
   }
 }
-function scriptInstructionDisplay(item: CustomInstructionMetadata, mnemonic: string): MipsInstruction {
+function scriptInstructionDisplay(item: CustomInstructionMetadata, mnemonic: string): MipsCustomInstruction {
   const operands = item.operands.map(op => op.kind === 'register' ? `$${op.field}` : op.kind === 'memory' ? `${op.offsetField}($${op.baseField})` : op.field);
   const target = item.operands.findIndex(op => op.kind === 'immediate' && !!op.relocation);
-  return { mnemonic, type: 'special', summary: '工作区自定义指令', description: `自定义编码：${item.encoding}`,
+  return { mnemonic, type: 'special', summary: '工作区自定义指令', description: '', encoding: item.encoding,
     formats: [`${mnemonic}${operands.length ? ' ' : ''}${operands.join(', ')}`], operands: [operands.length, operands.length],
     ...(target === 0 ? { labelOperand: 'first' } : target === 1 ? { labelOperand: 'second' } : target === operands.length - 1 && target >= 0 ? { labelOperand: 'last' } : {}) };
 }

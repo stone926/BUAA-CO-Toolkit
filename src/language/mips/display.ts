@@ -1,8 +1,10 @@
 import { MarkupKind, Position, Range } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { p7ExceptionHandlerAddress } from '../../courseTesting/p7Hardware';
+import { parseCustomInstructionEncoding } from '../../mips/core/custom/encoding';
 import { lineAt } from '../common/lsp';
 import { languageIds } from '../generated/languages';
+import type { MipsCustomInstruction } from './customInstructionFacts';
 import { MipsMacro, MipsParseResult } from './model';
 import { instructionWritesRegister } from './instructionValidation';
 import { macroCallArgumentsAtPosition } from './queries';
@@ -14,7 +16,6 @@ import {
   canonicalRegister,
   isRegister,
   MipsCp0RegisterInfo,
-  MipsInstruction,
   MipsSyscallInfo,
   syscallsByCode
 } from './resources';
@@ -24,8 +25,20 @@ import {
   signed32ImmediateValue
 } from './syntax';
 
-export function customInstructionPreviewMarkdown(instruction: MipsInstruction): string {
-  return `\`\`\`${languageIds.mipsInstructionPreview}\n${instruction.formats[0]}\n\`\`\`\n${instruction.description}`;
+export function customInstructionPreviewMarkdown(instruction: MipsCustomInstruction): string {
+  return `\`\`\`${languageIds.mipsInstructionPreview}\n${instruction.formats[0]}\n\`\`\`\n\n${instructionDescriptionMarkdown(instruction)}`;
+}
+
+export function instructionDescriptionMarkdown(instruction: MipsCustomInstruction): string {
+  if (!instruction.encoding) return instruction.description;
+  const { parts } = parseCustomInstructionEncoding(instruction.encoding, instruction.mnemonic);
+  const rows = [
+    ['位号', ...parts.map(({ shift, width }) => width === 1 ? `${shift}` : `${shift + width - 1}–${shift}`)],
+    ['---', ...parts.map(() => ':---:')],
+    ['编码', ...parts.map(({ text }) => `\`${text}\``)],
+    ['位宽', ...parts.map(({ width }) => width)]
+  ];
+  return rows.map(row => `| ${row.join(' | ')} |`).join('\n');
 }
 
 export function directiveHoverText(directive: string): string | undefined {

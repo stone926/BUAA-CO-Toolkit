@@ -41,6 +41,10 @@
         },
         {
           "include": "source.mips#punctuation"
+        },
+        {
+          "name": "variable.language.register.mips",
+          "match": "\\$[A-Za-z][A-Za-z0-9_]*(?![A-Za-z0-9_.$])"
         }
       ]
     }

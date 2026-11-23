@@ -6,8 +6,8 @@ import { isSupportedAssemblerMnemonic } from '../assembler/capabilities';
 import { marsFpMemoryOpcodes } from '../assembler/marsInstructionFacts';
 import { validateCustomMetadata } from './metadataValidation';
 import type { CustomInstructionDefinition, CustomInstructionMetadata, CustomInstructionMode } from './api';
+import { customEncodingFieldMask, parseCustomInstructionEncoding, type CustomEncodingField } from './encoding';
 
-export interface CustomEncodingField { readonly name: string; readonly width: number; readonly shift: number }
 interface CompiledInstruction {
   readonly definition: CustomInstructionDefinition;
   readonly metadata: CustomInstructionMetadata;
@@ -16,7 +16,6 @@ interface CompiledInstruction {
   readonly value: number;
 }
 const modes = ['mars', 'P3', 'P4', 'P5', 'P6', 'P7'];
-const maskFor = (width: number): number => width === 32 ? 0xffff_ffff : 2 ** width - 1;
 export class CustomInstructionRegistry {
   private readonly entries: readonly CompiledInstruction[];
   constructor(definitions: readonly CustomInstructionDefinition[]) {
@@ -77,7 +76,7 @@ export class CustomInstructionRegistry {
     const entry = this.entries.find(item => item.definition.modes.includes(mode) && ((word & item.mask) >>> 0) === item.value);
     if (!entry) return undefined;
     const fields: Record<string, number> = Object.create(null) as Record<string, number>;
-    for (const field of entry.fields) fields[field.name] = (word >>> field.shift) & maskFor(field.width);
+    for (const field of entry.fields) fields[field.name] = (word >>> field.shift) & customEncodingFieldMask(field.width);
     return { definition: entry.definition, fields: Object.freeze(fields) };
   }
   encode(mnemonic: string, fields: Readonly<Record<string, number>>, mode: CustomInstructionMode): number {
@@ -87,8 +86,8 @@ export class CustomInstructionRegistry {
     let word = entry.value;
     for (const field of entry.fields) {
       const value = fields[field.name];
-      if (!Number.isSafeInteger(value) || value < -(2 ** (field.width - 1)) || value > maskFor(field.width)) throw new Error(`${mnemonic}: field ${field.name} is outside ${field.width} bits`);
-      word = (word | ((value & maskFor(field.width)) << field.shift)) >>> 0;
+      if (!Number.isSafeInteger(value) || value < -(2 ** (field.width - 1)) || value > customEncodingFieldMask(field.width)) throw new Error(`${mnemonic}: field ${field.name} is outside ${field.width} bits`);
+      word = (word | ((value & customEncodingFieldMask(field.width)) << field.shift)) >>> 0;
     }
     return word;
   }
@@ -116,24 +115,7 @@ function compile(input: CustomInstructionDefinition): CompiledInstruction {
   if (input.aliases !== undefined && (!Array.isArray(input.aliases) || input.aliases.length > 32 || input.aliases.some(alias => typeof alias !== 'string' || !/^[a-z][a-z0-9_.]*$/.test(alias) || alias.length > 64) || new Set([name, ...input.aliases]).size !== input.aliases.length + 1)) throw new Error(`${name}: invalid aliases`);
   if (!Array.isArray(input.modes) || input.modes.length === 0 || input.modes.some(mode => !modes.includes(mode)) || new Set(input.modes).size !== input.modes.length) throw new Error(`${name}: invalid modes`);
   if (typeof input.execute !== 'function') throw new Error(`${name}: execute must be a function`);
-  if (typeof input.encoding !== 'string') throw new Error(`${name}: encoding must be a bit pattern`);
-  let remaining = 32, mask = 0, value = 0;
-  const fields: CustomEncodingField[] = [];
-  for (const token of input.encoding.trim().split(/\s+/)) {
-    if (/^[01]+$/.test(token)) {
-      remaining -= token.length;
-      if (remaining < 0) throw new Error(`${name}: encoding exceeds 32 bits`);
-      mask = (mask | (maskFor(token.length) << remaining)) >>> 0;
-      value = (value | (parseInt(token, 2) << remaining)) >>> 0;
-    } else {
-      const match = /^([A-Za-z][A-Za-z0-9_]*):([1-9][0-9]?)$/.exec(token);
-      if (!match || Number(match[2]) > 31) throw new Error(`${name}: invalid encoding token ${token}`);
-      const width = Number(match[2]); remaining -= width;
-      if (remaining < 0 || fields.some(field => field.name === match[1])) throw new Error(`${name}: duplicate field or encoding exceeds 32 bits`);
-      fields.push(Object.freeze({ name: match[1], width, shift: remaining }));
-    }
-  }
-  if (remaining !== 0 || mask === 0) throw new Error(`${name}: encoding must total 32 bits with fixed selector bits`);
+  const { fields, mask, value } = parseCustomInstructionEncoding(input.encoding, name);
   if (!Array.isArray(input.operands) || input.operands.length > 8) throw new Error(`${name}: invalid operands`);
   const consumed = new Set<string>();
   const requireField = (field: string, register = false): void => {
@@ -162,7 +144,7 @@ function compile(input: CustomInstructionDefinition): CompiledInstruction {
   })) as CustomInstructionMetadata;
   deepFreeze(metadata);
   const definition = Object.freeze({ ...metadata, execute });
-  return Object.freeze({ definition, metadata, mask, value, fields: Object.freeze(fields) });
+  return Object.freeze({ definition, metadata, mask, value, fields: Object.freeze(fields.map(field => Object.freeze(field))) });
 }
 function deepFreeze(value: unknown): void {
   if (value && typeof value === 'object') { for (const item of Object.values(value)) deepFreeze(item); Object.freeze(value); }

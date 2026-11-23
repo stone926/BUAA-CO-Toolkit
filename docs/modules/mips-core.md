@@ -1,4 +1,4 @@
-# mips-core | src/mips/core/ | 72 files
+# mips-core | src/mips/core/ | 73 files
 
 纯 TypeScript MIPS 引擎核心：ISA 编解码、两遍课程汇编器、架构执行器与设备模型。**零** VS Code / LSP / 文件系统 / Worker 依赖（边界由 `scripts/check-module-boundaries.mjs` 检查）。汇编器与执行器通过不可变 `ProgramImage` 连接，因此可各自独立验证。
 
@@ -102,6 +102,7 @@
 
 - `custom/api.ts` — JS/TS 公共 SDK、操作数/效果与 generation/timing 契约
 - `custom/registry.ts` — 不可变分模式注册表、编码冲突/别名与仅元数据视图
+- `custom/encoding.ts` — 解析自定义编码的固定分段与字段，供注册表和编辑器编码表共用
 - `custom/metadataValidation.ts` — 字段、访问集合、生成配方和冒险阶段校验
 - `custom/bits.ts` — SDK 固定位宽运算与扩展
 - `custom/assembler.ts` — 复用两遍汇编的自定义操作数、标签/数字位移与编码

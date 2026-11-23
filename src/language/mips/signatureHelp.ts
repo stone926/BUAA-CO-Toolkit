@@ -10,11 +10,13 @@ import { CoSettings } from '../common/settings';
 import { getCachedMipsParse } from './parseCache';
 import {
   instructions,
-  instructionTypeLabel
+  instructionTypeLabel,
+  type MipsInstruction
 } from './resources';
 import { MipsServerState } from './state';
 import type { MipsExecutableAst } from './ast';
 import { customInstructionDisplayFor } from './customInstructionFacts';
+import { instructionDescriptionMarkdown } from './display';
 
 export function getMipsSignatureHelp(document: TextDocument, position: Position, settings: CoSettings, state: MipsServerState): SignatureHelp | undefined {
   const parsed = getCachedMipsParse(document, settings, state);
@@ -35,7 +37,7 @@ export function getMipsSignatureHelp(document: TextDocument, position: Position,
 
   const instruction = instructions[name.toLowerCase()];
   const custom = customInstructionDisplayFor(document.uri, settings.project.profile, name);
-  if (custom) return buildInstructionSignatureHelp(custom, activeParameter);
+  if (custom) return buildInstructionSignatureHelp(custom, activeParameter, instructionDescriptionMarkdown(custom));
   if (instruction) {
     return buildInstructionSignatureHelp(instruction, activeParameter);
   }
@@ -67,7 +69,7 @@ function activeParameterFromOperands(executable: MipsExecutableAst, character: n
   return executable.operands.length - 1;
 }
 
-function buildInstructionSignatureHelp(instruction: { mnemonic: string; summary: string; type: string; formats: string[]; operands: [number, number]; description: string; pseudo?: boolean }, activeParameter: number): SignatureHelp {
+function buildInstructionSignatureHelp(instruction: MipsInstruction, activeParameter: number, description = instruction.description): SignatureHelp {
   const signatures: SignatureInformation[] = [];
 
   for (const format of instruction.formats) {
@@ -83,9 +85,9 @@ function buildInstructionSignatureHelp(instruction: { mnemonic: string; summary:
         value: [
           `**${instruction.mnemonic}** - ${instruction.summary}`,
           '',
-          `Type: ${instructionTypeLabel(instruction.type as any)}`,
+          `Type: ${instructionTypeLabel(instruction.type)}`,
           '',
-          instruction.description
+          description
         ].join('\n')
       },
       parameters: paramInfos

@@ -951,6 +951,9 @@ function buildSystemVerilogGrammar(keywordResource, systemVerilogResource) {
 }
 
 function buildMipsInstructionPreviewGrammar() {
+  const operands = mipsOperandPatterns().map(({ include }) => ({ include: `${grammars.mips.scopeName}${include}` }));
+  // Script templates use names such as $rs before a concrete register is chosen.
+  operands.push({ name: 'variable.language.register.mips', match: `\\$[A-Za-z][A-Za-z0-9_]*${MIPS_IDENTIFIER_END}` });
   return generatedGrammar(
     'MIPS instruction preview',
     grammars.mipsInstructionPreview.scopeName,
@@ -959,7 +962,7 @@ function buildMipsInstructionPreviewGrammar() {
       `^[\\t ]*(${MIPS_CALLABLE_IDENTIFIER})${MIPS_IDENTIFIER_END}`,
       { 1: { name: 'keyword.control.instruction.mips' } },
       'meta.instruction.mips',
-      mipsOperandPatterns().map(({ include }) => ({ include: `${grammars.mips.scopeName}${include}` })),
+      operands,
     )],
     {},
     ['resources/co/languages.json', 'syntaxes/mips.tmLanguage.json'],

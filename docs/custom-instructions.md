@@ -74,6 +74,8 @@ export default defineInstruction({
 | `controlFlow` | 指令可能转移控制流时设为 `true`。 |
 | `override` | 显式允许覆盖已有原生名称或编码；不会消除两个自定义定义之间的歧义。 |
 
+在汇编中悬停指令助记符即可查看编码表。表格按定义中的分段从最高位排到最低位，每列给出位号、固定位串或字段名以及位宽。
+
 寄存器操作数写为 `{ kind: 'register', field: 'rd' }`，对应字段必须是 5 位。立即数写为 `{ kind: 'immediate', field: 'immediate', signed: true }`。访存操作数写为 `{ kind: 'memory', baseField: 'rs', offsetField: 'immediate', signed: true }`，汇编形式为 `offset($base)`，偏移默认有符号。
 
 `execute` 收到的是**解码后的原始无符号字段**：例如 16 位的 `-1` 是 `65535`。`signed` 约束汇编输入，并不会替回调完成符号扩展。请使用 `bits.signExtend(value, width)`；随机配方中的原始 `65535` 会按有符号操作数输出为 `-1`。

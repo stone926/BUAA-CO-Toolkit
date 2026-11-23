@@ -188,13 +188,14 @@ describe('generated TextMate grammars', () => {
 
   it('colors a custom instruction preview with the regular MIPS instruction and operand scopes', async () => {
     const preview = await requireGrammar('source.mips.instruction-preview');
-    const lines = tokenize(preview, 'bds $t1, $t2\ncustom_load $s0, 16($s1)');
+    const lines = tokenize(preview, 'bds $rs, $rt\ncustom_load $s0, 16($base_reg)');
 
     expectScope(scopesAt(lines, 0, 'bds'), 'keyword.control.instruction.mips');
-    expectScope(scopesAt(lines, 0, '$t1'), 'variable.language.register.mips');
-    expectScope(scopesAt(lines, 0, '$t2'), 'variable.language.register.mips');
+    expectScope(scopesAt(lines, 0, '$rs'), 'variable.language.register.mips');
+    expectScope(scopesAt(lines, 0, '$rt'), 'variable.language.register.mips');
+    expectScope(scopesAt(lines, 1, '$s0'), 'variable.language.register.mips');
     expectScope(scopesAt(lines, 1, '16'), 'constant.numeric.mips');
-    expectScope(scopesAt(lines, 1, '$s1'), 'variable.language.register.mips');
+    expectScope(scopesAt(lines, 1, '$base_reg'), 'variable.language.register.mips');
   });
 
   it('keeps dollar macro parameters scoped across a MIPS macro block without hiding real registers', () => {
