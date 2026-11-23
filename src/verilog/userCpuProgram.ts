@@ -59,7 +59,6 @@ export async function prepareUserCpuProgramForTestbench(
       await writeTextFile(machineCodeSource, session.program.hexText);
       return { kind: 'ready', machineCodeSource };
     }
-    // A separate staging file keeps a failed/cancelled assembly out of code.txt.
     // Always ask, even when only one ASM exists or an ASM editor is active.
     const asm = await pickOneFile(
       '选择 CPU testbench 使用的 ASM（取消则停止本次运行）',
@@ -71,17 +70,18 @@ export async function prepareUserCpuProgramForTestbench(
       sourceUri: asm,
       target: { kind: 'userText', outputFile: machineCodeSource },
       revealOutput: false,
+      writeOutput: false,
       requirements: {
         profile,
         instructionLayers: ['required', 'commonExtensions', 'marsCompatibility'],
         pseudoInstructions: true
       }
-    }, { signal }, resolveCourseEnginePlan('builtin', profile));
+    }, { signal }, resolveCourseEnginePlan('auto', profile));
     if (signal?.aborted) return { kind: 'stopped' };
     const result = invocation.result;
     if (!result?.ok || !result.image) {
       throw new Error(result?.status.stderr.trim() || preflightFailureMessage(invocation.preflight)
-        || '内置汇编器未返回可加载的程序');
+        || '汇编器未返回可加载的程序');
     }
     const words = courseInstructionImageWordsWithOrdinaryHalt(result.image, profile);
     services.output.appendLine(`CPU testbench 已汇编 ${asm.fsPath}`);

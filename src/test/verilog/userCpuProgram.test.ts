@@ -127,7 +127,7 @@ describe('program preparation for generated CPU testbenches', () => {
   });
 
   it.each(['P4', 'P7'] as const)(
-    'assembles %s with the builtin plan and renders course halt/kernel positions through real image helpers',
+    'assembles %s with the automatic plan and renders course halt/kernel positions through real image helpers',
     async (profile) => {
       const tb = testbenchUri(`.co/tb/${profile}.v`);
       mocks.getProfile.mockReturnValue(profile);
@@ -135,17 +135,18 @@ describe('program preparation for generated CPU testbenches', () => {
       await expect(prepareUserCpuProgram(createTestServices(), tb, outDir)).resolves.toMatchObject({ kind: 'ready' });
 
       const plan = mocks.assembleWithPreflight.mock.calls[0][3];
-      expect(plan).toEqual(resolveCourseEnginePlan('builtin', profile));
+      expect(plan).toEqual(resolveCourseEnginePlan('auto', profile));
       expect(mocks.assembleWithPreflight).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({
           sourceUri: asmUri,
           target: expect.objectContaining({ kind: 'userText' }),
           revealOutput: false,
+          writeOutput: false,
           requirements: expect.objectContaining({ profile })
         }),
         expect.objectContaining({ signal: undefined }),
-        expect.objectContaining({ mode: 'builtin', primaryEngineId: 'builtin-ts' })
+        expect.objectContaining({ mode: 'auto', primaryEngineId: 'builtin-ts' })
       );
 
       const words = latestWrittenText().trim().split(/\r?\n/);
