@@ -130,9 +130,11 @@ describe('P7 deterministic interrupt/exception priority probes', () => {
     const diagnostics = externalDiagnostics(program);
     const executed = executeProbe(program, () => 1);
     const image = createLegacyProgramImage(courseInstructionImageHexText(executed.image), []);
-    const pcs = Object.values(ordinaryProbeRecordSources(image, metadata).priorityCapture!);
+    const capture = ordinaryProbeRecordSources(image, metadata).priorityCapture!;
+    const pcs = Object.values(capture);
     const events = parseSimOutput(executed.trace!.join('\n'));
-    expect(checkP7Probe(diagnostics, events, metadata, image).failures).toEqual([]);
+    const complete = checkP7Probe(diagnostics, events, metadata, image);
+    expect(complete.failures).toEqual([]);
     const isCapture = (event: typeof events[number]) => pcs.includes(Number.parseInt(event.pc, 16));
     const corrupted = events.map(event => isCapture(event) ? { ...event, value: 'deadbeef' } : event);
     expect(checkP7Probe(diagnostics, corrupted, metadata, image).failures).toContainEqual(expect.objectContaining({
@@ -143,6 +145,16 @@ describe('P7 deterministic interrupt/exception priority probes', () => {
     const firstCapture = events.findIndex(isCapture);
     const initial = checkP7Probe('', events.slice(0, firstCapture), metadata, image);
     expect(initial.failures.find(failure => failure.message.includes('依次写入首次中断'))?.observed).toBeUndefined();
+    const secondEpc = events.findIndex(event => event.lineNumber > complete.records[0].lastLineNumber
+      && Number.parseInt(event.pc, 16) === capture.epcPc);
+    expect(secondEpc).toBeGreaterThan(firstCapture);
+    const prefix = events.slice(0, secondEpc + 1);
+    const observed = () => checkP7Probe('', prefix, metadata, image).failures.filter(failure => failure.observed);
+    expect(observed()).toEqual([]);
+    prefix[secondEpc] = { ...prefix[secondEpc], value: '00000000' };
+    expect(observed()).toEqual([expect.objectContaining({
+      scenarioId: metadata.scenarios[1].id, message: expect.stringContaining('EPC')
+    })]);
   });
 
   it('rejects wrong priority, stale IP, lost BD/EPC/EXL, premature victim commits and missing completion', () => {

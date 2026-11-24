@@ -3,7 +3,6 @@
     // architectural boundary past eret; no CP0 stage or cycle count is assumed.
     integer co_return_phase;
     integer co_reset_phase;
-    reg co_return_armed;
     reg co_return_record_complete;
     reg [31:0] co_return_last_pc;
     wire [31:0] co_return_macro_pc = macroscopic_pc;
@@ -11,7 +10,6 @@
     initial begin
         co_return_phase = 0;
         co_reset_phase = ${resetAtFirstIrq};
-        co_return_armed = 0;
         co_return_record_complete = 0;
         co_return_last_pc = 32'hffffffff;
     end
@@ -31,12 +29,6 @@
             #1;
             $finish;
         end
-        if (!reset && co_return_phase == 0 && !co_return_armed
-            && m_data_byteen == 4'b1111 && fixed_addr == ${armAddress}
-            && m_data_wdata == ${armValue}) begin
-            co_return_armed = 1;
-            $display("CO_P7_PROBE external_arm scenario=${firstId} time=%0d", $time);
-        end
     end
 
     always @(negedge clk) begin
@@ -49,7 +41,6 @@
                 $display("CO_P7_RESET_RESTART");
             end
             co_return_phase = 0;
-            co_return_armed = 0;
             co_return_record_complete = 0;
             co_return_last_pc = 32'hffffffff;
         end else begin
@@ -74,7 +65,9 @@
                 interrupt = 0;
             end else begin
                 case (co_return_phase)
-                    0: if (co_return_armed && co_return_macro_pc == ${firstTarget}) begin
+                    // This PC occurs only on the approach to the victim (or its retry).
+                    // Its older store can reach the DM port after the PC is sampled.
+                    0: if (co_return_macro_pc == ${firstTarget}) begin
                         interrupt = 1;
                         co_return_phase = 1;
                         co_return_record_complete = 0;

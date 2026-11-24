@@ -20,7 +20,10 @@ describe.skipIf(!available)('public return-boundary protocol in real Icarus', ()
   afterAll(() => { fs.rmSync(dir, { recursive: true, force: true }); });
 
   function run(mode: 'short' | 'stalled' | 'unaligned' | 'unknown' | 'low-address-bits'
-    | 'delayed-ack' | 'eret-edge-ack' | 'held-ack' | 'early-ack' | 'forwarded-unselected' | 'request-gated-ack') {
+    | 'delayed-ack' | 'eret-edge-ack' | 'held-ack' | 'early-ack' | 'forwarded-unselected' | 'request-gated-ack'
+    | 'pc-before-store' | 'reset-pc-before-store') {
+    const resetAtFirstIrq = mode === 'reset-pc-before-store';
+    const pcBeforeStore = mode === 'pc-before-store' || resetAtFirstIrq;
     const source = `\`timescale 1ns/1ps
 module tb;
 reg clk=0, reset=1, interrupt=0; always #2 clk=~clk;
@@ -28,7 +31,7 @@ reg [31:0] macroscopic_pc=32'h3000,m_data_addr=0,m_data_wdata=0,m_inst_addr=0,m_
 reg [3:0] m_data_byteen=0,int_mask=0;
 wire [3:0] m_int_byteen=${mode === 'request-gated-ack' ? '(interrupt ? int_mask : 0)' : 'int_mask'};
 wire [31:0] fixed_addr=m_data_addr & 32'hfffffffc;
-${buildP7ReturnInterruptBlock(scenarios)}
+${buildP7ReturnInterruptBlock(scenarios, resetAtFirstIrq)}
 task tick; begin @(posedge clk); #1; end endtask
 task record_tail;
  input [31:0] addr;
@@ -37,12 +40,24 @@ task record_tail;
    tick; m_data_byteen=0;
  end
 endtask
+task first_request;
+ begin
+  m_inst_addr=32'h303c;m_data_addr=${mode === 'low-address-bits' ? "{30'h9f4,2'bxx}" : "32'h27d0"};m_data_wdata=1;m_data_byteen=15;
+  ${mode === 'forwarded-unselected' ? "m_int_addr=32'h27d0;int_mask=15;" : ''}
+  ${pcBeforeStore ? `macroscopic_pc=32'h3040; @(negedge clk); #1;
+  if(!interrupt)$fatal(1,"IRQ missed the only target sample before the DM write");
+  tick; m_data_byteen=0;macroscopic_pc=32'h3044;`
+    : `tick; m_data_byteen=0;macroscopic_pc=32'h3040;
+  tick; if(!interrupt)$fatal(1,"first request missing");`}
+ end
+endtask
 initial begin
  tick; tick; reset=0;
- m_inst_addr=32'h3030;m_data_addr=${mode === 'low-address-bits' ? "{30'h9f4,2'bxx}" : "32'h27d0"};m_data_wdata=1;m_data_byteen=15;
- ${mode === 'forwarded-unselected' ? "m_int_addr=32'h27d0;int_mask=15;" : ''}
- tick; m_data_byteen=0;macroscopic_pc=32'h3040;
- tick; if(!interrupt)$fatal(1,"first request missing");
+ first_request;
+ ${resetAtFirstIrq ? `if(!reset)$fatal(1,"reset missing at first IRQ");
+ @(negedge clk); #1; if(reset || interrupt)$fatal(1,"reset did not restart the protocol");
+ macroscopic_pc=32'h3000; tick; first_request;
+ if(reset)$fatal(1,"reset repeated on restarted execution");` : ''}
  ${mode === 'early-ack' ? '' : "record_tail(32'h281c);"}
  ${mode === 'delayed-ack' ? 'repeat(3)tick;' : ''}
  m_int_addr=32'h7f20;int_mask=1;m_inst_addr=32'h4190;macroscopic_pc=${mode === 'eret-edge-ack' ? "32'h41c4" : "32'h41c0"};
@@ -95,4 +110,16 @@ endmodule\n`;
     expect(output.match(/external_ack_early scenario=1/g)).toHaveLength(1);
     expect(output).not.toContain('external_ack_early scenario=2');
   });
+
+  it.each(['pc-before-store', 'reset-pc-before-store'] as const)(
+    '%s injects at the first macro PC even when the preceding store has not reached its clock edge', mode => {
+      const output = run(mode);
+      const resets = mode === 'reset-pc-before-store' ? 1 : 0;
+      expect(output.match(/CO_P7_RESET_RESTART/g) ?? []).toHaveLength(resets);
+      expect(output.match(/external_raise scenario=1 pc=00003040/g)).toHaveLength(1 + resets);
+      expect(output.match(/external_ack scenario=1/g)).toHaveLength(1);
+      expect(output.match(/external_raise scenario=2 pc=00003040/g)).toHaveLength(1);
+      expect(output.match(/external_ack scenario=2/g)).toHaveLength(1);
+      expect(output).not.toContain('external_ack_early');
+    });
 });

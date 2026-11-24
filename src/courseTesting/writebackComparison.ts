@@ -1,5 +1,5 @@
 // @index course-testing — 有界、可取消的写回事件比较视图模型，复用自动测试事件对齐
-import { iterTraceDiffEntries, TraceDiffStatus } from '../language/mips/traceCompare';
+import { iterTraceDiffEntries, TraceCompareOptions, TraceDiffStatus } from '../language/mips/traceCompare';
 import { CpuTraceEvent, parseCpuTraceLine } from '../language/mips/traceParser';
 import { evidencePc, type FailureEvidence } from './failureEvidence';
 
@@ -28,7 +28,7 @@ export interface WritebackComparison {
   truncated: boolean;
 }
 
-export interface WritebackComparisonOptions {
+export interface WritebackComparisonOptions extends Pick<TraceCompareOptions, 'equivalentValues'> {
   signal?: AbortSignal;
   yieldControl?: () => Promise<void>;
 }
@@ -63,7 +63,7 @@ export async function buildWritebackComparison(
   const rows: WritebackRow[] = [];
   const differences: number[] = [];
   let truncated = false;
-  for (const entry of iterTraceDiffEntries(oracle, dut)) {
+  for (const entry of iterTraceDiffEntries(oracle, dut, options)) {
     if (rows.length === maximumWritebackRows) {
       truncated = true;
       break;
@@ -74,7 +74,7 @@ export async function buildWritebackComparison(
       oracle: eventSnapshot(entry.oracle),
       dut: eventSnapshot(entry.dut),
       reason: entry.reason,
-      changedFields: changedFields(entry.oracle, entry.dut)
+      changedFields: entry.status === 'ok' ? [] : changedFields(entry.oracle, entry.dut)
     });
     if (entry.status !== 'ok') differences.push(entry.index);
     if (rows.length % batchSize === 0) await checkpoint();

@@ -5,6 +5,10 @@ export type P7ProbeShard = 'all' | 'core' | 'timer' | 'mmio' | 'priority' | 'mdu
 export type P7ProbeScope = 'standard' | 'special-timer-exl';
 export type P7ProbeScenarioKind = 'external' | 'timer0' | 'timer1' | 'adel' | 'ades' | 'syscall' | 'ri' | 'ov' | 'internal';
 
+export function isP7MaskedExternalVariant(variant: string | undefined): variant is 'masked-ie' | 'masked-im2' {
+  return variant === 'masked-ie' || variant === 'masked-im2';
+}
+
 export interface P7ProbeExpectedRecord {
   expectedIpMask: number;
   /** Architecturally visible SR before entry. The checker sets EXL for the handler sample. */
@@ -28,6 +32,8 @@ export interface P7ProbeCommitExpectation {
   kind: 'grf' | 'dm';
   target: number;
   value: number;
+  /** An observed CP0 read (or its saved copy). Other architectural values are exact. */
+  cp0Sample?: 'status' | 'cause' | 'epc';
 }
 
 export interface P7ProbeRegisterSample {
@@ -71,7 +77,7 @@ export interface P7ProbeScenario {
   variant?: string;
   victimPc?: number;
   donePc: number;
-  /** Macroscopic PC at which the probe testbench raises an armed external interrupt. */
+  /** Macroscopic PC at which the probe testbench raises an external interrupt. */
   triggerPc?: number;
   waitPc?: number;
   timerPreset?: number;

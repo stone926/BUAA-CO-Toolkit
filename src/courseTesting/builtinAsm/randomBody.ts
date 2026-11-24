@@ -284,7 +284,7 @@ export function generateBuiltinAsmTestCase(options: BuiltinAsmGeneratorOptions):
     count,
     seed,
     options.generatedAt ?? new Date(),
-    { interrupt, exceptionRate, exceptionTypes }, options.customRegistry
+    { interrupt, exceptionRate, exceptionTypes, p7StressMode: options.p7StressMode }, options.customRegistry
   );
   return generator.generate();
 }
@@ -341,6 +341,7 @@ class ProgramGenerator {
   private readonly exceptionRate: number;
   private readonly exceptionTypes: P7ExceptionKind[];
   private readonly p7HandlerEnabled: boolean;
+  private readonly p7BodyCp0Register: '$12' | '$14';
   private readonly pendingExceptionCoverage: P7ExceptionKind[];
   private readonly state = new CpuState();
   private readonly lines: string[] = [];
@@ -372,7 +373,12 @@ class ProgramGenerator {
     targetCount: number,
     seed: string,
     generatedAt: Date,
-    options: { interrupt: boolean; exceptionRate: number; exceptionTypes?: readonly P7ExceptionKind[] } = { interrupt: false, exceptionRate: 0 },
+    options: {
+      interrupt: boolean;
+      exceptionRate: number;
+      exceptionTypes?: readonly P7ExceptionKind[];
+      p7StressMode?: P7StressMode;
+    },
     private readonly customRegistry?: CustomInstructionRegistry
   ) {
     this.profile = profile;
@@ -385,6 +391,8 @@ class ProgramGenerator {
     this.interruptEnabled = profile === 'P7' && options.interrupt;
     this.exceptionRate = profile === 'P7' ? options.exceptionRate : 0;
     this.exceptionTypes = profile === 'P7' ? [...(options.exceptionTypes ?? p7ExceptionCoverageOrder)] : [];
+    // Anchor payloads use the fully defined EPC as a CP0 producer for random GPR dependencies.
+    this.p7BodyCp0Register = options.p7StressMode === 'off' ? '$12' : '$14';
     this.p7HandlerEnabled = profile === 'P7'
       && (
         this.interruptEnabled ||
@@ -559,8 +567,7 @@ class ProgramGenerator {
   }
 
   private emitP7Prologue(): void {
-    // Install SR = 0x1001 (IE=1, IM[2]=1) before any body instruction so the external interrupt
-    // can be taken and mfc0 $12 remains predictable.
+    // Install SR = 0x1001 (IE=1, IM[2]=1) before any body instruction so the external interrupt can be taken.
     this.emitStaticInstruction('ori', `ori $k0, $0, 0x${p7StatusEnableInterrupts.toString(16)}`);
     this.state.setRegister('$26', p7StatusEnableInterrupts);
     this.emitStaticInstruction('mtc0', `mtc0 $k0, $12`);
@@ -1018,12 +1025,10 @@ class ProgramGenerator {
       return this.nonRaisingTrapRegisterOperands(mnemonic) !== undefined;
     }
     if (mnemonic === 'mfc0') {
-      // Body only reads Status ($12); EPC/Cause reads are left to the fixed handler.
       return this.profile === 'P7';
     }
     if (mnemonic === 'mtc0') {
-      // Never generated in the body: mtc0 is reserved for the fixed prologue/handler so that
-      // Status stays at p7StatusEnableInterrupts and the model can predict mfc0 $12 reads.
+      // CP0 writes are reserved for the fixed prologue and handler.
       return false;
     }
     if (mnemonic === 'syscall') {
@@ -1597,18 +1602,15 @@ class ProgramGenerator {
   }
 
   private emitCp0(mnemonic: string, steer?: OperandSteer): SteeredEmission | undefined {
-    // Only mfc0 $12 (Status) is generated. Status is held constant by the prologue, so the read
-    // value is modelable and matches both MARS and the Verilog CPU. EPC/Cause reads and all mtc0
-    // writes are left to the fixed prologue/handler (see canEmitSingle).
     if (mnemonic !== 'mfc0') {
       return undefined;
     }
-    const value = this.state.cp0_sr;
+    const value = this.state.cp0ReadValue(this.p7BodyCp0Register);
     const chosen = this.searchOperands(steer, () => ({ destination: this.steeredDestination(steer), value }));
     if (!chosen) {
       return undefined;
     }
-    this.emit('mfc0', `mfc0 ${chosen.destination}, $12`);
+    this.emit('mfc0', `mfc0 ${chosen.destination}, ${this.p7BodyCp0Register}`);
     this.state.setRegister(chosen.destination, value);
     return { write: chosen.destination, value };
   }
@@ -1817,7 +1819,7 @@ class ProgramGenerator {
       return;
     }
     if (mnemonic === 'mfc0') {
-      write('$12', this.state.cp0ReadValue('$12'));
+      write(this.p7BodyCp0Register, this.state.cp0ReadValue(this.p7BodyCp0Register));
       return;
     }
     if (loadMnemonics.has(mnemonic)) {

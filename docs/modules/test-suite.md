@@ -1,4 +1,4 @@
-# test-suite | src/test/ | 316 test files | 框架: Vitest
+# test-suite | src/test/ | 317 test files | 框架: Vitest
 
 `helpers/testTimeouts.ts` 统一测试时限：Vitest 默认单测 60 秒、准备/清理钩子 120 秒，真实 Icarus 子进程 30 秒，给并发编译和大量文件操作预留调度余量；性能回归及专门验证取消/超时行为的用例保留自身预算，不改变生产工具时限。
 
@@ -102,6 +102,7 @@ MIPS 的 `language/mips/formatting.test.ts` 同时验证格式化前后实际汇
 - **公平规划与完整分析**：`courseTesting/hazardTargetScheduling.test.ts` 验证具体目标不被类别债务长期阻塞、端口目标独立及真实默认 P7 程序覆盖原 JR 缺口；链接测试加入 0/1、1/0 间隔和 `sub.rt` 的实际故障执行。`hazardAnalysis/detailedAnalysis.test.ts` 覆盖全流计数不受实例上限影响、键截断、全部同时阻塞原因、IRQ 输入边界、设备隔离，以及掩码/分支/存储车道/同 GPR 双端口的效果三态与运行时故障对照。
 - **分析输入与报告**：`hazardCaseInput.test.ts` 用真实保存用例检查原 IRQ 重放、ASM/include/映像/机器码完整性、调度/timeline/hash 冲突与 probe 拒绝；`hazard.test.ts` 验证命令把执行上下文传入真实分析并保存可重开结果。`hazardReportDetails.test.ts` 覆盖无实例仍有完整统计、旧 v1 不假报零、细分 DTO 验证、新字段转义与截断说明。
 - `courseTesting/p7DirectedProbes.test.ts`、`courseTesting/p7TimerProbeTiming.test.ts` 验证复位即异常、老 AdES 与年轻 RI 的独立 Cause/EPC、双设备独立屏蔽、完整 IM、不同 COUNT/IP 采样相位与缺少观察时的结果分类。
+- `courseTesting/p7AnchorTraceComparison.test.ts` 检查固定 Cause 观察点的有效位、完整 EPC、普通寄存器与 DM，以及写回面板的一致性。
 - **返回边界协议**：`p7ReturnProbe.test.ts` 校验不同种子、合法 jal link 重放、未命中与功能失败区别、handler 字段来源和路径内错误 EPC；`p7ReturnTestbench.test.ts` 使用真实 Icarus 检查不同 eret 停留长度、X/错位 PC、SW 低位 don't-care、未选中 IG 转发、应答随 interrupt 撤销等合法接口变体。Mode1 官方周期模型与“每次 Enable 仅发一次 IRQ、COUNT 仍重载”的变异，确保停止态新检查不会替代连续周期 IRQ 覆盖
 - **DUT 观测**：`CO_DM_STORE` 公开事务与 builtin CommitEvent 逐笔对拍（覆盖整字相同时仍能失败的地址/mask 漏检）；P6/P7 完整 testbench 下 `dm_store_contract.v` 捕获的错误全使能读改写
 - **可移植性**：`processCore` 的 stdout/stderr raw-byte cap、UTF-8 chunk 边界、timeout/abort 与子孙进程树；Windows UTF-8 code page manifest；macOS/Linux 的 bundled `-B <lib/ivl>`

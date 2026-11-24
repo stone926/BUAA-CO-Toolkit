@@ -32,15 +32,15 @@ export function generateP7ReturnProbe(options: BuiltinAsmGeneratorOptions): Buil
   const branchPcs = new Set<number>();
   let replayedLink: P7ProbeCommitExpectation | undefined;
   const emit = (instruction: string) => { reachable.add(main.pc()); main.emit(instruction); };
-  const grf = (instruction: string, target: number, value: number) => {
-    commits.push({ pc: main.pc(), kind: 'grf', target, value: value >>> 0 }); emit(instruction);
+  const grf = (instruction: string, target: number, value: number, cp0Sample?: P7ProbeCommitExpectation['cp0Sample']) => {
+    commits.push({ pc: main.pc(), kind: 'grf', target, value: value >>> 0, ...(cp0Sample && { cp0Sample }) }); emit(instruction);
   };
-  const store = (instruction: string, target: number, value: number) => {
-    commits.push({ pc: main.pc(), kind: 'dm', target, value: value >>> 0 }); emit(instruction);
+  const store = (instruction: string, target: number, value: number, cp0Sample?: P7ProbeCommitExpectation['cp0Sample']) => {
+    commits.push({ pc: main.pc(), kind: 'dm', target, value: value >>> 0, ...(cp0Sample && { cp0Sample }) }); emit(instruction);
   };
   const poison = () => { forbidden.push(main.pc()); main.emit(`sw $0, ${p7ProbeEretPoisonAddress}($0)`); };
   main.raw('# Built-in BUAA CO P7 return-boundary probe');
-  if (options.probeShard === 'reset') main.raw('# The first armed IRQ coincides with synchronous reset. The program restarts before the two-interrupt check.');
+  if (options.probeShard === 'reset') main.raw('# The first IRQ coincides with synchronous reset. The program restarts before the two-interrupt check.');
   main.raw('# scope: standard; real interrupt handler; public macroscopic-PC return transition');
   main.raw(`# variant: ${variant}`);
   main.raw(`# seed: ${seed}`);
@@ -51,9 +51,9 @@ export function generateP7ReturnProbe(options: BuiltinAsmGeneratorOptions): Buil
   store('sw $16, 0($0)', 0, startupValue);
   const initialCp0: NonNullable<P7ProbeMetadata['initialCp0']> = {};
   for (const [name, cp0, address] of [['status', 12, 0x610], ['cause', 13, 0x614], ['epc', 14, 0x618]] as const) {
-    grf(`mfc0 $8, $${cp0}`, 8, 0);
+    grf(`mfc0 $8, $${cp0}`, 8, 0, name);
     initialCp0[name] = { pc: main.pc(), kind: 'dm', target: address, value: 0 };
-    store(`sw $8, ${address}($0)`, address, 0);
+    store(`sw $8, ${address}($0)`, address, 0, name);
   }
   const setupPadding = rng.int(0, 3);
   for (let index = 0; index < setupPadding; index++) {
@@ -66,6 +66,7 @@ export function generateP7ReturnProbe(options: BuiltinAsmGeneratorOptions): Buil
   grf(`ori $26, $0, ${p7StatusEnableAllCourseInterrupts}`, 26, p7StatusEnableAllCourseInterrupts);
   emit('mtc0 $26, $12');
   grf('ori $26, $0, 1', 26, 1);
+  // This store is an older architectural commit checked before the first handler.
   store(`sw $26, ${p7ProbeExternalArmAddress}($0)`, p7ProbeExternalArmAddress, 1);
   let firstPc: number;
   let firstEpc: number;
@@ -153,7 +154,6 @@ export function generateP7ReturnProbe(options: BuiltinAsmGeneratorOptions): Buil
     id: 1, kind: 'external', variant: `return-${variant}-first`,
     expectedIpMask: p7CauseIpExternalMask, expectedExcCode: 0, expectedBd: firstBd,
     allowedEpc: [firstEpc], triggerPc: firstPc, victimPc: firstPc, donePc,
-    armAddress: p7ProbeExternalArmAddress, armValue: 1, externalDelayCycles: 0,
     requiredPreHandlerCommits: commits.filter(commit => commit.pc < firstPc), forbiddenCommitPcs: forbidden
   };
   const second: P7ProbeScenario = {

@@ -12,6 +12,7 @@ import { getVerilogTestbenchConfig } from '../../courseConfig';
 import { renderResourceTemplate } from '../../templates/templateRegistry';
 import { VerilogDecl, VerilogModule } from './model';
 import { buildP7ReturnInterruptBlock } from './p7ReturnTestbench';
+import { isP7MaskedExternalVariant } from '../../courseTesting/builtinAsm/types';
 
 const {
   externalInstructionMemoryWords: courseExternalInstructionMemoryWords,
@@ -46,6 +47,7 @@ interface P7ProbeTestbenchMetadata {
   scenarios: Array<{
     id: number;
     kind: string;
+    variant?: string;
     triggerPc?: number;
     waitPc?: number;
     armAddress?: number;
@@ -324,7 +326,9 @@ function p7ExternalScenarioView(
   scenario: P7ProbeTestbenchMetadata['scenarios'][number],
   index: number
 ): P7ExternalScenarioView {
-  const armAddress = Number.isFinite(scenario.armAddress) ? ((scenario.armAddress ?? 0) >>> 0) : 0;
+  // Earlier masked-probe images also wrote a setup marker just before their
+  // unique trigger PC. The two public ports can present them on the same cycle.
+  const armAddress = isP7MaskedExternalVariant(scenario.variant) ? 0 : (scenario.armAddress ?? 0) >>> 0;
   const armValue = Number.isFinite(scenario.armValue) ? ((scenario.armValue ?? scenario.id) >>> 0) : scenario.id;
   return {
     index,

@@ -9,6 +9,7 @@ import {
 import { P7ProbeMetadata } from './builtinAsmGenerator';
 import { findCourseHaltPc } from '../mips/core/assembler/artifacts';
 import { checkP7Probe } from './p7ProbeCheck';
+import { p7AnchorValueEquivalence } from './p7AnchorTraceComparison';
 import { concludeP7Probe, isP7ObservationLimit, observedP7Halt } from './p7ProbeCompletion';
 import { firstDmStoreDifference } from './dmStoreCheck';
 import {
@@ -522,9 +523,11 @@ export async function runCourseTraceCase(
 
   await options.onPhase?.('compare');
   const simText = dut.simResult.stdout;
+  const equivalentValues = profile === 'P7' && p7AnchorValueEquivalence(asmCase.manifest, dump.image, oracle.descriptor.id);
   const diff = pipeline.compareTraces(oracle.trace.events, iterCpuTraceEvents(simText), {
     compareCycles: false,
-    retainedEntryLimit: batchTraceCompareRetainedEntries
+    retainedEntryLimit: batchTraceCompareRetainedEntries,
+    ...(equivalentValues ? { equivalentValues } : {})
   });
   const storeDifference = diff.matched && oracle.events && (profile === 'P6' || profile === 'P7')
     ? firstDmStoreDifference(oracle.events, simText)

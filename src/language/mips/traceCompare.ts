@@ -12,6 +12,8 @@ export type TraceDiffStatus = NeutralTraceDiffStatus | LegacyTraceDiffStatus;
 export interface TraceCompareOptions {
   compareCycles?: boolean;
   retainedEntryLimit?: number;
+  /** Optional equivalence for differing values at an already matched PC, kind and target. */
+  equivalentValues?: (oracle: CpuTraceEvent, dut: CpuTraceEvent) => boolean;
 }
 
 export interface TraceDiffEntry {
@@ -316,7 +318,7 @@ function compareAtIndex(
     return { index, status: 'ok' };
   }
 
-  const reason = firstSemanticDifference(mars, sim);
+  const reason = firstSemanticDifference(mars, sim, options);
   if (reason) {
     return diffEntry(index, 'diff', mars, sim, reason);
   }
@@ -342,7 +344,7 @@ function diffEntry(
   };
 }
 
-function firstSemanticDifference(mars: CpuTraceEvent, sim: CpuTraceEvent): string | undefined {
+function firstSemanticDifference(mars: CpuTraceEvent, sim: CpuTraceEvent, options: TraceCompareOptions): string | undefined {
   if (mars.pc !== sim.pc) {
     return '指令地址（PC）不一致。';
   }
@@ -352,7 +354,7 @@ function firstSemanticDifference(mars: CpuTraceEvent, sim: CpuTraceEvent): strin
   if (mars.target !== sim.target) {
     return '写入目标不一致。';
   }
-  if (mars.value !== sim.value) {
+  if (mars.value !== sim.value && !options.equivalentValues?.(mars, sim)) {
     return '写入值不一致。';
   }
   return undefined;

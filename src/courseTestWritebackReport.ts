@@ -58,7 +58,9 @@ export function renderWritebackComparison(view: WritebackComparisonView): string
 function renderRow(row: WritebackRow, view: WritebackComparisonView): string {
   const missing = !row.oracle ? '多出写回' : !row.dut ? '缺少写回' : undefined;
   const labels = { pc: 'PC 不同', target: '目标不同', value: '值不同' };
-  const status = missing ?? (row.changedFields.length ? row.changedFields.map(field => labels[field]).join('、') : '一致');
+  const equivalent = row.status === 'ok' && row.oracle?.value !== row.dut?.value;
+  const status = missing ?? (row.changedFields.length ? row.changedFields.map(field => labels[field]).join('、')
+    : equivalent ? '有效位一致' : '一致');
   const changed = row.status !== 'ok';
   const cell = (field: 'pc' | 'target') => {
     const left = row.oracle;
@@ -71,7 +73,8 @@ function renderRow(row: WritebackRow, view: WritebackComparisonView): string {
   return `<tr class="${changed ? 'different' : 'equal'}${row.index === view.focus ? ' selected' : ''}"${row.index === view.focus ? ' data-selected="true" aria-current="true"' : ''}>
     <td><button type="button" class="event-index" data-writeback-action="select" data-row="${row.index}" aria-label="选中第 ${row.index + 1} 项写回">${row.index + 1}</button><span class="row-status">${html.text(status)}</span></td>
     <td>${cell('pc')}</td><td>${cell('target')}</td>
-    <td>${value(row.oracle, row.dut, 'reference')}</td><td>${value(row.dut, row.oracle, 'actual')}</td></tr>`;
+    <td>${value(row.oracle, equivalent ? undefined : row.dut, 'reference')}</td>
+    <td>${value(row.dut, equivalent ? undefined : row.oracle, 'actual')}</td></tr>`;
 }
 
 function pc(event: WritebackEvent, row: WritebackRow, side: 'oracle' | 'dut', view: WritebackComparisonView, changed: boolean): string {

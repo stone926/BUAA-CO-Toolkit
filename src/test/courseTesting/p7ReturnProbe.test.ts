@@ -23,7 +23,7 @@ function run(variant: P7ProbeReturnVariant, second: 'entry' | 'delay' | 'none' =
   expect(executed.status, JSON.stringify(executed.diagnostic)).toBe('halted');
   const secondPc = (second === 'delay' ? first.triggerPc! : first.allowedEpc[0]).toString(16).padStart(8, '0');
   const eretPc = generated.probe!.scenarios[1].afterReturnOf!.eretPc.toString(16).padStart(8, '0');
-  const diagnostics = ['external_arm scenario=1', 'external_raise scenario=1', 'external_ack scenario=1',
+  const diagnostics = ['external_raise scenario=1', 'external_ack scenario=1',
     ...(second === 'none' ? [] : [`return_seen scenario=2 pc=${eretPc}`, `return_exit scenario=2 pc=${secondPc}`,
       `external_raise scenario=2 pc=${secondPc}`, 'external_ack scenario=2'])]
     .map(text => `CO_P7_PROBE ${text}`).join('\n');
@@ -40,6 +40,32 @@ describe('real handler return boundary probes', () => {
     expect(result.coverage?.[0].covered).toBe(true);
     expect(fixture.generated.instructionCount * 4 + 0x3000).toBeLessThan(0x4180);
     expect(fixture.generated.text).not.toContain('jal _co_probe_priority_release');
+  });
+
+  it('replays historical return metadata with the same first PC and older-store obligations', () => {
+    const { generated, diagnostics, events } = run('direct');
+    const metadata = generated.probe!;
+    const old = { ...metadata, scenarios: metadata.scenarios.map((scenario, index) => index === 0
+      ? { ...scenario, armAddress: 0x27d0, armValue: 1, externalDelayCycles: 0 } : scenario) };
+    expect(checkP7Probe(diagnostics, events, old).passed).toBe(true);
+    expect(checkP7Probe(`CO_P7_PROBE external_arm scenario=1\n${diagnostics}`, events, old).passed).toBe(true);
+    const withoutStore = events.filter(event => event.kind !== 'dm' || parseInt(event.target, 16) !== 0x27d0);
+    expect(checkP7Probe(diagnostics, withoutStore, old).passed).toBe(false);
+  });
+
+  it('compares only the functional SR and Cause fields in the return program startup samples', () => {
+    const { generated, diagnostics, events } = run('direct');
+    const metadata = generated.probe!;
+    const samples = metadata.returnBoundary!.mainCommits.filter(commit =>
+      commit.cp0Sample === 'status' || commit.cp0Sample === 'cause');
+    expect(samples).toHaveLength(4);
+    const samplePcs = new Set(samples.map(commit => commit.pc));
+    const reserved = events.map(event => samplePcs.has(parseInt(event.pc, 16)) ? { ...event, value: '40000000' } : event);
+    expect(checkP7Probe(diagnostics, reserved, metadata).passed).toBe(true);
+    for (const sample of samples) {
+      const wrong = reserved.map(event => parseInt(event.pc, 16) === sample.pc ? { ...event, value: '40008000' } : event);
+      expect(checkP7Probe(diagnostics, wrong, metadata).passed).toBe(false);
+    }
   });
 
   it('allows only jal link replays explained by the observed BD/EPC records', () => {

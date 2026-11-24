@@ -1,15 +1,17 @@
 import { checkRequiredProbeCommits, matchingCommits } from './p7ProbeCommits';
+import { matchesP7ObservedWord, p7Cp0ObservationMask, p7StatusObservationMask } from './p7Cp0Observation';
 import { CpuTraceEvent, iterCpuTraceEvents } from '../language/mips/traceParser';
 import type { ProgramImage } from '../mips/core/api';
 import { P7ProbeExpectedRecord, P7ProbeMetadata, P7ProbeScenario } from './builtinAsmGenerator';
 import { checkP7ReturnProbe } from './p7ReturnCheck';
+import { isP7MaskedExternalVariant } from './builtinAsm/types';
 import {
   checkTimerCounter, checkTimerIpSampling, readFirstTimerCapture, timerIpCoverageMarker
 } from './p7TimerProbeCheck';
 import { expectedProbeRecordPath, ordinaryProbeRecordSources, type P7ProbeRecordSources } from './p7ProbeRecordSources';
 import { readP7ProbeCapture } from './p7ProbeCapture';
 import { parseProbeHexWord as parseHex, parseProbeRegister } from './p7ProbeTraceWord';
-import { p7DataMemoryWords, p7ExceptionHandlerAddress } from './p7Hardware';
+import { p7DataMemoryWords, p7ExceptionHandlerAddress, p7ProbeStateScenarioId } from './p7Hardware';
 import {
   p7CauseExcCodeMask,
   p7ExcCodeAdel,
@@ -38,7 +40,6 @@ const p7StatusExlMask = 0x0002;
 const p7RequiredExceptionStatusMask = p7StatusEnableAllCourseInterrupts | p7StatusExlMask;
 const p7CauseIpMask = 0xfc00;
 const p7CauseBdMask = 0x80000000;
-const p7ImplementedCauseMask = p7CauseBdMask | p7CauseIpMask | p7CauseExcCodeMask;
 
 export interface P7ProbeRecord {
   index: number;
@@ -89,16 +90,17 @@ export function checkP7Probe(
       simEvents = [...iterCpuTraceEvents(simOutput)];
     }
     return checkP7ReturnProbe(simOutput, simEvents, metadata,
-      activeMetadata => checkProbeRecords(simOutput, simEvents, activeMetadata));
+      activeMetadata => checkProbeRecords(simOutput, simEvents, activeMetadata), image);
   }
-  return checkProbeRecords(simOutput, simEvents, metadata, image && ordinaryProbeRecordSources(image, metadata));
+  return checkProbeRecords(simOutput, simEvents, metadata, image && ordinaryProbeRecordSources(image, metadata), image);
 }
 
 function checkProbeRecords(
   simOutput: string,
   simEvents: readonly CpuTraceEvent[],
   metadata: P7ProbeMetadata,
-  sources?: P7ProbeRecordSources
+  sources?: P7ProbeRecordSources,
+  image?: ProgramImage
 ): P7ProbeCheckResult {
   const diagnostics = parseProbeDiagnostics(simOutput);
   const failures: P7ProbeFailure[] = [];
@@ -106,9 +108,14 @@ function checkProbeRecords(
   // Each scenario has several exact commit obligations. Index once instead of rescanning the
   // complete trace for every operand/result/forbidden PC as coverage grows.
   const commitsByPc = new Map<number, CpuTraceEvent[]>();
+  const scenarioStarts = new Map<number, number>();
   for (const event of simEvents) {
     const pc = parseHex(event.pc);
     if (!Number.isFinite(pc)) continue;
+    if (event.kind === 'dm' && pc < p7ExceptionHandlerAddress && parseHex(event.target) === p7ProbeStateScenarioId) {
+      const id = parseHex(event.value);
+      if (!scenarioStarts.has(id)) scenarioStarts.set(id, event.lineNumber);
+    }
     const commits = commitsByPc.get(pc);
     if (commits) commits.push(event);
     else commitsByPc.set(pc, [event]);
@@ -131,10 +138,10 @@ function checkProbeRecords(
         scenarioId: 0, kind: 'cp0-reset-sample', observed: true,
         message: `CP0 复位后 ${label} 的首个样本出现在异常处理程序开始之后`
       });
-    } else if (parseHex(sample.value) !== expected.value) {
+    } else if (!matchesP7ObservedWord(parseHex(sample.value), expected.value, p7Cp0ObservationMask(name))) {
       failures.push({
         scenarioId: 0, kind: 'cp0-reset', observed: true,
-        message: `CP0 复位后 ${label} 读回值不符合预期：PC 0x${pc} 的首个样本应为零，实际为 0x${sample.value}`
+        message: `CP0 复位后 ${label} 读回值不符合预期：PC 0x${pc} 的受检位应为零，原始值为 0x${sample.value}`
       });
     }
     if (writes.length > 1) {
@@ -197,45 +204,51 @@ function checkProbeRecords(
     }
   }
 
-  let recordIndex = 0;
+  const recordsByIndex = new Map(records.map(record => [record.index, record]));
   let timerCoverage: P7ProbeCheckResult['coverage'];
   const ackTimes = new Map<number, number>();
   for (const match of simOutput.matchAll(/^CO_P7_PROBE external_ack scenario=(\d+) time=(\d+)\r?$/gm)) {
     const id = Number(match[1]);
     if (!ackTimes.has(id)) ackTimes.set(id, Number(match[2]));
   }
-  for (const scenario of metadata.scenarios) {
+  for (const [recordIndex, scenario] of metadata.scenarios.entries()) {
     for (const pc of scenario.forbiddenCommitPcs ?? []) {
       if (atPc(pc).length) {
         failures.push(failure(scenario, `禁止提交的后续指令/错误路径 PC 0x${(pc >>> 0).toString(16)} 已提交`, true));
       }
     }
     const expectedRecords = expectedRecordsFor(scenario);
+    const record = recordsByIndex.get(recordIndex);
+    const finalRecord = record?.scenarioId === scenario.id ? record : undefined;
+    // The first-IRQ handler uses the same store PCs in every scenario. A truncated
+    // run may never reach this scenario or its predecessor's record.
+    const captureStart = scenarioStarts.get(scenario.id) ?? recordsByIndex.get(recordIndex - 1)?.lastLineNumber
+      ?? (recordIndex === 0 ? 0 : undefined);
+    const next = metadata.scenarios[recordIndex + 1];
+    const captureEnd = (next && scenarioStarts.get(next.id)) ?? Infinity;
     if (scenario.timerObservation) {
       const report = (message: string, observed?: true) => failures.push(failure(scenario, message, observed));
-      const current = records.find(item => item.index === recordIndex && item.scenarioId === scenario.id);
-      const previous = records.find(item => item.index === recordIndex - 1);
       const marker = timerIpCoverageMarker(scenario, atPc);
-      checkTimerCounter(scenario, atPc, current?.firstLineNumber ?? marker?.lineNumber ?? Infinity, report);
+      checkTimerCounter(scenario, atPc, finalRecord?.firstLineNumber ?? marker?.lineNumber ?? Infinity, report);
       checkTimerIpSampling(scenario, atPc, marker, report);
       const firstReadPc = scenario.requiredPreHandlerCommits?.[0]?.pc;
       const firstRead = firstReadPc === undefined ? undefined : atPc(firstReadPc)[0];
-      const captured = readFirstTimerCapture(scenario, atPc, previous?.lastLineNumber ?? 0,
-        firstRead?.lineNumber ?? current?.firstLineNumber ?? marker?.lineNumber ?? Infinity, report);
-      if (captured && current && (captured.status !== current.status || captured.cause !== current.cause || captured.epc !== current.epc)) {
+      const captured = readFirstTimerCapture(scenario, atPc, captureStart,
+        Math.min(firstRead?.lineNumber ?? finalRecord?.firstLineNumber ?? marker?.lineNumber ?? Infinity, captureEnd), report);
+      if (captured && finalRecord
+        && (captured.status !== finalRecord.status || captured.cause !== finalRecord.cause || captured.epc !== finalRecord.epc)) {
         report('模式 1 定时器的首次中断样本与打包记录不一致', true);
+      } else if (captured && !finalRecord) {
+        validateExpectedRecord({
+          ...captured, index: recordIndex, scenarioId: scenario.id, kindCode: kindCode(scenario.kind),
+          aux0: 0, aux1: 0, firstLineNumber: 0, lastLineNumber: 0, duplicateFields: []
+        }, expectedRecords[0], scenario, 0, failures);
       }
       if (marker) {
         const markerPc = parseHex(marker.pc);
         if (records.some(item => item.index >= recordIndex)
           || simEvents.some(event => event.lineNumber > marker.lineNumber && parseHex(event.pc) >= markerPc)) {
           report('模式 1 定时器未观测标记之后出现了不应执行的提交', true);
-        }
-        if (captured) {
-          validateExpectedRecord({
-            ...captured, index: recordIndex, scenarioId: scenario.id, kindCode: kindCode(scenario.kind),
-            aux0: 0, aux1: 0, firstLineNumber: 0, lastLineNumber: 0, duplicateFields: []
-          }, expectedRecords[0], scenario, 0, failures);
         }
         timerCoverage = [{ covered: false, message: `P7 定时器场景 ${scenario.id} 未覆盖：轮询未采样到首次中断之后的 Cause.IP 去断言` }];
         break;
@@ -264,18 +277,14 @@ function checkProbeRecords(
         scenarioRecords.length > 1 ? true : undefined
       ));
     }
-    let finalRecord: P7ProbeRecord | undefined;
-    const currentIndex = recordIndex++;
-    const record = records.find((item) => item.index === currentIndex);
     if (!record) {
-      failures.push(failure(scenario, `缺少索引为 ${currentIndex} 的探针记录`));
+      failures.push(failure(scenario, `缺少索引为 ${recordIndex} 的探针记录`));
     } else if (record.scenarioId !== scenario.id) {
       failures.push(failure(
         scenario,
-        `探针记录顺序错误：索引 ${currentIndex} 应为场景 ${scenario.id}，实际为 ${record.scenarioId}`, true
+        `探针记录顺序错误：索引 ${recordIndex} 应为场景 ${scenario.id}，实际为 ${record.scenarioId}`, true
       ));
     } else {
-      finalRecord = record;
       validateExpectedRecord(record, expectedRecords[0], scenario, 0, failures);
       if (expectedRecords.length > 1) {
         const statusSamples = scenario.replayStatusAddress === undefined ? [] : simEvents.filter((event) =>
@@ -308,20 +317,17 @@ function checkProbeRecords(
     const completionWrites = scenario.requireCompletion ? atPc(scenario.donePc) : [];
     const completionEvents = findCompletionEvents(completionWrites, scenario);
     if (sources && expectedProbeRecordPath(scenario) === 'priority') {
-      const previous = records.find(item => item.index === currentIndex - 1);
-      const stageEnd = finalRecord?.firstLineNumber ?? completionEvents[0]?.lineNumber ?? Infinity;
-      const { capture, invalid } = sources.priorityCapture
-        ? readP7ProbeCapture(atPc, sources.priorityCapture, previous?.lastLineNumber ?? 0, stageEnd)
-        : { capture: undefined, invalid: false };
+      const stageEnd = Math.min(finalRecord?.firstLineNumber ?? completionEvents[0]?.lineNumber ?? Infinity, captureEnd);
+      const { capture, invalid } = readP7ProbeCapture(atPc, sources.priorityCapture, captureStart, stageEnd);
       if (!capture) {
         failures.push(failure(scenario, '优先级探针应在重试前依次写入首次中断的 Status、Cause 和 EPC',
-          invalid || Number.isFinite(stageEnd) ? true : undefined));
+          invalid ? true : undefined));
       } else if (finalRecord
         && (capture.status !== finalRecord.status || capture.cause !== finalRecord.cause || capture.epc !== finalRecord.epc)) {
         failures.push(failure(scenario, '优先级探针的首次中断样本与打包记录不一致', true));
       } else if (!finalRecord) {
         validateExpectedRecord({
-          ...capture, index: currentIndex, scenarioId: scenario.id, kindCode: kindCode(scenario.kind),
+          ...capture, index: recordIndex, scenarioId: scenario.id, kindCode: kindCode(scenario.kind),
           aux0: 0, aux1: 0, firstLineNumber: 0, lastLineNumber: 0, duplicateFields: []
         }, expectedRecords[0], scenario, 0, failures);
       }
@@ -333,8 +339,12 @@ function checkProbeRecords(
       const armCount = diagnostics.filter((item) => item === `external_arm:${scenario.id}`).length;
       const raiseCount = diagnostics.filter((item) => item === `external_raise:${scenario.id}`).length;
       const ackCount = diagnostics.filter((item) => item === `external_ack:${scenario.id}`).length;
-      const requiresArm = Number.isFinite(scenario.armAddress) && Number.isFinite(scenario.armValue);
-      if (scenario.variant === 'masked-ie' || scenario.variant === 'masked-im2') {
+      const masked = isP7MaskedExternalVariant(scenario.variant);
+      // Return and masked windows use a unique trigger PC, including archived
+      // images whose metadata still describes the preceding setup store.
+      const requiresArm = !metadata.returnBoundary && !masked
+        && Number.isFinite(scenario.armAddress) && Number.isFinite(scenario.armValue);
+      if (masked) {
         const marker = scenario.requiredPreHandlerCommits?.find(commit =>
           commit.kind === 'dm' && commit.target === p7ProbeMaskedInterruptMarkerAddress);
         const ackTime = ackTimes.get(scenario.id);
@@ -348,8 +358,8 @@ function checkProbeRecords(
       if (requiresArm && armIndex < 0) {
         failures.push(failure(scenario, '软件标记未能启动外部中断'));
       }
-      if (requiresArm && raiseIndex < 0) {
-        failures.push(failure(scenario, '启动标记之后未发出外部中断请求'));
+      if ((requiresArm || masked) && raiseIndex < 0) {
+        failures.push(failure(scenario, requiresArm ? '启动标记之后未发出外部中断请求' : '未在指定宏观 PC 发出外部中断请求'));
       }
       if (ackIndex < 0) {
         failures.push(failure(scenario, `外部中断未通过 0x${p7ExternalInterruptAckAddress.toString(16)} 应答`));
@@ -395,7 +405,7 @@ function checkProbeRecords(
       }
     }
     checkRequiredProbeCommits(scenario, atPc, finalRecord,
-      (message, observed) => failures.push(failure(scenario, message, observed)));
+      (message, observed) => failures.push(failure(scenario, message, observed)), image);
   }
 
   return {
@@ -436,18 +446,13 @@ function validateExpectedRecord(
   const expectedStatus = expected.statusBeforeException === undefined
     ? p7RequiredExceptionStatusMask
     : (expected.statusBeforeException | p7StatusExlMask) >>> 0;
-  if (record.status !== expectedStatus) {
+  if (!matchesP7ObservedWord(record.status, expectedStatus, p7StatusObservationMask)) {
     const actual = Number.isFinite(record.status) ? `0x${record.status.toString(16)}` : '含未知位';
     failures.push(failure(
       scenario,
-      `${recordLabel}SR/Status 不符：应恰为 0x${expectedStatus.toString(16)}，实际为 ${actual}`,
+      `${recordLabel}SR/Status 不符：IM、EXL、IE 应为 0x${(expectedStatus & p7StatusObservationMask).toString(16)}，原始值为 ${actual}`,
       statusObserved ? true : undefined
     ));
-  }
-
-  const unsupportedCauseBits = (record.cause & ~p7ImplementedCauseMask) >>> 0;
-  if (unsupportedCauseBits !== 0) {
-    reject(`Cause 的未实现位应为 0，实际非零位为 0x${unsupportedCauseBits.toString(16)}`);
   }
 
   const excCode = (record.cause & p7CauseExcCodeMask) >>> 2;

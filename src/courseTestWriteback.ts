@@ -6,6 +6,7 @@ import { findSourceAtPc, loadCaseWritebackTexts, type CaseInspection } from './c
 import { buildWritebackComparison, initialWritebackFocus } from './courseTesting/writebackComparison';
 import { evidencePc, parseFailureEvidence } from './courseTesting/failureEvidence';
 import { isManifestV2 } from './courseTesting/manifestCodec';
+import { p7AnchorValueEquivalence } from './courseTesting/p7AnchorTraceComparison';
 import { renderWritebackComparison, writebackPageSize } from './courseTestWritebackReport';
 import { textEditorColumn } from './editorNavigation';
 
@@ -32,9 +33,14 @@ export async function openCourseWritebackComparison(inspection: CaseInspection, 
   try {
     const text = await loadCaseWritebackTexts(inspection);
     if (disposed) return;
-    const model = await buildWritebackComparison(text.oracle, text.dut, { signal: controller.signal });
-    if (disposed) return;
     const manifest = inspection.asmCase.manifest;
+    const equivalentValues = isManifestV2(manifest)
+      ? p7AnchorValueEquivalence(manifest, inspection.image, manifest.oracle?.engine.id) : undefined;
+    const model = await buildWritebackComparison(text.oracle, text.dut, {
+      signal: controller.signal,
+      ...(equivalentValues ? { equivalentValues } : {})
+    });
+    if (disposed) return;
     const metadata = isManifestV2(manifest) ? manifest.metadata : undefined;
     const savedDifference = parseFailureEvidence(metadata?.['test.evidence']);
     let focus = initialWritebackFocus(model, savedDifference);

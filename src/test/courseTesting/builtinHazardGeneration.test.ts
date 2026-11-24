@@ -86,6 +86,9 @@ describe('hazard-directed generation', () => {
       if (profile === 'P7') {
         expect(events.filter((event) => event.kind === 'interrupt')).toHaveLength(1);
         expect(events.some((event) => event.kind === 'exception')).toBe(true);
+        const bodyCp0Reads = events.filter(({ mnemonic, pcBefore }) => mnemonic === 'mfc0' && pcBefore < p7ExceptionHandlerAddress);
+        expect(bodyCp0Reads.length).toBeGreaterThan(0);
+        expect(bodyCp0Reads.every(({ instructionWord }) => ((instructionWord! >>> 11) & 31) === 14)).toBe(true);
       }
       if (profile === 'P3' || profile === 'P4') expect(generated.hazardCoverage).toBeUndefined();
       else expect(generated.hazardCoverage?.stallTuples).toBeGreaterThan(0);

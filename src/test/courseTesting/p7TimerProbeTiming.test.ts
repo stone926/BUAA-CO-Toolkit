@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { generateBuiltinAsmTestCase, type P7ProbeMetadata } from '../../courseTesting/builtinAsmGenerator';
 import { checkP7Probe } from '../../courseTesting/p7ProbeCheck';
+import { concludeP7Probe } from '../../courseTesting/p7ProbeCompletion';
 import { p7ProbeTimerReloadPreset } from '../../courseTesting/builtinAsm/p7/constants';
 import { parseSimOutput } from '../../language/verilog/traceParser';
 import { assembleCourseSource } from '../../mips/core/assembler/assembler';
@@ -45,6 +46,34 @@ function runTimerProbe(advance?: (session: CourseSystemSession, metadata: P7Prob
 }
 
 describe('P7 Timer phase-independent observations', () => {
+  it('attributes shared first-IRQ stores only to the active Mode 1 scenario at EOF', () => {
+    const { stdout, events, image, metadata, result } = runTimerProbe();
+    expect(result.passed).toBe(true);
+    const repeated = metadata.scenarios.filter(scenario => scenario.timerObservation?.kind === 'mode1');
+    const earlier = result.records.find(record => record.scenarioId === repeated[1].id)!;
+    const active = repeated[2];
+    const observation = active.timerObservation!;
+    if (observation.kind !== 'mode1') throw new Error('expected Mode 1 capture');
+    const preceding = result.records.find(record => record.index === metadata.scenarios.indexOf(active) - 1)!;
+    const epc = events.find(event => event.lineNumber > preceding.lastLineNumber
+      && Number.parseInt(event.pc, 16) === observation.firstCapture.epcPc)!;
+    const lines = stdout.split('\n');
+    const haltPc = findCourseHaltPc(image, 'P7')!;
+    function judge(prefix: string[]) {
+      const text = prefix.join('\n');
+      return concludeP7Probe(checkP7Probe(text, parseSimOutput(text), metadata, image), text, haltPc, true);
+    }
+
+    // Two earlier IRQ pairs have used these same three store PCs. Later Timers have yet to start.
+    expect(judge(lines.slice(0, earlier.lastLineNumber))).toMatchObject({ failures: [], coverage: [{ covered: false }] });
+    const prefix = lines.slice(0, epc.lineNumber);
+    expect(judge(prefix).failures).toEqual([]);
+    prefix[prefix.length - 1] = prefix[prefix.length - 1].replace(epc.value, '00000000');
+    expect(judge(prefix).failures).toEqual([expect.objectContaining({
+      scenarioId: active.id, observed: true, message: expect.stringContaining('EPC')
+    })]);
+  });
+
   it.each([1, 2, 8, 41])('accepts both Timer restart and genuine repeated IRQs with %i clocks across the restart sequences', cycles => {
     const observed = runTimerProbe((session, metadata, pc) => {
       const inDisableReload = metadata.scenarios.some(scenario => {

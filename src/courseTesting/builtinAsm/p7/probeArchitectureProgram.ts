@@ -23,7 +23,7 @@ export function generateP7ArchitectureProbe(options: BuiltinAsmGeneratorOptions)
   const reset = program.next('syscall', 'reset-syscall');
   main.emit('syscall');
   const resetRecord = program.complete(reset, { statusBeforeException: 0, allowedEpc: [p7UserTextBaseAddress], bd: false });
-  resetRecord.requiredCommits = [expectRegister(main, 'mfc0 $8, $12', 8, 0)];
+  resetRecord.requiredCommits = [expectRegister(main, 'mfc0 $8, $12', 8, 0, 'status')];
 
   const cp0AndDm = emitCp0AndDmReadbacks(main);
   for (const [kind, victim, status, before] of [
@@ -39,7 +39,7 @@ export function generateP7ArchitectureProbe(options: BuiltinAsmGeneratorOptions)
     main.emit('sw $8, 0x624($0)');
     const scenario = program.complete(item, { statusBeforeException: status, allowedEpc: [victimPc], victimPc,
       bd: false, requiredPreHandlerCommits: [...before], forbiddenCommitPcs: [poisonPc] });
-    scenario.requiredCommits = [expectRegister(main, 'mfc0 $8, $12', 8, status)];
+    scenario.requiredCommits = [expectRegister(main, 'mfc0 $8, $12', 8, status, 'status')];
   }
 
   writeStatus(main, 0);
@@ -75,12 +75,11 @@ export function generateP7ArchitectureProbe(options: BuiltinAsmGeneratorOptions)
 }
 
 function emitCp0AndDmReadbacks(main: ProgramWriter): P7ProbeCommitExpectation[] {
-  // Exercise every writable IM bit and both IE values, with reserved bits set in the operand.
-  // EXL is kept clear so subsequent exception tests start from the observed SR value.
-  writeStatus(main, 0xffff_fffd);
-  const allIm = expectRegister(main, 'mfc0 $8, $12', 8, 0xfc01);
-  writeStatus(main, 0xaaaa_aaa8);
-  const partialIm = expectRegister(main, 'mfc0 $8, $12', 8, 0xa800);
+  // Exercise all six IM bits and both IE values using only the P7 control fields.
+  writeStatus(main, 0xfc01);
+  const allIm = expectRegister(main, 'mfc0 $8, $12', 8, 0xfc01, 'status');
+  writeStatus(main, 0xa800);
+  const partialIm = expectRegister(main, 'mfc0 $8, $12', 8, 0xa800, 'status');
   emitLoadImmediate(main, '$9', p7UserTextBaseAddress);
   main.emit('mtc0 $9, $14');
   const epc = expectRegister(main, 'mfc0 $8, $14', 8, p7UserTextBaseAddress);
@@ -174,7 +173,7 @@ function emitTimerMaskScenario(program: DirectedProbeProgram, selected?: 0 | 1):
   // self-branch and its delay slot report the branch PC as EPC.
   const scenario = program.complete(item, { statusBeforeException: status, ipMask: bothTimerIps, allowedEpc: [waitPc],
     waitPc, requiredPreHandlerCommits: [observed] });
-  scenario.requiredCommits = [expectRegister(main, 'mfc0 $8, $12', 8, status)];
+  scenario.requiredCommits = [expectRegister(main, 'mfc0 $8, $12', 8, status, 'status')];
 }
 
 function prepareTimerPending(main: ProgramWriter, id: number, source: typeof timerSources[number]): void {

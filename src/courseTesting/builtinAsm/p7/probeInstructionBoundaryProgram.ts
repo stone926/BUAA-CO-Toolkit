@@ -30,10 +30,10 @@ export function generateP7InstructionBoundaryProbe(options: BuiltinAsmGeneratorO
 
   const handler = program.handler('_co_boundary_natural_entry');
   handler.label('_co_boundary_natural_entry');
-  const naturalStatus = expectStore(handler, 'sw $24, 0x634($0)', 0x634, 0);
+  const naturalStatus = expectStore(handler, 'sw $24, 0x634($0)', 0x634, 0, 'status');
   const naturalControl = expectStore(handler, 'sw $11, 0x638($0)', 0x638, p7ExceptionHandlerAddress - 4);
   handler.emit('mfc0 $24, $13');
-  const naturalCause = expectStore(handler, 'sw $24, 0x63c($0)', 0x63c, 0);
+  const naturalCause = expectStore(handler, 'sw $24, 0x63c($0)', 0x63c, 0, 'cause');
   handler.emit('mfc0 $24, $14');
   const naturalEpc = expectStore(handler, 'sw $24, 0x640($0)', 0x640, 0);
   handler.emit('beq $0, $0, _co_boundary_after_vector');

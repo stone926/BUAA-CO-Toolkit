@@ -44,7 +44,7 @@ export function emitTimerMode1RepeatScenario(
 
   // The first handler leaves the peripheral untouched and clears CPU IE under EXL.
   // Both COUNT and live Cause.IP can now be observed without taking an interrupt.
-  expectRegister('mfc0 $14, $12', 14, p7StatusEnableAllCourseInterrupts & ~1);
+  expectRegister('mfc0 $14, $12', 14, p7StatusEnableAllCourseInterrupts & ~1, 'status');
   expectRegister(`lw $14, 0x${ctrl.toString(16)}($0)`, 14, mode1Enabled);
   expectRegister(`lw $14, 0x${preset.toString(16)}($0)`, 14, timerPreset);
   if (stopped) {
@@ -134,8 +134,8 @@ export function emitTimerMode1RepeatScenario(
     return waitPc;
   }
 
-  function expectRegister(instruction: string, target: number, value: number): void {
-    requiredPreHandlerCommits.push({ pc: writer.pc(), kind: 'grf', target, value });
+  function expectRegister(instruction: string, target: number, value: number, cp0Sample?: P7ProbeCommitExpectation['cp0Sample']): void {
+    requiredPreHandlerCommits.push({ pc: writer.pc(), kind: 'grf', target, value, ...(cp0Sample && { cp0Sample }) });
     writer.emit(instruction);
   }
 

@@ -9,6 +9,7 @@ import {
 } from './builtinAsm/p7/constants';
 import { maximumCourseTraceClocks } from './pipeline/executionBudget';
 import { parseProbeHexWord, parseProbeRegister } from './p7ProbeTraceWord';
+import { matchesP7ObservedWord, p7Cp0ObservationMask } from './p7Cp0Observation';
 import { readP7ProbeCapture } from './p7ProbeCapture';
 
 type EventsAtPc = (pc: number) => readonly CpuTraceEvent[];
@@ -124,13 +125,13 @@ export function observedTimerReadback(
 ): true | undefined {
   if (expected.kind !== 'grf' || events.length !== 1 || events[0].lineNumber >= beforeLine) return;
   const value = readRegister(events[0], expected.target);
-  return value !== undefined && value !== expected.value ? true : undefined;
+  return value !== undefined && !matchesP7ObservedWord(value, expected.value, p7Cp0ObservationMask(expected.cp0Sample)) ? true : undefined;
 }
 
 export function readFirstTimerCapture(
   scenario: P7ProbeScenario,
   atPc: EventsAtPc,
-  afterLine: number,
+  afterLine: number | undefined,
   beforeLine: number,
   report: ReportFailure
 ): { status: number; cause: number; epc: number } | undefined {
@@ -138,8 +139,7 @@ export function readFirstTimerCapture(
   if (observation?.kind !== 'mode1') return;
   const { capture, invalid } = readP7ProbeCapture(atPc, observation.firstCapture, afterLine, beforeLine);
   if (!capture) {
-    report('模式 1 定时器应在返回前依次记录首次中断的 Status、Cause 和 EPC',
-      invalid || Number.isFinite(beforeLine) ? true : undefined);
+    report('模式 1 定时器应在返回前依次记录首次中断的 Status、Cause 和 EPC', invalid ? true : undefined);
   }
   return capture;
 }
@@ -155,7 +155,7 @@ function readRegister(event: CpuTraceEvent, register: number): number | undefine
 function matchesCommit(event: CpuTraceEvent, expected: P7ProbeCommitExpectation): boolean {
   return event.kind === expected.kind
     && (event.kind === 'grf' ? parseProbeRegister(event.target) : parseWord(event.target)) === expected.target
-    && parseWord(event.value) === expected.value;
+    && matchesP7ObservedWord(parseProbeHexWord(event.value), expected.value, p7Cp0ObservationMask(expected.cp0Sample));
 }
 
 function parseWord(value: string): number | undefined {

@@ -95,7 +95,6 @@ describe('P7 probe checker', () => {
         requiredPreHandlerCommits: [{ pc: 0x3010, kind: 'dm' as const, target: 0x27dc, value: 0x6001 }] };
       const metadata = { ...baseMetadata, scenarios: [scenario] };
       const output = [
-        'CO_P7_PROBE external_arm scenario=1 time=20',
         'CO_P7_PROBE external_raise scenario=1 time=24',
         '40@00003010: *000027dc <= 00006001',
         ...recordLines(0, [p7ProbeMagic, 1, 1, 0x1c03, 0x1000, 0x3020, 0, 0])
@@ -103,6 +102,8 @@ describe('P7 probe checker', () => {
         'CO_P7_PROBE external_ack scenario=1 time=100'
       ].join('\n');
       expect(checkP7Probe(output, parseSimOutput(output), metadata).passed).toBe(true);
+      const noRequest = output.replace('CO_P7_PROBE external_raise scenario=1 time=24', '');
+      expect(checkP7Probe(noRequest, parseSimOutput(noRequest), metadata).passed).toBe(false);
       const early = output.replace('time=100', 'time=36');
       expect(checkP7Probe(early, parseSimOutput(early), metadata).failures).toContainEqual(expect.objectContaining({
         observed: true, message: expect.stringContaining('在软件启用前已应答')
@@ -137,7 +138,7 @@ describe('P7 probe checker', () => {
     expect(result.failures.filter((failure) => failure.message.includes('Status'))).toHaveLength(2);
   });
 
-  it('requires unimplemented Status and Cause bits to remain zero', () => {
+  it('compares the P7 Status and Cause fields while preserving other readback bits as evidence', () => {
     const sim = [
       ...recordLines(0, [p7ProbeMagic, 1, 1, 0x1c07, 0x1001, 0x3020, 0, 0]),
       ...recordLines(1, [p7ProbeMagic, 2, 2, 0x1c03, 0x0401, 0x3040, 0, 0]),
@@ -148,9 +149,11 @@ describe('P7 probe checker', () => {
 
     const result = checkP7Probe(sim, parseSimOutput(sim), baseMetadata);
 
-    expect(result.passed).toBe(false);
-    expect(result.failures.some((failure) => failure.message.includes('SR/Status 不符'))).toBe(true);
-    expect(result.failures.filter((failure) => failure.message.includes('未实现位应为 0'))).toHaveLength(2);
+    expect(result.failures).toEqual([]);
+    expect(result.records[0]).toMatchObject({ status: 0x1c07, cause: 0x1001 });
+    const broken = sim.replace('00001c07', '00009c07');
+    expect(checkP7Probe(broken, parseSimOutput(broken), baseMetadata).failures)
+      .toContainEqual(expect.objectContaining({ message: expect.stringContaining('SR/Status 不符') }));
   });
 
   it('rejects unexpected pending sources in an isolated timer scenario', () => {

@@ -3,12 +3,15 @@ import type { CpuTraceEvent } from '../language/mips/traceParser';
 import type { P7ProbeMetadata } from './builtinAsmGenerator';
 import type { P7ProbeCheckResult } from './p7ProbeCheck';
 import { parseProbeHexWord, parseProbeRegister } from './p7ProbeTraceWord';
+import { matchesP7ObservedWord, p7CommitObservationMask, p7Cp0ObservationMask } from './p7Cp0Observation';
+import type { ProgramImage } from '../mips/core/api';
 
 export function checkP7ReturnProbe(
   output: string,
   events: readonly CpuTraceEvent[],
   metadata: P7ProbeMetadata,
-  checkRecords: (metadata: P7ProbeMetadata) => P7ProbeCheckResult
+  checkRecords: (metadata: P7ProbeMetadata) => P7ProbeCheckResult,
+  image?: ProgramImage
 ): P7ProbeCheckResult {
   const plan = metadata.returnBoundary!;
   const raised = (id: number) => protocol(output, 'external_raise', id);
@@ -35,11 +38,14 @@ export function checkP7ReturnProbe(
   }
   const lastObservedMainPc = plan.mainCommits.reduce((last, commit) => byPc.has(commit.pc)
     ? Math.max(last, commit.pc) : last, 0);
+  const resetStores = new Map(Object.entries(metadata.initialCp0 ?? {}).map(([name, sample]) =>
+    [sample.pc, p7Cp0ObservationMask(name)] as const));
   for (const expected of plan.mainCommits) {
     const actual = byPc.get(expected.pc) ?? [];
     const required = secondRaised.length || lastObservedMainPc > expected.pc || result.records.some(record =>
       expected.pc < record.epc + ((record.cause >>> 31) ? 4 : 0));
-    if ((required || actual.length) && (actual.length !== 1 || !matches(actual[0], expected))) {
+    const mask = p7CommitObservationMask(expected, image) ?? (expected.kind === 'dm' ? resetStores.get(expected.pc) : undefined);
+    if ((required || actual.length) && (actual.length !== 1 || !matches(actual[0], expected, mask))) {
       fail(`主程序在 PC 0x${expected.pc.toString(16)} 的提交不符：应恰好有一次 ${expected.kind === 'grf' ? '寄存器' : '存储器'}写入，值为 0x${expected.value.toString(16)}`, actual.length > 0);
     }
     if (actual.length === 1) for (const record of result.records) {
@@ -187,8 +193,8 @@ function displayMacroPc(token: string | undefined): string {
 
 function matches(event: CpuTraceEvent | undefined, expected: {
   kind: 'grf' | 'dm'; target: number; value: number;
-}): boolean {
+}, mask?: number): boolean {
   return event !== undefined && event.kind === expected.kind
     && (event.kind === 'grf' ? parseProbeRegister(event.target) : parseProbeHexWord(event.target)) === expected.target
-    && parseProbeHexWord(event.value) === (expected.value >>> 0);
+    && matchesP7ObservedWord(parseProbeHexWord(event.value), expected.value, mask);
 }

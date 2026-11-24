@@ -1,4 +1,4 @@
-# course-testing | src/courseTesting/ | 94 files + host adapters
+# course-testing | src/courseTesting/ | 96 files + host adapters
 
 P3–P7 自动化测试：生成 ASM → 内置 TS assembler/ProgramImage → 内置 TS 课程 oracle → Verilog（bundled Icarus）或 Logisim 仿真 Trace → 对比/Probe 检查 → HTML/JSON 报告。通用 Verilog 仿真与自动 DUT lane 固定使用扩展内置 Icarus，运行目录 `.co/iverilog`。
 
@@ -22,7 +22,11 @@ P3–P7 自动化测试：生成 ASM → 内置 TS assembler/ProgramImage → �
 
 **特殊 Timer 实验。** special-priority、special-mdu、special-hazard 分别包含 14、12、10 个软件构造 EXL/EPC 后通过 `jal → eret` 释放 Timer 的变体。其官方保证范围尚未确认。每项的真实结果写入独立表和用例历史，课程统计及停止条件只计常规测试。旧用例按既有元数据识别。
 
-**精确边界。** 外部 IRQ 依据宏观 PC 触发。挂起时只有下降沿命中应答地址且字节使能有效才消费应答。双中断返回点和外部 IRQ 屏蔽点以公开 DM 写入顺序检测提前应答。双中断返回将第二次 IRQ 的原始 PC 与 EPC、BD 和实际分支位置核对。允许由 BD/EPC 解释的 jal 重放。reset 点先污染 GPR 和 SR，再在首个受害 PC 将 IRQ 与同步复位一起施加，复位后重新执行整个双中断程序。每个 P7 点验证宏观 PC 穿过标准停机分支、延迟槽并返回该分支。预算截止时按实际观测到的违例判失败，只有缺失后缀则报告未覆盖或工具中止。
+**精确边界。** 双中断返回、同步复位和外部 IRQ 屏蔽点在宏观 PC 首次命中目标指令时触发。目标之前的准备存储按架构提交顺序核对，允许 DM 端口在目标 PC 之后才显示该写入。中断挂起时，下降沿命中应答地址且字节使能有效才消费应答。双中断返回点和外部 IRQ 屏蔽点以公开 DM 写入顺序检测提前应答。双中断返回将第二次 IRQ 的原始 PC 与 EPC、BD 和实际分支位置核对。允许由 BD/EPC 解释的 jal 重放。reset 点先污染 GPR 和 SR，再在首个受害 PC 将 IRQ 与同步复位一起施加，复位后重新执行整个双中断程序。Timer 和优先级探针按当前场景的启动标记归属共享处理程序的采样。预算截止时按实际观测到的违例判失败，只有缺失后缀则报告未覆盖或工具中止。
+
+**CP0 功能判分。** 教程 P7-2-6 的 CP0 约束规定未实现位恒为零。插件的自动功能测试只核对 SR.IM（全部六位）、EXL、IE 和 Cause.BD、IP（全部六位）、ExcCode，EPC 按完整 32 位核对。报告保留原始数值。自动随机正文使用 EPC 作为 `mfc0` 的数据来源，固定 handler 中可安全覆盖的 Cause 写回按有效字段对拍。用户 ASM 继续按其实际写回逐字比较。
+
+**覆盖边界。** P7-2-6 说明官方用宏观 PC 定位中断，并保证不会跳到未加载指令的位置。本工具还用宏观 PC 确认停机，缺少这项见证时报告未覆盖。直接跳到 IM 范围外的定向用例检查 P7-2-3 定义的取指 AdEL，属于比官方承诺的输入范围更宽的硬件测试。
 
 **观测证据。** CP0 复位值、启动采样是否被重放和记录字段的实际写指令分别检查。MDU 验证课程允许的完整 HI/LO 结果。P7 黑盒测试覆盖本次输入的公开功能行为，课程要求的内部结构和课堂周期范围仍需独立验证。
 
@@ -99,6 +103,7 @@ P3–P7 自动化测试：生成 ASM → 内置 TS assembler/ProgramImage → �
 - `testOutcomeDiagnostic.ts` — 历史与持续测试共用的有界中文结果摘要，保留探针首失败、结构化写回/DM 事务差异及工具诊断；脱敏后附独立范围说明
 - `p7ReturnCheck.ts` — 返回协议、全部 main/handler 事务、记录字段来源、EPC/BD 提交边界与合法 jal link 重放检查；未覆盖与功能失败分别记录
 - `p7ProbeRecordSources.ts` / `p7ProbeTraceWord.ts` — 依据本次仿真的机器码绑定记录字段及重入 Status 样本的存储 PC，严格解码架构写回的 32 位值
+- `p7Cp0Observation.ts`、`p7AnchorTraceComparison.ts` — 课程 CP0 字段掩码与自动 anchor 固定 handler 的写回比较，保留 DUT 原始证据。
 - `p7ProbeCapture.ts` — 校验优先级和 Mode 1 打包记录的首次 CP0 样本，核对同一场景内按顺序执行的三个公开 DM 写入
 - `p7ProbeCheck.ts` — DUT-only 黑盒精确检查：重建完整 DM 记录并校验 CP0/EPC/Timer 前后状态与 handler 前后精确 commit；按 PC 一次索引提交，older 必须早于记录首字段，取消的 younger/错误路径提交即失败
 

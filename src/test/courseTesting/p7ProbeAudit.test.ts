@@ -55,7 +55,11 @@ describe('P7 audit regressions', () => {
       expect(events.filter((event) => event.kind === 'dm'
         && Number.parseInt(event.target, 16) === sample.target).length).toBeGreaterThan(1);
       const missing = events.filter((event) => event !== original);
-      const nonzero = { ...original, value: '00000004' };
+      const nonzero = { ...original, value: name === 'status' ? '00000001' : '00000004' };
+      if (name !== 'epc') {
+        const reserved = { ...original, value: '40000000' };
+        expect(checkP7Probe('', events.map(event => event === original ? reserved : event), metadata).failures).toEqual([]);
+      }
       for (const [corrupted, kind] of [
         [events.map((event) => event === original ? nonzero : event), 'cp0-reset'],
         [missing, 'cp0-reset-sample'],

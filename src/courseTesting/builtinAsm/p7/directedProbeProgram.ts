@@ -131,14 +131,16 @@ export class DirectedProbeProgram {
   }
 }
 
-export function expectStore(writer: ProgramWriter, instruction: string, target: number, value: number): P7ProbeCommitExpectation {
+export function expectStore(writer: ProgramWriter, instruction: string, target: number, value: number,
+  cp0Sample?: P7ProbeCommitExpectation['cp0Sample']): P7ProbeCommitExpectation {
   const pc = writer.pc();
   writer.emit(instruction);
-  return { pc, kind: 'dm', target, value };
+  return { pc, kind: 'dm', target, value, ...(cp0Sample && { cp0Sample }) };
 }
 
-export function expectRegister(writer: ProgramWriter, instruction: string, target: number, value: number): P7ProbeCommitExpectation {
+export function expectRegister(writer: ProgramWriter, instruction: string, target: number, value: number,
+  cp0Sample?: P7ProbeCommitExpectation['cp0Sample']): P7ProbeCommitExpectation {
   const pc = writer.pc();
   writer.emit(instruction);
-  return { pc, kind: 'grf', target, value };
+  return { pc, kind: 'grf', target, value, ...(cp0Sample && { cp0Sample }) };
 }

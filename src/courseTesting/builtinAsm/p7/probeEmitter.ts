@@ -9,7 +9,7 @@ import {
   resolveBuiltinInstructionSet
 } from '../randomBody';
 import { ProgramWriter } from '../programWriter';
-import { P7ProbeCommitExpectation, P7ProbeMetadata, P7ProbeScenario, P7ProbeScenarioKind, P7ProbeShard, P7ProbeTimerObservation as P7TimerProtocol } from '../types';
+import { isP7MaskedExternalVariant, P7ProbeCommitExpectation, P7ProbeMetadata, P7ProbeScenario, P7ProbeScenarioKind, P7ProbeShard, P7ProbeTimerObservation as P7TimerProtocol } from '../types';
 import {
   p7CauseExcCodeMask,
   p7CauseIpExternalMask,
@@ -286,7 +286,7 @@ function emitScenario(
   if ((kind === 'external' || kind === 'timer0' || kind === 'timer1') && variant?.startsWith('priority-')) {
     return emitInterruptPriorityScenario(writer, id, kind, variant, rng, padding);
   }
-  if (kind === 'external' && (variant === 'masked-ie' || variant === 'masked-im2')) {
+  if (kind === 'external' && isP7MaskedExternalVariant(variant)) {
     return emitMaskedExternalScenario(writer, id, variant, rng, padding);
   }
   if (kind === 'external' && isExternalRetryVariant(variant)) {
@@ -342,6 +342,7 @@ function emitInternalScenario(
     writer.emit('mfc0 $8, $12');
     requiredCommits.push({
       pc: statusReadPc,
+      cp0Sample: 'status',
       kind: 'grf' as const,
       target: 8,
       value: p7StatusEnableAllCourseInterrupts
@@ -350,6 +351,7 @@ function emitInternalScenario(
     writer.emit(`sw $8, 0x${p7ProbePostEretStatusAddress.toString(16)}($0)`);
     requiredCommits.push({
       pc: statusStorePc,
+      cp0Sample: 'status',
       kind: 'dm' as const,
       target: p7ProbePostEretStatusAddress,
       value: p7StatusEnableAllCourseInterrupts
@@ -396,11 +398,10 @@ function emitMaskedExternalScenario(
     writer.emit('mtc0 $26, $12');
   }
 
-  // After these 16 instructions, the handler resumes at the completion marker. The marker is
-  // deliberately younger than the masked trigger and older than the enabling mtc0.
-  const donePc = writer.pc() + 16 * 4;
+  // The unique trigger PC is reached under the mask. The DM witness follows it
+  // and must commit before the software enables the pending interrupt.
+  const donePc = writer.pc() + 14 * 4;
   emitStoreImmediate(writer, donePc, p7ProbeStateDonePc);
-  emitStoreImmediate(writer, id, p7ProbeExternalArmAddress);
   const triggerPc = writer.pc();
   writer.emit(`ori $8, $0, ${id}`);
   writer.emit('nop');
@@ -431,9 +432,6 @@ function emitMaskedExternalScenario(
     triggerPc,
     waitPc,
     allowedEpc: pcRange(firstEligiblePc, waitPc),
-    armAddress: p7ProbeExternalArmAddress,
-    armValue: id,
-    externalDelayCycles: 0,
     requireCompletion: true,
     requiredPreHandlerCommits: [{
       pc: markerPc,

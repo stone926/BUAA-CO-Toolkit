@@ -6,6 +6,7 @@ interface ReturnScenario {
   id: number;
   kind: string;
   triggerPc?: number;
+  /** Older saved scenarios include their software setup marker. */
   armAddress?: number;
   armValue?: number;
   afterReturnOf?: { scenarioId: number; eretPc: number };
@@ -19,14 +20,14 @@ export function buildP7ReturnInterruptBlock(scenarios: readonly ReturnScenario[]
   }
   const hex = (value: number | undefined): string => {
     if (!Number.isSafeInteger(value) || value === undefined || value < 0 || value > 0xffffffff) {
-      throw new Error('A return-boundary probe contains an invalid public PC or marker.');
+      throw new Error('A return-boundary probe contains an invalid public PC.');
     }
     return `32'h${value.toString(16).padStart(8, '0')}`;
   };
   return [renderResourceTemplate('verilog/p7_return_block.v', {
     resetAtFirstIrq: resetAtFirstIrq ? 1 : 0,
     firstId: first.id, secondId: second.id,
-    firstTarget: hex(first.triggerPc), armAddress: hex(first.armAddress), armValue: hex(first.armValue),
+    firstTarget: hex(first.triggerPc),
     eretPc: hex(second.afterReturnOf.eretPc), ackAddress: hex(p7ExternalInterruptAckAddress),
     firstRecordTail: hex(p7ProbeLogBase + (p7ProbeRecordWords - 1) * 4),
     secondRecordTail: hex(p7ProbeLogBase + (2 * p7ProbeRecordWords - 1) * 4),

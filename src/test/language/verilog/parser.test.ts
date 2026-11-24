@@ -1589,7 +1589,14 @@ describe('buildTestbench', () => {
     expect(tb).toContain("if (|m_int_byteen && (m_int_addr & 32'hfffffffc) == 32'h7f20)");
   });
 
-  it('keeps legacy P7 probe external interrupt support behind legacy metadata', () => {
+  it.each([
+    { id: 1, kind: 'external', waitPc: 0x3020 },
+    // An archived masked window can expose the target before its preceding DM marker.
+    ...['masked-ie', 'masked-im2'].map(variant => ({
+      id: 1, kind: 'external', variant, triggerPc: 0x3020, waitPc: 0x3040,
+      armAddress: 0x27d0, armValue: 1, externalDelayCycles: 0
+    }))
+  ])('triggers directly on the public PC for legacy and masked windows %#', scenario => {
     const module = makeModule({
       name: 'mips',
       ports: [
@@ -1600,13 +1607,12 @@ describe('buildTestbench', () => {
     const tb = buildTestbench(module, 'mips_tb', {
       profile: 'P7',
       p7Probe: {
-        scenarios: [
-          { id: 1, kind: 'external', waitPc: 0x3020 }
-        ]
+        scenarios: [scenario]
       }
     });
 
     expect(tb).toContain("co_p7_external_arm_addr = 32'h00000000;");
+    expect(tb).toContain("co_p7_external_target = 32'h00003020;");
     expect(tb).toContain('co_p7_external_legacy = 1;');
     expect(tb).toContain('co_p7_external_legacy && fixed_macroscopic_pc == co_p7_external_target');
     expect(tb).not.toContain('CO_P7_PROBE external_arm');

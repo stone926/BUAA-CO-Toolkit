@@ -11,20 +11,23 @@ export interface P7ProbeCapturePcs {
 
 export function readP7ProbeCapture(
   atPc: (pc: number) => readonly CpuTraceEvent[],
-  pcs: P7ProbeCapturePcs,
-  afterLine: number,
+  pcs: P7ProbeCapturePcs | undefined,
+  afterLine: number | undefined,
   beforeLine: number
 ): { capture?: { status: number; cause: number; epc: number }; invalid: boolean } {
+  if (afterLine === undefined) return { invalid: false };
+  if (!pcs) return { invalid: Number.isFinite(beforeLine) };
+  const start = afterLine;
   let invalid = false;
   const status = readCapture(pcs.statusPc, p7ProbeStateFirstStatus);
   const cause = readCapture(pcs.causePc, p7ProbeStateFirstCause);
   const epc = readCapture(pcs.epcPc, p7ProbeStateFirstEpc);
-  if (!status || !cause || !epc) return { invalid };
+  if (!status || !cause || !epc) return { invalid: invalid || Number.isFinite(beforeLine) };
   if (status.line >= cause.line || cause.line >= epc.line) return { invalid: true };
   return { capture: { status: status.value, cause: cause.value, epc: epc.value }, invalid: false };
 
   function readCapture(pc: number, address: number): { value: number; line: number } | undefined {
-    const events = atPc(pc).filter(event => event.lineNumber > afterLine && event.lineNumber < beforeLine);
+    const events = atPc(pc).filter(event => event.lineNumber > start && event.lineNumber < beforeLine);
     if (!events.length) return undefined;
     const [event] = events;
     const value = parseProbeHexWord(event.value);

@@ -9,6 +9,24 @@ import { courseInstructionImageHexText, courseInstructionImageWords, findCourseH
 import { executeProgramForService } from '../../mips/core/machine/executeService';
 
 describe('directed P7 automatic probes', () => {
+  it('rechecks archived SR witnesses against the six IM bits, EXL and IE', () => {
+    const { generated, image, haltPc } = assembleShard('architecture');
+    const probe = structuredClone(generated.probe!);
+    const events = execute(image, haltPc, [1]);
+    const readbacks = probe.scenarios[1].requiredPreHandlerCommits!.filter(commit => commit.cp0Sample === 'status');
+    expect(readbacks.map(commit => commit.value)).toEqual([0xfc01, 0xa800]);
+    for (const commit of readbacks) delete commit.cp0Sample;
+    const raw = ['fffffffd', 'aaaaaaa8'];
+    const input = events.map(event => {
+      const index = readbacks.findIndex(commit => commit.pc === Number.parseInt(event.pc, 16));
+      return index < 0 ? event : { ...event, value: raw[index] };
+    });
+    expect(checkP7Probe('', input, probe, image).failures).toEqual([]);
+    const damaged = input.map(event => Number.parseInt(event.pc, 16) === readbacks[0].pc
+      ? { ...event, value: 'ffff7ffd' } : event);
+    expect(checkP7Probe('', damaged, probe, image).passed).toBe(false);
+  });
+
   it('takes reset syscall at 0x3000 and protects precise exception and mask witnesses', () => {
     const { generated, image, haltPc } = assembleShard('architecture');
     expect(wordAt(image, 0x3000)).toBe(0x0c);
