@@ -160,7 +160,8 @@ describe('saved automatic case rerun', () => {
   it('rejects stdin altered only during the archive copy and leaves no new case', async () => {
     const original = await savedCase(true);
     const archive = original.stdin!.fsPath;
-    const graph = path.join(original.dir.fsPath, 'source', 'graph.json');
+    // The source loader opens the canonical path, including when TEMP is accessed through a junction.
+    const graph = await fs.realpath(path.join(original.dir.fsPath, 'source', 'graph.json'));
     const open = nativeFs.open.bind(nativeFs);
     let copyStarted = false;
     const fileOpen = vi.spyOn(nativeFs, 'open').mockImplementation(async (file, ...options) => {
@@ -180,6 +181,7 @@ describe('saved automatic case rerun', () => {
     });
     try {
       const { result } = await rerunCourseTestCase(services, original);
+      expect(copyStarted).toBe(true);
       expect(result).toMatchObject({ status: 'error', message: expect.stringContaining('stdin snapshot 已偏离 case manifest') });
       expect(runCourseTraceCase).not.toHaveBeenCalled();
       expect(await fs.readdir(path.dirname(original.dir.fsPath))).toEqual([original.id]);
