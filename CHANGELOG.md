@@ -4,6 +4,8 @@ All notable changes to BUAA CO Toolkit are documented in this file.
 
 ## [Unreleased]
 
+## [1.6.1] - 2026-11-24
+
 - 统一自定义指令的编辑器识别、终端执行、机器码导出和 CPU 测试。工作区优先加载 JS/TS 定义，仅有 `.class` 时自动使用配置的魔改 MARS。未知指令、缺少 JAR 或 JAR 不兼容时会显示具体原因。
 - 修复 P6/P7 专用脚本指令在终端中的识别问题。自定义指令的悬浮提示显示语法高亮及 JS/TS 编码表。
 - 用户汇编测试自动选择参考引擎并显示执行阶段。P4–P6 测试按参考引擎实际执行的步数设置仿真窗口，减少短用例的等待时间。
