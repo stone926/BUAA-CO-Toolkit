@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { URI } from 'vscode-uri';
 import { getMachineCode } from '../../config';
 import { ensureDirectory } from '../../fsUtil';
-import { copyMachineCodeToSimDirectory } from '../../verilog/simulationInputs';
+import { containedMachineCodeAlias, copyMachineCodeToSimDirectory } from '../../verilog/simulationInputs';
 
 const vscodeState = vi.hoisted(() => ({
   state: undefined as ReturnType<typeof import('../helpers/vscodeMock').createVscodeMockState> | undefined
@@ -74,6 +74,13 @@ describe('simulation machine-code inputs', () => {
     expect(writtenBasenames()).toEqual(['code.txt']);
     expect(vi.mocked(vscode.workspace.fs.writeFile).mock.calls[0][0].path)
       .toMatch(/slot-2\/code\.txt$/);
+  });
+
+  it('keeps a relative alias inside an isolated directory and ignores an escaping one', () => {
+    const outDir = URI.file('E:/work/.co/iverilog/automatic/run-test');
+    vi.mocked(getMachineCode).mockReturnValueOnce('input/extra.hex').mockReturnValueOnce('../outside.hex');
+    expect(containedMachineCodeAlias(outDir).replace(/\\/g, '/')).toBe('input/extra.hex');
+    expect(containedMachineCodeAlias(outDir)).toBe('code.txt');
   });
 });
 

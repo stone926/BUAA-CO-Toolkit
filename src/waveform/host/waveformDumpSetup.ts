@@ -25,7 +25,7 @@ export class WaveformDumpSetup {
   private text = '';
 
   constructor(
-    private readonly dump: vscode.Uri | ((testbenchName: string) => vscode.Uri),
+    private readonly dump: vscode.Uri | ((testbenchName: string, outDir: vscode.Uri) => vscode.Uri),
     private readonly requestedMemories?: readonly MemoryDump[],
     private readonly registry?: MutableVerilogModuleProvider,
     private readonly maximumDumpBytes?: number
@@ -39,7 +39,7 @@ export class WaveformDumpSetup {
       acceptCompileResult,
       shouldReportCompileFailure: acceptCompileResult,
       generatedTopModules: async (context) => {
-        const dump = typeof this.dump === 'function' ? this.dump(context.testbench.moduleName) : this.dump;
+        const dump = typeof this.dump === 'function' ? this.dump(context.testbench.moduleName, context.outDir) : this.dump;
         await ensureDirectory(vscode.Uri.file(path.dirname(dump.fsPath)));
         if (this.requestedMemories === undefined) {
           const sources = [context.testbench.generatedUri, context.testbench.sourceUri, ...(context.sourceFiles ?? [])]

@@ -8,7 +8,7 @@ import { p7InterruptAnchorPairIssue } from '../courseTesting/p7InterruptAnchor';
 import { courseInstructionImageWords, findCourseHaltPc } from '../mips/core/assembler/artifacts';
 import type { ProgramImage } from '../mips/core/api';
 import type { ExternalInterruptRequest } from '../mips/core/devices/interruptController';
-import { deserializeProgramImage, parseStrictHexTextWords } from '../mips/replay/programImage';
+import { deserializeStoredProgramImage, parseStrictHexTextWords } from '../mips/replay/programImage';
 import { loadVerifiedSourceGraphInput } from '../mips/replay/sourceBundle';
 import {
   maximumReplayManifestBytes, maximumReplaySourceBytes, maximumReplayProgramImageBytes,
@@ -62,7 +62,7 @@ export async function loadHazardCaseInput(
   ]);
   const rootUnit = graph.units.find((unit) => unit.id === graph.rootId);
   if (!rootUnit || rootUnit.contentHash !== sha256Bytes(asmBytes)) throw new Error('用例 ASM 与源码闭包不一致。');
-  const image = deserializeProgramImage(imageBytes);
+  const image = await deserializeStoredProgramImage(imageBytes);
   const hashes = new Map(graph.units.map((unit) => [unit.id, unit.contentHash]));
   if (image.fingerprint !== manifest.program.imageFingerprint || image.inputGraph.length !== hashes.size
     || image.inputGraph.some((unit) => hashes.get(unit.id) !== unit.contentHash)) {

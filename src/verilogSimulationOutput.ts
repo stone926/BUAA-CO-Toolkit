@@ -2,7 +2,7 @@
 import { CO_OUT_DIR } from './constants';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { ensureDirectory, workspaceFolderFor, workspaceFolderForOrFirst } from './fsUtil';
+import { ensureDirectory } from './fsUtil';
 export { normalizePathKey, samePath } from './pathUtils';
 
 export function simulationOutputFileName(top: string, configured?: string): string {
@@ -10,10 +10,8 @@ export function simulationOutputFileName(top: string, configured?: string): stri
   return trimmed ? path.basename(trimmed) : `${top}.sim.out`;
 }
 
-export async function simulationOutputDirectory(resource: vscode.Uri | undefined, runtimeDir: vscode.Uri): Promise<vscode.Uri> {
-  const folder = workspaceFolderFor(resource) ?? workspaceFolderForOrFirst(runtimeDir);
-  const baseDir = folder?.uri.fsPath ?? path.dirname(path.dirname(runtimeDir.fsPath));
-  const outDir = vscode.Uri.file(path.join(baseDir, CO_OUT_DIR));
+export async function simulationOutputDirectory(workspaceRoot: vscode.Uri): Promise<vscode.Uri> {
+  const outDir = vscode.Uri.file(path.join(workspaceRoot.fsPath, CO_OUT_DIR));
   await ensureDirectory(outDir);
   return outDir;
 }

@@ -2,6 +2,7 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
+const { gunzipSync } = require('node:zlib');
 const vscode = require('./extension-host-api.cjs');
 
 function sameFile(left, right) {
@@ -26,7 +27,11 @@ async function expectedSource(caseDirectory, manifest) {
   const rawPc = evidence.oracle?.pc ?? evidence.dut?.pc;
   assert.ok(rawPc, 'The retained writeback mismatch must identify a PC');
   const pc = Number.parseInt(rawPc.replace(/^0x/i, ''), 16);
-  const image = JSON.parse(await fs.readFile(path.join(caseDirectory, manifest.program.image.path), 'utf8'));
+  const saved = await fs.readFile(path.join(caseDirectory, manifest.program.image.path));
+  const json = manifest.program.image.path.endsWith('.gz')
+    ? gunzipSync(saved, { maxOutputLength: 16 * 1024 * 1024 })
+    : saved;
+  const image = JSON.parse(json.toString('utf8'));
   let origin;
   for (const [segmentIndex, segment] of image.segments.entries()) {
     const wordIndex = (pc - segment.baseAddress) / 4;

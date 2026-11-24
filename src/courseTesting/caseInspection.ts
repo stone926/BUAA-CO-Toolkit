@@ -9,7 +9,7 @@ import type { AsmCase } from '../asmCaseStore';
 import type { AsmCaseManifestUnion, AsmCaseManifestV2, ManifestArtifactReference } from './manifestCodec';
 import type { AsmCaseSnapshot } from '../asmCaseStoreCore';
 import { isKnownManifest, isManifestV2, isSafeCaseRelativePath } from './manifestCodec';
-import { deserializeProgramImage } from '../mips/replay/programImage';
+import { deserializeStoredProgramImage } from '../mips/replay/programImage';
 import { loadVerifiedSourceGraphInput, type SourceGraphBundle } from '../mips/replay/sourceBundle';
 import { assertContainedDirectoryPath } from '../pathContainment';
 
@@ -41,7 +41,6 @@ export interface CaseInspection {
 }
 
 const validCaseId = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
-const maximumSourceGraphSnapshotBytes = 2 * 1024 * 1024;
 
 /**
  * Load one known case by its ID. All paths are rooted at the supplied cases directory;
@@ -114,16 +113,18 @@ export async function loadCaseInspection(casesDirectory: string, caseId: string)
       if (!sourceGraphReference || typeof sourceGraphReference === 'string') {
         throw new Error('source graph snapshot is missing');
       }
-      await readSnapshot(caseDir, sourceGraphReference, maximumSourceGraphSnapshotBytes, 'program source graph');
-      const verified = await loadVerifiedSourceGraphInput(caseDir, sourceGraphReference.path);
+      const verified = await loadVerifiedSourceGraphInput(caseDir, sourceGraphReference);
+      const rootUnit = verified.graph.units[0];
+      if (rootUnit.contentHash !== manifest.asmSnapshot.sha256.toLowerCase()
+        || rootUnit.bytes !== manifest.asmSnapshot.bytes) {
+        throw new Error('source graph root does not match the case ASM snapshot');
+      }
       sourceGraph = verified.graph;
       sourceTexts = new Map(verified.sourceGraphInput.sources.map((unit) => [unit.id, unit.text]));
       sourceUris = new Map(await Promise.all(sourceGraph.units.map(async (unit) => [
         unit.id,
         await resolveManifestFile(caseDir, unit.materializedPath)
       ] as const)));
-      const rootUnit = sourceGraph.units.find((unit) => unit.id === sourceGraph!.rootId);
-      if (!rootUnit) throw new Error('source graph root unit is missing');
       sourceAsmUri = sourceUris.get(rootUnit.id)!;
       sourceAvailable = asmSnapshotVerified;
     } catch (error) {
@@ -252,7 +253,7 @@ async function readProgramImage(caseDir: string, manifest: AsmCaseManifestV2): P
   const snapshot = manifest.program.image;
   if (!snapshot || typeof snapshot === 'string') throw new Error('program image snapshot is missing');
   const bytes = await readSnapshot(caseDir, snapshot, maximumReplayProgramImageBytes, 'program image');
-  const image = deserializeProgramImage(bytes);
+  const image = await deserializeStoredProgramImage(bytes);
   if (manifest.program.imageFingerprint && image.fingerprint !== manifest.program.imageFingerprint) {
     throw new Error('program image fingerprint does not match the manifest');
   }

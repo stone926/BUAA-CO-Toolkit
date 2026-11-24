@@ -49,12 +49,16 @@ import {
   ensureP7InterruptTestbench,
   ensureRunnableTestbench,
   findUserTestbenchSourceUris,
-  recordTestbenchForAsmCase
+  recordTestbenchForAsmCase,
+  savePrivateTestbenchFailure
 } from '../../verilog/testbenchResolver';
+import { createAutomaticIverilogRunDirectory, discardAutomaticIverilogDependencies } from '../../verilog/automaticIverilogFiles';
+import { simulationOutputDirectory } from '../../verilogSimulationOutput';
 
 const vscodeState = vi.hoisted(() => ({
   state: undefined as ReturnType<typeof import('../helpers/vscodeMock').createVscodeMockState> | undefined
 }));
+const disposeAutomaticRunDirectory = vi.hoisted(() => vi.fn(async () => undefined));
 
 vi.mock('vscode', async () => {
   const { createVscodeMockState, createVscodeModuleMock } = await import('../helpers/vscodeMock');
@@ -72,9 +76,16 @@ vi.mock('../../config', () => ({
 
 vi.mock('../../fsUtil', () => ({
   ensureDirectory: vi.fn(async () => undefined),
+  pathExists: vi.fn(async () => false),
   workspaceFolderFor: vi.fn(),
   writeTextFile: vi.fn(async () => undefined),
   writeTextFileIfChanged: vi.fn(async () => true)
+}));
+
+vi.mock('../../pathContainment', () => ({ ensureContainedDirectoryPath: vi.fn(async () => undefined) }));
+vi.mock('../../verilog/automaticIverilogFiles', () => ({
+  createAutomaticIverilogRunDirectory: vi.fn(),
+  discardAutomaticIverilogDependencies: vi.fn(async () => undefined)
 }));
 
 vi.mock('../../process', () => ({
@@ -119,7 +130,8 @@ vi.mock('../../verilog/iverilogCompileCache', () => ({
   storeIverilogCompileCache: vi.fn()
 }));
 
-vi.mock('../../verilog/simulationInputs', () => ({
+vi.mock('../../verilog/simulationInputs', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../../verilog/simulationInputs')>(),
   copyMachineCodeToSimDirectory: vi.fn(async () => undefined),
   resolveMachineCodeSource: vi.fn()
 }));
@@ -130,6 +142,7 @@ vi.mock('../../verilog/testbenchResolver', () => ({
   findUserTestbenchSourceUris: vi.fn(),
   recordTestbenchForAsmCase: vi.fn(async () => undefined),
   resolveNamedTestbench: vi.fn(),
+  savePrivateTestbenchFailure: vi.fn(async () => undefined),
   testbenchCompileSources: vi.fn((_folder: unknown, resolution: { generatedUri?: unknown }) =>
     resolution.generatedUri ? [resolution.generatedUri] : [])
 }));
@@ -293,6 +306,11 @@ describe('Icarus runner orchestration', () => {
     vi.mocked(storeIverilogCompileCache).mockResolvedValue(true);
     vi.mocked(resolveMachineCodeSource).mockResolvedValue(undefined);
     vi.mocked(prepareUserCpuProgram).mockResolvedValue({ kind: 'unmanaged' });
+    let nextRun = 0;
+    vi.mocked(createAutomaticIverilogRunDirectory).mockImplementation(async () => ({
+      directory: `C:/system-temp/co-vvp-${nextRun++}`,
+      dispose: disposeAutomaticRunDirectory
+    }));
   });
 
   it('prepares CPU input through the resolver before compiling the newly created testbench', async () => {
@@ -696,13 +714,14 @@ describe('Icarus runner orchestration', () => {
     expect(runTool).toHaveBeenCalledTimes(1);
   });
 
-  it('uses the private automatic testbench/source exclusions and prepares code.txt in the shared cwd', async () => {
+  it('uses private P7 sources and stages code.txt in an isolated cwd even without a slot', async () => {
     vi.mocked(getProfile).mockReturnValue('P7');
-    const generatedTb = URI.file('E:/work/.co/iverilog/co_generated_p7_auto_tb.v');
+    const generatedText = 'module co_generated_p7_auto_tb; endmodule\n';
     vi.mocked(ensureP7InterruptTestbench).mockResolvedValue({
       kind: 'p7-auto',
       moduleName: 'co_generated_p7_auto_tb',
-      generatedUri: generatedTb,
+      generatedText,
+      sha256: 'p7-generated-sha256',
       designSourceUri: URI.file('E:/work/src/mips.v')
     });
     const currentCase = {
@@ -724,7 +743,7 @@ describe('Icarus runner orchestration', () => {
     } satisfies AsmCase;
     const moduleRegistry = { getModules: vi.fn() } as never;
 
-    await runIverilog(services(), {
+    const result = await runIverilog(services(), {
       resource,
       asmCase: currentCase,
       moduleRegistry,
@@ -739,12 +758,12 @@ describe('Icarus runner orchestration', () => {
       [0x3000],
       undefined,
       false,
-      expect.objectContaining({ nonInteractive: true, runtimeDirectory: expect.anything() }),
+      expect.objectContaining({ nonInteractive: true }),
       moduleRegistry
     );
     expect(resolveVerilogProjectFiles).toHaveBeenCalledWith(
       expect.anything(),
-      [generatedTb],
+      [result?.testbench.generatedUri],
       expect.objectContaining({
         excludedFiles: [URI.file('E:/work/test/mips_tb.v')],
         excludedBasenames: ['mips_tb.v'],
@@ -753,16 +772,19 @@ describe('Icarus runner orchestration', () => {
     );
     expect(copyMachineCodeToSimDirectory).toHaveBeenCalledWith(
       currentCase.machineCode,
-      expect.objectContaining({ path: expect.stringMatching(/[\\/]\.co[\\/]iverilog$/i) }),
-      resource
+      expect.objectContaining({ path: expect.stringMatching(/[\\/]system-temp[\\/]co-vvp-0$/i) }),
+      resource,
+      'code.txt'
     );
-    expect(copyAsmCaseArtifact).toHaveBeenCalledWith(
-      currentCase,
-      'verilog',
-      expect.objectContaining({ path: expect.stringMatching(/[\\/]\.co[\\/]iverilog[\\/]code\.txt$/i) }),
-      'machine-code-in-sim.txt',
-      'machineCodeInSim'
-    );
+    expect(copyAsmCaseArtifact).not.toHaveBeenCalled();
+    expect(updateAsmCaseArtifacts).toHaveBeenCalledWith(currentCase, 'verilog', { machineCodeInSim: currentCase.machineCode.fsPath });
+    expect(normalized(result!.testbench.generatedUri!.fsPath)).toMatch(/\/automatic\/build-\d\/co_course_testbench\.v$/);
+    expect(writeTextFileIfChanged).toHaveBeenCalledWith(result!.testbench.generatedUri, generatedText);
+    expect(normalized(vi.mocked(runTool).mock.calls[0][2].cwd)).toMatch(/e:\/work\/\.co\/iverilog\/automatic\/build-\d$/);
+    expect(normalized(vi.mocked(runTool).mock.calls[1][2].cwd)).toBe('c:/system-temp/co-vvp-0');
+    expect(normalized(vi.mocked(simulationOutputDirectory).mock.calls[0][0].fsPath)).toBe('e:/work');
+    expect(result?.simOut?.fsPath.replace(/\\/g, '/').toLowerCase()).toContain('e:/work/.co/out/');
+    expect(disposeAutomaticRunDirectory).toHaveBeenCalledTimes(1);
     expect(recordTestbenchForAsmCase).toHaveBeenCalledWith(
       currentCase,
       expect.objectContaining({ moduleName: 'co_generated_p7_auto_tb' })
@@ -856,17 +878,18 @@ describe('Icarus runner orchestration', () => {
     await vi.waitFor(() => expect(finishSimulations).toHaveLength(2));
     const cwdPaths = vi.mocked(runTool).mock.calls.map(call => normalized(call[2].cwd));
     for (const slot of [0, 1]) {
-      const suffix = `/.co/iverilog/automatic/slot-${slot}`;
+      const suffix = `/system-temp/co-vvp-${slot}`;
       expect(cwdPaths.filter(cwd => cwd.endsWith(suffix))).toHaveLength(2);
       expect(vi.mocked(copyMachineCodeToSimDirectory).mock.calls
         .some(call => normalized(call[1].fsPath).endsWith(suffix))).toBe(true);
-      expect(vi.mocked(ensureP7InterruptTestbench).mock.calls
-        .some(call => normalized(call[5]!.runtimeDirectory!.fsPath).endsWith(suffix))).toBe(true);
     }
-    const compileOutputs = vi.mocked(lookupIverilogCompileCache).mock.calls.map(call => normalized(call[0].compiledFile));
+    expect(disposeAutomaticRunDirectory).not.toHaveBeenCalled();
+    const compileOutputs = vi.mocked(runTool).mock.calls.filter(call => call[0] === runtime.iverilogPath)
+      .map(call => normalized(call[1][call[1].indexOf('-o') + 1]));
     expect(new Set(compileOutputs).size).toBe(2);
     finishSimulations.forEach(finish => finish(toolResult()));
     await Promise.all(runs);
+    expect(disposeAutomaticRunDirectory).toHaveBeenCalledTimes(2);
   });
 
   it('rejects invalid slots and slot use without an automatic case', async () => {
@@ -878,11 +901,39 @@ describe('Icarus runner orchestration', () => {
     expect(runTool).not.toHaveBeenCalled();
   });
 
+  it('compiles a one-off waveform build with the private testbench kept in system temp', async () => {
+    const generatedText = 'module co_generated_auto_tb; endmodule\n';
+    vi.mocked(ensureRunnableTestbench).mockResolvedValue({
+      kind: 'generated', moduleName: 'co_generated_auto_tb', generatedText, sha256: 'waveform-tb'
+    });
+    vi.mocked(resolveVerilogProjectFiles).mockImplementationOnce(async (_folder, extra) => [
+      URI.file('E:/work/src/mips.v'), ...(extra ?? [])
+    ]);
+    const simOutputUri = URI.file('E:/work/.co/cases/case-1/verilog/case.sim.out');
+    const onSimulationComplete = vi.fn(async () => {
+      expect(disposeAutomaticRunDirectory).not.toHaveBeenCalled();
+    });
+    const result = await runIverilog(services(), {
+      resource, asmCase: {} as AsmCase, nonInteractive: true, simOutputUri, onSimulationComplete,
+      generatedTopModules: async () => [{ moduleName: 'wave', fileName: 'wave.v', text: 'module wave; endmodule\n' }]
+    });
+
+    const [compile, sim] = vi.mocked(runTool).mock.calls;
+    expect(normalized(compile[2].cwd)).toBe('c:/system-temp/co-vvp-0');
+    expect(normalized(sim[2].cwd)).toBe('c:/system-temp/co-vvp-0');
+    const compileFiles = compile[1].map(normalized);
+    expect(compileFiles).toContain('c:/system-temp/co-vvp-0/co_course_testbench.v');
+    expect(compileFiles).toContain('c:/system-temp/co-vvp-0/wave.v');
+    expect(result?.simOut).toEqual(simOutputUri);
+    expect(onSimulationComplete).toHaveBeenCalledExactlyOnceWith(result);
+    expect(writeAsmCaseArtifact).toHaveBeenCalledWith(expect.anything(), 'verilog', 'case.sim.out', 'trace stdout', 'simOut');
+    expect(disposeAutomaticRunDirectory).toHaveBeenCalledTimes(1);
+  });
+
   it('joins one cold compilation for equal private testbenches and overlaps VVP readers', async () => {
     vi.mocked(getProfile).mockReturnValue('P4');
     vi.mocked(ensureRunnableTestbench).mockResolvedValue({
       kind: 'generated', moduleName: 'co_generated_auto_tb',
-      generatedUri: URI.file('E:/work/.co/iverilog/automatic/slot-0/co_generated_auto_tb.v'),
       sha256: 'shared-cold-testbench', generatedText: 'module co_generated_auto_tb; endmodule\n'
     });
     let cached = false;
@@ -903,6 +954,8 @@ describe('Icarus runner orchestration', () => {
     const vvpCalls = vi.mocked(runTool).mock.calls.filter(call => call[0] === runtime.vvpPath);
     expect(vvpCalls[0][1][1]).toBe(vvpCalls[1][1][1]);
     expect(vvpCalls[0][2].cwd).not.toBe(vvpCalls[1][2].cwd);
+    expect(discardAutomaticIverilogDependencies).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(storeIverilogCompileCache)).toHaveBeenCalledBefore(vi.mocked(discardAutomaticIverilogDependencies));
     finishSimulations.forEach(finish => finish(toolResult()));
     const results = await Promise.all(runs);
     expect(results.map(result => result?.compileCacheHit).sort()).toEqual([false, true]);
@@ -912,7 +965,6 @@ describe('Icarus runner orchestration', () => {
     vi.mocked(getProfile).mockReturnValue('P4');
     vi.mocked(ensureRunnableTestbench).mockResolvedValue({
       kind: 'generated', moduleName: 'co_generated_auto_tb',
-      generatedUri: URI.file('E:/work/.co/iverilog/automatic/slot-0/co_generated_auto_tb.v'),
       sha256: 'reader-protected-testbench', generatedText: 'module co_generated_auto_tb; endmodule\n'
     });
     let finishFirstSimulation!: (result: RunResult) => void;
@@ -947,6 +999,50 @@ describe('Icarus runner orchestration', () => {
     expect(copyMachineCodeToSimDirectory).toHaveBeenCalledWith(machineCode, expect.anything(), resource, 'code.txt');
     expect(updateAsmCaseArtifacts).toHaveBeenCalledWith(expect.anything(), 'verilog', { machineCodeInSim: machineCode.fsPath });
     expect(copyAsmCaseArtifact).not.toHaveBeenCalled();
+  });
+
+  it('keeps a limited P7 stdout only in the saved trace and preserves its failure diagnostics', async () => {
+    vi.mocked(getProfile).mockReturnValue('P7');
+    const asmCase = { machineCode: URI.file('E:/work/.co/cases/case-1/code.txt') } as AsmCase;
+    const generatedText = 'module co_generated_p7_auto_tb; endmodule\n';
+    vi.mocked(ensureP7InterruptTestbench).mockResolvedValue({
+      kind: 'p7-auto', moduleName: 'co_generated_p7_auto_tb', generatedText, sha256: 'limited-probe-sha256'
+    });
+    vi.mocked(runTool).mockResolvedValueOnce(toolResult()).mockResolvedValueOnce(toolResult({
+      ok: false, stopped: true, stopReason: 'stdout-limit', stdout: 'retained P7 observation', stderr: 'diagnostic'
+    }));
+    const simOutputUri = URI.file('E:/work/.co/cases/case-1/verilog/case.sim.out');
+
+    const result = await runIverilog(services(), {
+      resource, asmCase, nonInteractive: true, automaticRunSlot: 0, p7Probe: {} as never, simOutputUri
+    });
+
+    expect(result?.simOut).toEqual(simOutputUri);
+    expect(writeAsmCaseArtifact).toHaveBeenCalledWith(asmCase, 'verilog', 'case.sim.out', 'retained P7 observation', 'simOut');
+    const log = vi.mocked(writeAsmCaseArtifact).mock.calls.find(call => call[4] === 'simulationLog')?.[3];
+    expect(log).toContain('stopReason=stdout-limit');
+    expect(log).toContain('diagnostic');
+    expect(log).not.toContain('retained P7 observation');
+    expect(savePrivateTestbenchFailure).toHaveBeenCalledWith(asmCase, expect.objectContaining({ generatedText }), expect.anything());
+    expect(disposeAutomaticRunDirectory).toHaveBeenCalledTimes(1);
+  });
+
+  it('disposes a cancelled VVP cwd when the process settles without saving a failure log', async () => {
+    vi.mocked(getProfile).mockReturnValue('P4');
+    const controller = new AbortController();
+    const asmCase = { machineCode: URI.file('E:/work/.co/cases/case-1/code.txt') } as AsmCase;
+    let finishSimulation!: (result: RunResult) => void;
+    const simulation = new Promise<RunResult>(resolve => { finishSimulation = resolve; });
+    vi.mocked(runTool).mockResolvedValueOnce(toolResult()).mockReturnValueOnce(simulation);
+    const running = runIverilog(services(), { resource, asmCase, nonInteractive: true, signal: controller.signal });
+    await vi.waitFor(() => expect(runTool).toHaveBeenCalledTimes(2));
+    controller.abort();
+    expect(disposeAutomaticRunDirectory).not.toHaveBeenCalled();
+    finishSimulation(toolResult({ ok: false, stopped: true, stopReason: 'aborted' }));
+    await running;
+    expect(disposeAutomaticRunDirectory).toHaveBeenCalledTimes(1);
+    expect(writeAsmCaseArtifact).not.toHaveBeenCalled();
+    expect(savePrivateTestbenchFailure).not.toHaveBeenCalled();
   });
 
   it('cancels a queued workspace turn without blocking the next simulation', async () => {

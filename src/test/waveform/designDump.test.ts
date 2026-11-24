@@ -186,6 +186,11 @@ endmodule`);
     expect(text).not.toContain('__co_word');
     expect(dumpFileArgument(path.join('ws', '.co', 'isim'), path.join('ws', '.co', 'wave', 'tb.vcd'))).toBe('../wave/tb.vcd');
   });
+
+  it.runIf(process.platform === 'win32')('uses an absolute VCD path for a Windows project on another drive', () => {
+    expect(dumpFileArgument('C:/Temp/co-vvp-1', 'E:/课程 项目/.co/cases/test/program.vcd'))
+      .toBe('E:/课程 项目/.co/cases/test/program.vcd');
+  });
 });
 
 const extensionRoot = path.resolve(__dirname, '../../..');

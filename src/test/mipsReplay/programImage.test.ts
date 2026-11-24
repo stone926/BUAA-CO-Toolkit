@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { sha256Canonical, type CanonicalJson } from '../../mips/replay/canonical';
+import { decodeReplayJson, encodeReplayJson } from '../../mips/replay/jsonStorage';
 import {
+  createLegacyProgramImage,
+  deserializeStoredProgramImage,
   maximumOracleDetailedBlockEvents,
   maximumOracleEvidenceEvents,
   maximumProgramImageInputUnits,
@@ -9,7 +12,8 @@ import {
   maximumProgramImageSymbols,
   maximumProgramImageWords,
   oracleEvidenceDigests,
-  programImageIssues
+  programImageIssues,
+  serializeProgramImage
 } from '../../mips/replay/programImage';
 
 const digest = 'a'.repeat(64);
@@ -28,6 +32,18 @@ function image(overrides: Record<string, unknown> = {}): Record<string, unknown>
 }
 
 describe('bounded replay ProgramImage and oracle evidence', () => {
+  it('preserves the image fingerprint in plain and gzip archives and bounds inflation', async () => {
+    const input = createLegacyProgramImage('00000000\n'.repeat(4096), [{ id: 'main.asm', contentHash: digest }]);
+    const plain = serializeProgramImage(input);
+    const stored = await encodeReplayJson(plain, plain.length, true);
+    expect(stored.suffix).toBe('.json.gz');
+    expect(stored.bytes.length).toBeLessThan(plain.length);
+    expect(await deserializeStoredProgramImage(stored.bytes)).toEqual(input);
+    expect(await deserializeStoredProgramImage(plain)).toEqual(input);
+    await expect(decodeReplayJson(stored.bytes, plain.length - 1)).rejects.toThrow();
+    await expect(deserializeStoredProgramImage(stored.bytes.subarray(0, -1))).rejects.toThrow();
+  });
+
   it('rejects every attacker-sized ProgramImage collection before expansion', () => {
     expect(programImageIssues(image({
       segments: [{ name: 'text', baseAddress: 0x3000, words: new Array(maximumProgramImageWords + 1).fill(0) }]

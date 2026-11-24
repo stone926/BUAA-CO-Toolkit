@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { URI } from 'vscode-uri';
 import type { AppServices } from '../../types';
+import { copyAsmCaseArtifact, updateAsmCaseMetadata, writeAsmCaseArtifact, type AsmCase } from '../../asmCaseStore';
 import type { MutableVerilogModuleProvider } from '../../language/verilog/moduleProvider';
 import { parseModules } from '../../language/verilog/parser';
 import { verilogDoc } from '../helpers/textDocument';
@@ -8,7 +9,9 @@ import { writeTextFile, writeTextFileIfAbsent } from '../../fsUtil';
 import {
   ensureP7InterruptTestbench,
   ensureRunnableTestbench,
-  findExistingTestbenchResolution
+  findExistingTestbenchResolution,
+  recordTestbenchForAsmCase,
+  savePrivateTestbenchFailure
 } from '../../verilog/testbenchResolver';
 import {
   automaticRuntimeTestbenchName,
@@ -53,6 +56,12 @@ vi.mock('../../fsUtil', async () => {
 
 vi.mock('../../workflowInputs', () => ({
   findWorkspaceFileCandidates: vi.fn()
+}));
+
+vi.mock('../../asmCaseStore', () => ({
+  copyAsmCaseArtifact: vi.fn(),
+  updateAsmCaseMetadata: vi.fn(),
+  writeAsmCaseArtifact: vi.fn()
 }));
 
 describe('testbench workspace discovery', () => {
@@ -103,7 +112,7 @@ describe('testbench workspace discovery', () => {
     );
 
     expect(result?.kind).toBe('generated');
-    const generatedText = vi.mocked(writeTextFile).mock.calls.at(-1)?.[1] as string | undefined;
+    const generatedText = result?.generatedText;
     expect(generatedText).toContain("reset = 1'b0;");
     expect(generatedText).not.toContain('$finish;');
     expect(generatedText).not.toContain('#1;');
@@ -138,8 +147,7 @@ describe('testbench workspace discovery', () => {
       moduleName: automaticRuntimeTestbenchName
     });
     expect(result?.sourceUri).toBeUndefined();
-    expect(result?.generatedUri?.fsPath).toContain(`${automaticRuntimeTestbenchName}.v`);
-    const generatedText = vi.mocked(writeTextFile).mock.calls.at(-1)?.[1] as string | undefined;
+    const generatedText = result?.generatedText;
     expect(generatedText).toContain(`module ${automaticRuntimeTestbenchName};`);
     expect(generatedText).not.toContain('$finish;');
     expect(generatedText).not.toContain('module mips_tb;');
@@ -165,21 +173,41 @@ describe('testbench workspace discovery', () => {
     expect(first?.generatedText).toContain("=== 32'hfc000000");
   });
 
-  it('places standard and case-specific P7 automatic testbenches inside their runtime slot', async () => {
+  it('resolves standard and case-specific P7 private testbenches without materializing a file', async () => {
     const resource = URI.file('E:/work/mips.v');
     vscodeState.module!.workspace.fs.readFile.mockResolvedValue(Buffer.from('module mips(input clk, reset); endmodule'));
-    const runtimeDirectory = URI.file('E:/work/.co/iverilog/automatic/slot-3');
     const standard = await ensureRunnableTestbench(services(), resource, false, undefined, {
-      nonInteractive: true, runtimeDirectory
+      nonInteractive: true
     });
     const p7 = await ensureP7InterruptTestbench(services(), resource, [0x3010], undefined, false, {
-      nonInteractive: true, runtimeDirectory
+      nonInteractive: true
     });
     for (const resolution of [standard, p7]) {
-      expect(resolution?.generatedUri?.fsPath.replace(/\\/g, '/'))
-        .toContain('/.co/iverilog/automatic/slot-3/');
+      expect(resolution?.generatedUri).toBeUndefined();
+      expect(resolution?.generatedText).toContain(`module ${resolution?.moduleName};`);
+      expect(resolution?.sha256).toMatch(/^[0-9a-f]{64}$/);
     }
-    expect(writeTextFile).toHaveBeenCalledTimes(2);
+    expect(writeTextFile).not.toHaveBeenCalled();
+  });
+
+  it('keeps private TB identity in case history and writes its source as failure evidence', async () => {
+    const resource = URI.file('E:/work/mips.v');
+    vscodeState.module!.workspace.fs.readFile.mockResolvedValue(Buffer.from('module mips(input clk, reset); endmodule'));
+    const asmCase = {} as AsmCase;
+    const resolution = (await ensureRunnableTestbench(services(), resource, false, undefined, { nonInteractive: true }))!;
+
+    await recordTestbenchForAsmCase(asmCase, resolution);
+
+    expect(updateAsmCaseMetadata).toHaveBeenCalledWith(asmCase, {
+      'dut.verilog.testbenchModule': automaticRuntimeTestbenchName,
+      'dut.verilog.testbenchKind': 'generated',
+      'dut.verilog.testbenchSha256': resolution.sha256
+    });
+    expect(copyAsmCaseArtifact).not.toHaveBeenCalled();
+    expect(writeAsmCaseArtifact).not.toHaveBeenCalled();
+
+    await savePrivateTestbenchFailure(asmCase, resolution, services());
+    expect(writeAsmCaseArtifact).toHaveBeenCalledWith(asmCase, 'verilog', 'testbench.v', resolution.generatedText, 'testbenchSnapshot');
   });
 
   it('creates an editable course CPU .co/tb and stops the first manual P6 run', async () => {

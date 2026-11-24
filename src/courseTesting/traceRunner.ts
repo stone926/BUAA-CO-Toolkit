@@ -30,6 +30,7 @@ import {
 import type { VerilogSimulationRunOutput } from '../verilog/simulationRunner';
 import { verilogSimulationFailureMessage } from '../verilog/simulationDiagnostic';
 import { privateDmStoreContractFailure } from '../verilog/dmStoreContractDiagnostic';
+import { savePrivateTestbenchFailure } from '../verilog/testbenchResolver';
 import { AppServices } from '../types';
 import { readTextFile, workspaceFolderFor } from '../fsUtil';
 import { normalizePathKey } from '../pathUtils';
@@ -170,6 +171,7 @@ export async function runCourseTraceCase(
       sourceRoot: options.sourceRoot,
       metadata: { 'test.cpuResource': resource.fsPath, 'test.engineResource': engineResource.fsPath },
       enginePlan,
+      signal: options.signal,
       p7: await p7MetadataFromManifest(asm)
     });
   } catch (error) {
@@ -297,11 +299,15 @@ export async function runCourseTraceCase(
       return failedDutCaseResult(item, asmCase, dut, undefined, options.signal);
     }
     const uncovered = probeResult.failures.length === 0 && probeResult.coverage?.find(item => !item.covered);
+    const status = uncovered ? 'error' : probeResult.passed ? 'passed' : 'failed';
+    if (!limited && status !== 'passed') {
+      await savePrivateTestbenchFailure(asmCase, dut.testbench, services, options.signal);
+    }
     return {
       asm: asm.fsPath,
       stdin: item.stdin?.fsPath,
       ...caseResultFields(asmCase),
-      status: uncovered ? 'error' : probeResult.passed ? 'passed' : 'failed',
+      status,
       stage: 'probe',
       message: uncovered ? uncovered.message
         : probeResult.passed ? 'P7 定向检查通过' : probeResult.failures[0]?.message ?? 'P7 定向检查失败',
@@ -359,6 +365,7 @@ export async function runCourseTraceCase(
     maxSteps,
     haltPc,
     runOutputFile: oracleOutputUri,
+    compressEventArtifact: caseOutputMode,
     interruptSchedule,
     p7RiInstruction: dump.resolvedRun?.p7RiInstruction,
     courseTrace: true,
@@ -522,6 +529,15 @@ export async function runCourseTraceCase(
   const storeDifference = diff.matched && oracle.events && (profile === 'P6' || profile === 'P7')
     ? firstDmStoreDifference(oracle.events, simText)
     : undefined;
+  const haltObserved = profile === 'P7' && observedP7Halt(simText, haltPc);
+  const emptyTrace = !haltObserved && (!diff.summary.oracleEvents || !diff.summary.dutEvents);
+  const firstDiff = storeDifference ?? (diff.matched ? undefined : firstTraceDiffSnapshot(diff));
+  const haltUnobserved = profile === 'P7' && !haltObserved
+    && (!firstDiff || firstDiff.status === 'oracle-only');
+  const status = emptyTrace || haltUnobserved ? 'error' : diff.matched && !storeDifference ? 'passed' : 'failed';
+  if (status !== 'passed') {
+    await savePrivateTestbenchFailure(asmCase, dut.testbench, services, options.signal);
+  }
 
   if (!diff.matched && oracle.referenceTiming === 'p7-timer-observed') {
     return failedCase(item, 'oracle',
@@ -529,8 +545,7 @@ export async function runCourseTraceCase(
       asmCase.machineCode, oracle.outputFile, asmCase);
   }
 
-  const haltObserved = profile === 'P7' && observedP7Halt(simText, haltPc);
-  if (!haltObserved && (!diff.summary.oracleEvents || !diff.summary.dutEvents)) {
+  if (emptyTrace) {
     const emptyTraceMessage = !diff.summary.oracleEvents && !diff.summary.dutEvents
       ? '参考结果与待测 CPU 均无可解析的写回事件，现有观测结果无法判定 CPU 是否实际执行了程序'
       : '参考结果与待测 CPU 中有一方没有可解析的写回事件';
@@ -553,14 +568,11 @@ export async function runCourseTraceCase(
     };
   }
 
-  const firstDiff = storeDifference ?? (diff.matched ? undefined : firstTraceDiffSnapshot(diff));
-  const haltUnobserved = profile === 'P7' && !haltObserved
-    && (!firstDiff || firstDiff.status === 'oracle-only');
   return {
     asm: asm.fsPath,
     stdin: item.stdin?.fsPath,
     ...caseResultFields(asmCase),
-    status: haltUnobserved ? 'error' : diff.matched && !storeDifference ? 'passed' : 'failed',
+    status,
     stage: 'compare',
     message: haltUnobserved
       ? `未覆盖：在观测预算内未看到宏观 PC 完成 0x${haltPc.toString(16)} 处的停机循环`

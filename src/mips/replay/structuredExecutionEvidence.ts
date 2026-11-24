@@ -1,6 +1,8 @@
 // @index mips-replay — canonical builtin commit-event evidence shared by capture and replay
 
 import { sha256Canonical, type CanonicalJson } from './canonical';
+import { maximumReplayTraceBytes } from './boundedFile';
+import { decodeReplayJson } from './jsonStorage';
 
 export interface StructuredExecutionEvidence {
   readonly steps: number;
@@ -25,10 +27,11 @@ export interface ParsedStructuredExecutionEvidence extends StructuredExecutionEv
 }
 
 /** Parse the provider-owned event artifact and bind its summary to the canonical event stream. */
-export function parseStructuredExecutionEvidence(bytes: Uint8Array): ParsedStructuredExecutionEvidence {
+export async function parseStructuredExecutionEvidence(bytes: Uint8Array): Promise<ParsedStructuredExecutionEvidence> {
+  const json = await decodeReplayJson(bytes, maximumReplayTraceBytes);
   let value: unknown;
   try {
-    value = JSON.parse(Buffer.from(bytes).toString('utf8'));
+    value = JSON.parse(json.toString('utf8'));
   } catch (error) {
     throw new Error(`builtin event artifact is not valid JSON: ${error instanceof Error ? error.message : String(error)}`);
   }

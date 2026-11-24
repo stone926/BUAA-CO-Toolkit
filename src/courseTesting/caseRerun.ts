@@ -3,9 +3,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import {
   asmCaseArtifactUri,
-  asmCaseSourceSnapshotIssue,
-  createAsmCaseFromAsm,
-  readAsmCaseStdinSnapshot,
+  createAsmCaseFromSavedSource,
   updateAsmCaseArtifacts,
   updateAsmCaseMetadata,
   type AsmCase
@@ -17,8 +15,6 @@ import type { CourseTraceCaseResult } from '../courseTestReport';
 import { simOutputFileNameForCase } from '../courseTestTraceFiles';
 import { resolveCourseEnginePlan } from '../mips/providers/courseEnginePolicy';
 import { CUSTOM_MARS_ENGINE_ID } from '../mips/providers/courseEnginePolicy';
-import { readBoundedRegularFile, maximumReplayManifestBytes } from '../mips/replay/boundedFile';
-import { sha256Bytes } from '../asmCaseStoreCore';
 import type { AppServices } from '../types';
 import { automaticTestEngineMode } from './automaticTestPolicy';
 import { courseRerunWaveformCapture } from './caseRerunWaveform';
@@ -56,11 +52,6 @@ export async function rerunCourseTestCase(
     if (!original.manifest.program.sourceGraph) {
       throw new Error('原用例没有保存完整的 ASM/include 闭包，无法使用自动测试链重跑');
     }
-    await assertRerunInputSnapshots(original);
-    throwIfCancelled(options.signal);
-    const stdin = original.manifest.stdin
-      ? vscode.Uri.file(path.join(original.dir.fsPath, ...original.manifest.stdin.path.split('/')))
-      : undefined;
     const metadata: Record<string, string> = { 'rerun.originalCaseId': original.id };
     metadata['test.cpuResource'] = cpuResource.fsPath;
     const engineResource = vscode.Uri.file(original.manifest.metadata?.['test.engineResource'] ?? original.manifest.originalAsmPath);
@@ -72,20 +63,18 @@ export async function rerunCourseTestCase(
     for (const [key, value] of Object.entries(original.manifest.metadata ?? {})) {
       if (key.startsWith('source.') && key !== 'source.sessionId') metadata[key] = value;
     }
-    rerun = await createAsmCaseFromAsm(original.sourceAsm, {
+    rerun = await createAsmCaseFromSavedSource(original, {
       resource: cpuResource,
       engineResource,
-      sourceRoot: original.dir,
-      stdin,
       source: manifestSourceOf(original.manifest),
       p7: manifestP7Of(original.manifest),
       metadata,
-      enginePlan: { ...resolveCourseEnginePlan(engineMode, profile, { deterministicConsole: stdin !== undefined }),
+      signal: options.signal,
+      enginePlan: { ...resolveCourseEnginePlan(engineMode, profile, { deterministicConsole: original.manifest.stdin !== undefined }),
         scriptInstructions: await loadCaseScriptInstructions(original.dir.fsPath, original.manifest) }
     });
     // The new manifest records the old case-local stdin as its originalPath.
-    item = { asm: rerun.asm, stdin, asmCase: rerun };
-    await assertRerunInputSnapshots(original);
+    item = { asm: rerun.asm, asmCase: rerun, stdin: rerun.manifest.stdin && vscode.Uri.file(rerun.manifest.stdin.originalPath) };
     throwIfCancelled(options.signal);
 
     const logisim = profile === 'P3'
@@ -150,24 +139,4 @@ async function recordRerunCancellation(services: AppServices, asmCase: AsmCase):
   } catch (error) {
     services.output.appendLine(`无法保存重跑取消状态：${error instanceof Error ? error.message : String(error)}`);
   }
-}
-
-async function assertRerunInputSnapshots(asmCase: AsmCase): Promise<void> {
-  const sourceIssue = await asmCaseSourceSnapshotIssue(asmCase);
-  if (sourceIssue) throw new Error(sourceIssue);
-  if (asmCase.manifest.version !== 2 || !asmCase.manifest.program.sourceGraph) {
-    throw new Error('原用例没有保存完整的 ASM/include 闭包');
-  }
-  // Verifying the graph's internal edges/blobs alone does not bind it to the
-  // archived manifest. Also authenticate the graph snapshot itself.
-  const snapshot = asmCase.manifest.program.sourceGraph;
-  const bytes = await readBoundedRegularFile(path.join(asmCase.dir.fsPath, ...snapshot.path.split('/')), {
-    maximumBytes: maximumReplayManifestBytes,
-    expectedBytes: snapshot.bytes,
-    label: '原用例 ASM/include 闭包'
-  });
-  if (sha256Bytes(bytes) !== snapshot.sha256.toLowerCase()) {
-    throw new Error('原用例 ASM/include 闭包已偏离 manifest 指纹，已拒绝重跑');
-  }
-  await readAsmCaseStdinSnapshot(asmCase);
 }

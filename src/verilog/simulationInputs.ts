@@ -47,7 +47,7 @@ export async function copyMachineCodeToSimDirectory(
   source: vscode.Uri,
   outDir: vscode.Uri,
   resource?: vscode.Uri,
-  /** Automatic course shells always read their own code.txt, independent of manual path settings. */
+  /** Override the configured alias while always staging the course shell's code.txt. */
   targetFileName?: string
 ): Promise<void> {
   const targets = dedupePaths([
@@ -62,6 +62,13 @@ export async function copyMachineCodeToSimDirectory(
     await ensureDirectory(vscode.Uri.file(path.dirname(target)));
     await vscode.workspace.fs.writeFile(vscode.Uri.file(target), content);
   }
+}
+
+/** Ignore configured aliases that would write outside an isolated simulation directory. */
+export function containedMachineCodeAlias(outDir: vscode.Uri, resource?: vscode.Uri): string {
+  const alias = path.relative(outDir.fsPath, path.resolve(outDir.fsPath, getMachineCode(resource)));
+  if (!alias || alias === '..' || alias.startsWith(`..${path.sep}`) || path.isAbsolute(alias)) return 'code.txt';
+  return alias;
 }
 
 function machineCodeCandidateRank(file: string, resource: vscode.Uri | undefined, folder: vscode.WorkspaceFolder): number {

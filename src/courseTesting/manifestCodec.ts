@@ -18,7 +18,7 @@ import {
   type SourceGraphBundle
 } from '../mips/replay/sourceBundle';
 import {
-  deserializeProgramImage,
+  deserializeStoredProgramImage,
   observabilitySchemaDigest,
   oracleEvidenceDigests,
   parseStrictHexTextWords,
@@ -180,7 +180,9 @@ export interface AsmCaseManifestV2 {
     /** Canonical SourceUnit/include graph and serialized domain image. */
     sourceGraph?: AsmCaseSnapshot;
     image?: AsmCaseSnapshot;
+    /** Older cases captured the fixed schema as a case-local file. */
     observability?: AsmCaseSnapshot;
+    observabilitySchemaSha256?: string;
     /** Exact bytes passed to the DUT adapter (currently the HexText machine-code file). */
     dutInput?: AsmCaseSnapshot;
     /** Hashed case-relative map; strings remain readable for early v2 drafts. */
@@ -239,7 +241,7 @@ export function isKnownManifest(manifest: unknown): manifest is AsmCaseManifestU
     ])
       && hasOnlyKeys(manifest.program, [
         'assembler', 'imageFingerprint', 'machineCode', 'sourceGraph', 'image',
-        'observability', 'dutInput', 'sourceMap'
+        'observability', 'observabilitySchemaSha256', 'dutInput', 'sourceMap'
       ])
       && hasOnlyKeys(manifest.oracle, [
         'engine', 'configurationHash', 'runConfiguration', 'stopReason', 'steps', 'eventCount',
@@ -251,6 +253,9 @@ export function isKnownManifest(manifest: unknown): manifest is AsmCaseManifestU
       && (manifest.program.sourceGraph === undefined || isSnapshot(manifest.program.sourceGraph))
       && (manifest.program.image === undefined || isSnapshot(manifest.program.image))
       && (manifest.program.observability === undefined || isSnapshot(manifest.program.observability))
+      && (manifest.program.observabilitySchemaSha256 === undefined || (
+        isSha256(manifest.program.observabilitySchemaSha256) && manifest.program.observability === undefined
+      ))
       && (manifest.program.dutInput === undefined || isSnapshot(manifest.program.dutInput))
       && (
         manifest.program.sourceMap === undefined
@@ -818,16 +823,22 @@ export function v2ReplayClosureIssues(manifest: AsmCaseManifestV2): string[] {
   }
   requiredReplaySnapshot('program.sourceGraph', manifest.program?.sourceGraph, issues);
   requiredReplaySnapshot('program.image', manifest.program?.image, issues);
-  requiredReplaySnapshot('program.observability', manifest.program?.observability, issues);
+  if (manifest.program.observabilitySchemaSha256 === undefined) {
+    requiredReplaySnapshot('program.observability', manifest.program.observability, issues);
+    requiredSnapshotAlias(
+      'artifacts.program.observability', manifest.artifacts?.program?.observability, manifest.program.observability, issues
+    );
+    if (manifest.program.assembler.id === 'legacy-mars-configured'
+      && manifest.program.observability?.sha256 !== observabilitySchemaDigest()) {
+      issues.push('program.observability does not identify the legacy observability schema revision');
+    }
+  } else if (manifest.program.observabilitySchemaSha256 !== observabilitySchemaDigest()
+    || manifest.program.observability || manifest.artifacts?.program?.observability) {
+    issues.push('program.observabilitySchemaSha256 must identify the built-in schema without a conflicting file reference');
+  }
   requiredReplaySnapshot('program.dutInput', manifest.program?.dutInput, issues);
   requiredSnapshotAlias('artifacts.source.graph', manifest.artifacts?.source?.graph, manifest.program?.sourceGraph, issues);
   requiredSnapshotAlias('artifacts.program.image', manifest.artifacts?.program?.image, manifest.program?.image, issues);
-  requiredSnapshotAlias(
-    'artifacts.program.observability',
-    manifest.artifacts?.program?.observability,
-    manifest.program?.observability,
-    issues
-  );
   requiredSnapshotAlias('artifacts.program.dutInput', manifest.artifacts?.program?.dutInput, manifest.program?.dutInput, issues);
   if (manifest.program?.sourceMap && typeof manifest.program.sourceMap !== 'string') {
     requiredSnapshotAlias(
@@ -843,10 +854,6 @@ export function v2ReplayClosureIssues(manifest: AsmCaseManifestV2): string[] {
   supplementalArtifactNameIssues('artifacts.program', manifest.artifacts?.program, [
     'image', 'observability', 'dutInput', 'sourceMap'
   ], issues);
-  if (manifest.program?.assembler?.id === 'legacy-mars-configured'
-    && manifest.program?.observability?.sha256 !== observabilitySchemaDigest()) {
-    issues.push('program.observability does not identify the legacy observability schema revision');
-  }
   if (manifest.program?.machineCode && manifest.program?.dutInput
     && (manifest.program.machineCode.sha256 !== manifest.program.dutInput.sha256
       || manifest.program.machineCode.bytes !== manifest.program.dutInput.bytes)) {
@@ -1321,7 +1328,7 @@ export async function v2ReplayBundleIssues(manifest: AsmCaseManifestV2, caseDir:
         loadAndVerifySourceGraph(caseDir, manifest.program.sourceGraph.path),
         resolveCaseFile(caseDir, manifest.program.image.path)
       ]);
-      const image = deserializeProgramImage(await readBoundedRegularFile(imageFile, {
+      const image = await deserializeStoredProgramImage(await readBoundedRegularFile(imageFile, {
         maximumBytes: maximumReplayProgramImageBytes,
         expectedBytes: manifest.program.image.bytes,
         label: 'program.image'
@@ -1370,7 +1377,7 @@ export async function v2ReplayBundleIssues(manifest: AsmCaseManifestV2, caseDir:
   if (hasStructuredEvents && isSafeCaseRelativePath(structuredEvents.path)) {
     try {
       const eventFile = await resolveCaseFile(caseDir, structuredEvents.path);
-      const evidence = parseStructuredExecutionEvidence(await readBoundedRegularFile(eventFile, {
+      const evidence = await parseStructuredExecutionEvidence(await readBoundedRegularFile(eventFile, {
         maximumBytes: maximumReplayTraceBytes,
         expectedBytes: structuredEvents.bytes,
         label: 'artifacts.oracle.events'
@@ -1600,7 +1607,7 @@ async function verifyProgramArtifactSemantics(
       }
     }
 
-    const image = deserializeProgramImage(imageBytes);
+    const image = await deserializeStoredProgramImage(imageBytes);
     if (image.entryPc !== courseTextBase) {
       issues.push('program.image entryPc must match the course text base 0x00003000');
     }
@@ -1636,7 +1643,7 @@ async function verifyProgramArtifactSemantics(
 }
 
 function instructionSegmentWordAt(
-  image: ReturnType<typeof deserializeProgramImage>,
+  image: Awaited<ReturnType<typeof deserializeStoredProgramImage>>,
   segmentName: string,
   address: number
 ): number | undefined {

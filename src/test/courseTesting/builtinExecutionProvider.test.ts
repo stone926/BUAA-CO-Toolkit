@@ -10,6 +10,7 @@ vi.mock('vscode', () => ({
 
 import { BuiltinTsExecutionProvider, type BuiltinWorkerRuntime } from '../../mips/providers/builtinExecutionProvider';
 import { ExecutionAssertionObserver } from '../../courseTesting/oracle/executionAssertions';
+import { parseStructuredExecutionEvidence } from '../../mips/replay/structuredExecutionEvidence';
 import { buildProgramImage } from '../../mips/core/programImage';
 import { sourceUnitFingerprint } from '../../mips/core/programImage';
 import type { ExecuteRequest } from '../../mips/providers/contracts';
@@ -91,6 +92,23 @@ describe('BuiltinTsExecutionProvider', () => {
     assert.isDefined(result.eventCount);
     expect(events.events).toHaveLength(result.eventCount);
     fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('archives a large course event stream once and preserves its execution digest', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'co-oracle-archive-'));
+    try {
+      const output = URI.file(path.join(dir, 'program.oracle.out'));
+      const result = await new BuiltinTsExecutionProvider().execute(request({
+        image: image([...Array<number>(32).fill(0x3408002a), 0x1000ffff, 0]),
+        haltPc: 0x3080, runOutputFile: output, compressEventArtifact: true
+      }));
+      expect(result.ok).toBe(true);
+      expect(fs.readdirSync(dir).sort()).toEqual(['program.oracle.out', 'program.oracle.out.events.json.gz']);
+      const evidence = await parseStructuredExecutionEvidence(await fs.promises.readFile(result.eventArtifact!.fsPath));
+      expect(evidence).toMatchObject({ eventCount: result.eventCount, eventDigest: result.eventDigest, steps: result.instructions });
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it('rejects stdin and non-course trace requests during preflight', async () => {

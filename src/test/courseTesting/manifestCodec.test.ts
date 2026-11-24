@@ -152,6 +152,20 @@ const v2Manifest: AsmCaseManifestV2 = {
 };
 
 describe('manifest v1/v2 codec', () => {
+  it('accepts a pinned built-in observability schema and rejects missing or conflicting evidence', () => {
+    const manifest = structuredClone(v2Manifest);
+    delete manifest.program.observability;
+    delete manifest.artifacts!.program!.observability;
+    expect(v2ReplayClosureIssues(manifest)).toContain('program.observability missing or invalid');
+    manifest.program.observabilitySchemaSha256 = observabilitySchemaDigest();
+    expect(isKnownManifest(manifest)).toBe(true);
+    expect(v2ReplayClosureIssues(manifest)).toEqual([]);
+    manifest.program.observabilitySchemaSha256 = '0'.repeat(64);
+    expect(v2ReplayClosureIssues(manifest)).toContainEqual(expect.stringContaining('program.observabilitySchemaSha256'));
+    manifest.program.observability = v2Manifest.program.observability;
+    expect(isKnownManifest(manifest)).toBe(false);
+  });
+
   it('requires canonical POSIX separators for replay snapshot paths', () => {
     expect(isSafeCaseRelativePath('source/graph.json')).toBe(true);
     expect(isSafeCaseRelativePath('source\\graph.json')).toBe(false);

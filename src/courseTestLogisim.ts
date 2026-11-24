@@ -1,4 +1,5 @@
 import * as path from 'path';
+import * as fs from 'fs/promises';
 import * as vscode from 'vscode';
 import {
   getJava,
@@ -27,11 +28,9 @@ import {
   setLogisimMainCircuit,
   validateP3LogisimFetchTrace
 } from './courseTesting/logisimTrace';
-import {
-  preparedCircuitFileName
-} from './courseTesting/logisimPrep';
 import { prepareP3LogisimReset } from './courseTesting/logisimReset';
-import { ensureDirectory, readTextFile, workspaceFolderFor, writeTextFile } from './fsUtil';
+import { createLogisimRunCircuit } from './courseTesting/logisimPrep';
+import { ensureDirectory, readTextFile, writeTextFile } from './fsUtil';
 import {
   findLogisimRomTargets,
   injectMachineCodeIntoLogisimRom,
@@ -53,6 +52,7 @@ import {
   requiredToolchainFailures
 } from './courseTestToolchain';
 import {
+  type AsmCase,
   asmCaseArtifactUri,
   asmCaseSourceSnapshotIssue,
   copyAsmCaseArtifact,
@@ -193,7 +193,8 @@ export async function runP3LogisimTraceCase(
     sourceRoot: options.sourceRoot,
     engineResource,
     metadata: { 'test.cpuResource': resource.fsPath, 'test.engineResource': engineResource.fsPath },
-    enginePlan
+    enginePlan,
+    signal: options.signal
   });
   const caseOutputMode = options.artifactOutputMode === 'case';
   if (!automatic) {
@@ -245,20 +246,14 @@ export async function runP3LogisimTraceCase(
     services.output.appendLine(`Logisim 停机 PC：0x${logisimCode.haltPcHex}`);
   }
 
-  let preparedCircuit: vscode.Uri;
+  let derivedText: string;
   let preparedSetup = setup;
   try {
     const injected = injectMachineCodeIntoLogisimRom(setup.circuitText, logisimCode.text, setup.romTarget.index);
     const reset = prepareP3LogisimReset(injected.text, setup.traceSpec);
-    const derivedText = setLogisimMainCircuit(reset.text, setup.traceCircuit);
+    derivedText = setLogisimMainCircuit(reset.text, setup.traceCircuit);
     preparedSetup = { ...setup, traceSpec: reset.traceSpec };
-    const folder = workspaceFolderFor(setup.circuit) ?? workspaceFolderFor(asm);
-    const baseDir = folder?.uri.fsPath ?? path.dirname(setup.circuit.fsPath);
-    const circuitName = preparedCircuitFileName(setup.circuit.fsPath, asm.fsPath, baseDir);
-    preparedCircuit = await writeAsmCaseArtifact(asmCase, 'logisim', circuitName, derivedText, 'preparedCircuit');
     await writeAsmCaseArtifact(asmCase, 'logisim', 'logisim-trace-spec.json', JSON.stringify(reset.traceSpec, null, 2), 'traceSpec');
-    await writeAsmCaseArtifact(asmCase, 'logisim', 'logisim-code.txt', logisimCode.text, 'machineCodeWithHalt');
-    await pipeline.copyArtifact(asmCase, 'logisim', setup.circuit, 'circuit-template.circ', 'circuitTemplate');
     await updateAsmCaseMetadata(asmCase, {
       'dut.logisim.traceCircuit': setup.traceCircuit,
       'dut.logisim.automaticReset': String(reset.applied)
@@ -314,6 +309,7 @@ export async function runP3LogisimTraceCase(
     haltPc: logisimCode.haltPc,
     p7RiInstruction: dump.resolvedRun?.p7RiInstruction,
     runOutputFile: oracleOutputUri,
+    compressEventArtifact: caseOutputMode,
     courseTrace: true,
     revealOutput: options.revealOutput,
     requirements: {
@@ -435,154 +431,111 @@ export async function runP3LogisimTraceCase(
   }
 
   await options.onPhase?.('simulate');
-  const logisimRun = await pipeline.runLogisimDut(
-    services,
-    preparedSetup,
-    preparedCircuit,
-    logisimCode.haltPcHex,
-    asm,
-    !automatic && options.revealOutput !== false,
-    options.signal,
-    automatic
-  );
-  const outDir = caseOutputMode ? undefined : courseTraceOutputDirectory(asm);
-  if (outDir) {
-    await ensureDirectory(outDir);
-  }
-  const rawOut = caseOutputMode
-    ? asmCaseArtifactUri(asmCase, 'logisim', logisimRawOutputFileNameForCase(item))
-    : vscode.Uri.file(path.join(outDir!.fsPath, logisimRawOutputFileNameForCase(item)));
-  await writeTextFile(rawOut, logisimRun.stdout);
-  await writeAsmCaseArtifact(asmCase, 'logisim', 'logisim-stderr.txt', logisimRun.stderr, 'simulationLog');
-  if (caseOutputMode) {
-    await pipeline.updateArtifacts(asmCase, 'logisim', { logisimOut: rawOut.fsPath });
-  } else {
-    await pipeline.copyArtifact(asmCase, 'logisim', rawOut, path.basename(rawOut.fsPath), 'logisimOut');
-  }
-
-  if (!logisimRun.result.ok) {
-    return {
-      asm: asm.fsPath,
-      ...caseResultFields(asmCase),
-      status: 'error',
-      ...(engineRunWasCancelled(logisimRun.result, options.signal) ? { cancelled: true as const } : {}),
-      stage: 'dut',
-      dutBackend: 'logisim',
-      message: engineStageFailureMessage('测试中止：被测电路命令行运行失败', logisimRun.result),
-      machineCode: asmCase.machineCode.fsPath,
-      oracleOut: oracle.outputFile.fsPath,
-      dutRawOut: rawOut.fsPath,
-      logisimCircuit: preparedCircuit.fsPath,
-      logisimRows: logisimRun.rowsSeen
-    };
-  }
-
-  let parsedLogisim: ReturnType<typeof parseLogisimTraceOutput>;
-  try {
-    parsedLogisim = parseLogisimTraceOutput(logisimRun.stdout, preparedSetup.traceSpec);
-    const fetchValidation = validateP3LogisimFetchTrace(
-      parsedLogisim.rows,
-      preparedSetup.traceSpec,
-      parseMachineCodeWords(logisimCode.text),
-      logisimCode.haltPcHex
-    );
-    for (const warning of fetchValidation.warnings) {
-      services.output.appendLine(`Logisim 取指校验：${warning}`);
-    }
-  } catch (error) {
-    return {
-      asm: asm.fsPath,
-      ...caseResultFields(asmCase),
-      status: 'error',
-      stage: 'dut',
-      dutBackend: 'logisim',
-      message: error instanceof Error ? error.message : String(error),
-      machineCode: asmCase.machineCode.fsPath,
-      oracleOut: oracle.outputFile.fsPath,
-      dutRawOut: rawOut.fsPath,
-      logisimCircuit: preparedCircuit.fsPath,
-      logisimRows: logisimRun.rowsSeen
-    };
-  }
-
-  const simTrace = caseOutputMode
-    ? asmCaseArtifactUri(asmCase, 'logisim', simOutputFileNameForCase(item))
-    : vscode.Uri.file(path.join(outDir!.fsPath, simOutputFileNameForCase(item)));
-  await writeTextFile(simTrace, formatLogisimTraceEvents(parsedLogisim.events));
-  if (caseOutputMode) {
-    await pipeline.updateArtifacts(asmCase, 'logisim', { traceOut: simTrace.fsPath });
-  } else {
-    await pipeline.copyArtifact(asmCase, 'logisim', simTrace, path.basename(simTrace.fsPath), 'traceOut');
-  }
-
-  await options.onPhase?.('compare');
-  const diff = pipeline.compareTraces(oracle.trace.events, parsedLogisim.events, {
-    compareCycles: false,
-    retainedEntryLimit: batchTraceCompareRetainedEntries
-  });
-
-  if (!diff.summary.oracleEvents && !parsedLogisim.events.length) {
-    return {
-      asm: asm.fsPath,
-      ...caseResultFields(asmCase),
-      status: 'passed',
-      stage: 'compare',
-      message: 'PC/Instr 校验通过，双方没有可见 GRF/DM 写事件',
-      machineCode: asmCase.machineCode.fsPath,
-      oracleOut: oracle.outputFile.fsPath,
-      dutOut: simTrace.fsPath,
-      dutRawOut: rawOut.fsPath,
-      logisimCircuit: preparedCircuit.fsPath,
-      logisimRows: parsedLogisim.rows.length,
-      oracleEvents: 0,
-      dutEvents: 0,
-      matchedEvents: 0,
-      diffEvents: 0,
-      ...(shadowSummary ? { shadow: shadowSummary } : {})
-    };
-  }
-
-  if (!diff.summary.oracleEvents || !parsedLogisim.events.length) {
-    return {
-      asm: asm.fsPath,
-      ...caseResultFields(asmCase),
-      status: 'error',
-      stage: 'compare',
-      message: '某一端没有可解析的写回记录事件',
-      machineCode: asmCase.machineCode.fsPath,
-      oracleOut: oracle.outputFile.fsPath,
-      dutOut: simTrace.fsPath,
-      dutRawOut: rawOut.fsPath,
-      logisimCircuit: preparedCircuit.fsPath,
-      logisimRows: parsedLogisim.rows.length,
-      oracleEvents: diff.summary.oracleEvents,
-      dutEvents: parsedLogisim.events.length,
-      matchedEvents: diff.summary.matchedEvents,
-      diffEvents: diff.summary.diffEvents,
-      ...(shadowSummary ? { shadow: shadowSummary } : {})
-    };
-  }
-
-  return {
+  const caseFields = {
     asm: asm.fsPath,
     ...caseResultFields(asmCase),
-    status: diff.matched ? 'passed' : 'failed',
-    stage: 'compare',
-    message: diffMessage(diff),
+    dutBackend: 'logisim' as const,
     machineCode: asmCase.machineCode.fsPath,
-    oracleOut: oracle.outputFile.fsPath,
-    dutOut: simTrace.fsPath,
-    dutRawOut: rawOut.fsPath,
-    logisimCircuit: preparedCircuit.fsPath,
-    logisimRows: parsedLogisim.rows.length,
-    firstDiffIndex: diff.firstDiffIndex >= 0 ? diff.firstDiffIndex : undefined,
-    firstDiff: firstTraceDiffSnapshot(diff),
-    oracleEvents: diff.summary.oracleEvents,
-    dutEvents: diff.summary.dutEvents,
-    matchedEvents: diff.summary.matchedEvents,
-    diffEvents: diff.summary.diffEvents,
-    ...(shadowSummary ? { shadow: shadowSummary } : {})
+    oracleOut: oracle.outputFile.fsPath
   };
+  let runCircuit: vscode.Uri;
+  try {
+    runCircuit = vscode.Uri.file(await createLogisimRunCircuit(asmCase.dir.fsPath, derivedText));
+  } catch (error) {
+    return { ...caseFields, status: 'error', stage: 'dut', message: error instanceof Error ? error.message : String(error) };
+  }
+
+  let result: NeutralCourseTraceCaseResult | undefined;
+  try {
+    const logisimRun = await pipeline.runLogisimDut(
+      services, preparedSetup, runCircuit, logisimCode.haltPcHex, asm,
+      !automatic && options.revealOutput !== false, options.signal, automatic
+    );
+    const outDir = caseOutputMode ? undefined : courseTraceOutputDirectory(asm);
+    if (outDir) await ensureDirectory(outDir);
+    const cancelled = !logisimRun.result.ok && engineRunWasCancelled(logisimRun.result, options.signal);
+    const keepRawOutput = !caseOutputMode || (logisimRun.stdout.length > 0 && !cancelled);
+    const rawOut = keepRawOutput ? await saveLogisimOutput(
+      pipeline, asmCase, outDir, logisimRawOutputFileNameForCase(item), 'logisimOut', logisimRun.stdout
+    ) : undefined;
+    if (logisimRun.stderr.trim()) {
+      await writeAsmCaseArtifact(asmCase, 'logisim', 'logisim-stderr.txt', logisimRun.stderr, 'simulationLog');
+    }
+    const runFields = {
+      ...caseFields, ...(rawOut ? { dutRawOut: rawOut.fsPath } : {}), logisimRows: logisimRun.rowsSeen
+    };
+    if (!logisimRun.result.ok) {
+      result = {
+        ...runFields, status: 'error', stage: 'dut', ...(cancelled ? { cancelled: true as const } : {}),
+        message: engineStageFailureMessage('测试中止：被测电路命令行运行失败', logisimRun.result)
+      };
+      return result;
+    }
+
+    let parsed: ReturnType<typeof parseLogisimTraceOutput>;
+    try {
+      parsed = parseLogisimTraceOutput(logisimRun.stdout, preparedSetup.traceSpec);
+      const fetchValidation = validateP3LogisimFetchTrace(
+        parsed.rows, preparedSetup.traceSpec, parseMachineCodeWords(logisimCode.text), logisimCode.haltPcHex
+      );
+      for (const warning of fetchValidation.warnings) services.output.appendLine(`Logisim 取指校验：${warning}`);
+    } catch (error) {
+      result = { ...runFields, status: 'error', stage: 'dut', message: error instanceof Error ? error.message : String(error) };
+      return result;
+    }
+
+    const simTrace = await saveLogisimOutput(
+      pipeline, asmCase, outDir, simOutputFileNameForCase(item), 'traceOut', formatLogisimTraceEvents(parsed.events)
+    );
+    await options.onPhase?.('compare');
+    const diff = pipeline.compareTraces(oracle.trace.events, parsed.events, {
+      compareCycles: false, retainedEntryLimit: batchTraceCompareRetainedEntries
+    });
+    const comparison = {
+      ...runFields, stage: 'compare' as const, dutOut: simTrace.fsPath,
+      logisimRows: parsed.rows.length, oracleEvents: diff.summary.oracleEvents, dutEvents: parsed.events.length,
+      matchedEvents: diff.summary.matchedEvents, diffEvents: diff.summary.diffEvents,
+      ...(shadowSummary ? { shadow: shadowSummary } : {})
+    };
+    if (!comparison.oracleEvents && !comparison.dutEvents) {
+      result = { ...comparison, status: 'passed', message: 'PC/Instr 校验通过，双方没有可见 GRF/DM 写事件' };
+    } else if (!comparison.oracleEvents || !comparison.dutEvents) {
+      result = { ...comparison, status: 'error', message: '某一端没有可解析的写回记录事件' };
+    } else {
+      result = {
+        ...comparison, status: diff.matched ? 'passed' : 'failed', message: diffMessage(diff),
+        firstDiffIndex: diff.firstDiffIndex >= 0 ? diff.firstDiffIndex : undefined,
+        firstDiff: firstTraceDiffSnapshot(diff)
+      };
+    }
+    return result;
+  } finally {
+    // On a DUT problem the very file passed to Logisim becomes the case artifact.
+    let archived = false;
+    if (!options.signal?.aborted && !result?.cancelled && result?.status !== 'passed') {
+      try {
+        await updateAsmCaseArtifacts(asmCase, 'logisim', { preparedCircuit: runCircuit.fsPath });
+        archived = true;
+        if (result) result.logisimCircuit = runCircuit.fsPath;
+      } catch (error) {
+        services.output.appendLine(`无法保存 Logisim 故障电路证据：${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+    if (!archived) await fs.rm(runCircuit.fsPath, { force: true }).catch(() => undefined);
+  }
+}
+
+async function saveLogisimOutput(
+  pipeline: CourseTracePipeline, asmCase: AsmCase, outDir: vscode.Uri | undefined,
+  fileName: string, artifact: 'logisimOut' | 'traceOut', text: string
+): Promise<vscode.Uri> {
+  const uri = outDir
+    ? vscode.Uri.file(path.join(outDir.fsPath, fileName))
+    : asmCaseArtifactUri(asmCase, 'logisim', fileName);
+  await writeTextFile(uri, text);
+  if (outDir) await pipeline.copyArtifact(asmCase, 'logisim', uri, fileName, artifact);
+  else await pipeline.updateArtifacts(asmCase, 'logisim', { [artifact]: uri.fsPath });
+  return uri;
 }
 
 function defaultP3TracePipeline(): CourseTracePipeline {

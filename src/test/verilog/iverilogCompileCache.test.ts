@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import type { RunResult } from '../../types';
+import { discardAutomaticIverilogDependencies } from '../../verilog/automaticIverilogFiles';
 import {
   clearIverilogCompileCache,
   IverilogCompileCacheInput,
@@ -36,9 +37,11 @@ describe('Icarus session compile cache', () => {
     ));
   });
 
-  it('hits for identical inputs and ignores runtime-only code.txt changes', async () => {
+  it('reuses a compile after discarding its dependency listing and changing runtime-only code.txt', async () => {
     const fixture = await createFixture();
     await compileAndStore(fixture);
+    await discardAutomaticIverilogDependencies(fixture.root, fixture.input.dependencyFile);
+    await expect(fs.promises.stat(fixture.input.dependencyFile)).rejects.toMatchObject({ code: 'ENOENT' });
 
     await fs.promises.writeFile(fixture.code, 'case two machine code\n');
     const lookup = await lookupIverilogCompileCache(fixture.input);

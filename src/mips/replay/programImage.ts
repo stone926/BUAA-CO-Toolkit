@@ -8,6 +8,7 @@ import {
 } from '../../language/mips/traceParser';
 import { canonicalJson, sha256Bytes, sha256Canonical, type CanonicalJson } from './canonical';
 import { programImageCanonicalPayload } from '../core/programImage';
+import { decodeReplayJson } from './jsonStorage';
 import {
   maximumReplayMachineCodeWords,
   maximumReplayProgramImageBytes,
@@ -102,13 +103,17 @@ export function deserializeProgramImage(bytes: Uint8Array): ProgramImage {
   return parsed as ProgramImage;
 }
 
+export async function deserializeStoredProgramImage(bytes: Uint8Array): Promise<ProgramImage> {
+  return deserializeProgramImage(await decodeReplayJson(bytes, maximumReplayProgramImageBytes));
+}
+
 export async function programImageFileIssues(
   file: string,
   expectedFingerprint?: string,
   expectedBytes?: number
 ): Promise<string[]> {
   try {
-    const image = deserializeProgramImage(await readBoundedRegularFile(file, {
+    const image = await deserializeStoredProgramImage(await readBoundedRegularFile(file, {
       maximumBytes: maximumReplayProgramImageBytes,
       expectedBytes,
       label: 'serialized ProgramImage'

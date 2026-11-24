@@ -222,6 +222,8 @@ export interface ExecuteRequest {
   interruptSchedule?: number[];
   p7RiInstruction?: boolean;
   runOutputFile?: vscode.Uri;
+  /** Store large structured event records as gzip when archiving a course case. */
+  compressEventArtifact?: boolean;
   courseTrace?: boolean;
   revealOutput?: boolean;
   requirements?: ProviderCapabilityRequirements;

@@ -1,4 +1,4 @@
-# orchestration | src/ | 67 files
+# orchestration | src/ | 68 files
 
 扩展宿主层：生命周期、命令注册、配置读取、Profile 推断、UI、工具链、MIPS/Verilog/Logisim 操作命令与用例存储。**不含**语言智能逻辑（在 `src/language/` 的 LSP Server 端）。这一层只做 VS Code glue，业务逻辑必须落在下面的领域模块里。
 
@@ -39,7 +39,8 @@
 - `verilog.ts` — Verilog 命令入口；用户 TB 统一生成到 `.co/tb`（只创建不覆盖）
 - `verilog/projectConfiguration.ts` — 快速修复将 LSP 推断的工程源集合保存到工作区设置；单根路径相对化，多根保留绝对路径，已有配置优先
 - `verilog/iverilogRuntime.ts` — 纯 platform/arch 映射到 `vendor/iverilog/<target>`；为子进程前置 bundled bin 与 `-B <lib/ivl>`，清除可重定向 compiler config 的 `IVERILOG_ICONFIG`；Windows 走 manifest-only UTF-8 补丁以兼容中文路径。会话级共享预检单独使用 30 秒进程时限，不继承语法检查或仿真预算；调用方可独立取消等待，失败不缓存
-- `verilog/iverilogRunner.ts` — `-g2005 -t vvp` 编译 + bundled `vvp -N`；手动同工作区串行，自动测试独立 slot cwd/code.txt，内容相同的私有 TB 共享编译目录/镜像，短编译锁合并首次编译而 VVP 并发
+- `verilog/iverilogRunner.ts` — `-g2005 -t vvp` 编译与内置 `vvp -N` 运行。自动测试按私有 TB 内容共享编译目录和 VVP 镜像，各点独立运行
+- `verilog/automaticIverilogFiles.ts` — 在系统临时目录创建每次 VVP 独占的工作目录，进程结束后回收。编译缓存取得依赖快照后释放临时依赖清单
 - `verilog/automaticCompilePool.ts` — 每工作区 8 个稳定共享编译目录，按私有 TB 内容分配；VVP 读租约阻止目录复用与同 TB 的源变化重编译覆盖，等待/取消可释放，空闲工作区池有界
 - `verilog/iverilogCompileCache.ts` / `verilog/iverilogCompileCacheIo.ts` — 每 workspace/runtime-directory 单条 content-verified 编译缓存（8-workspace LRU，每工作区最多 9 条），依赖闭包与 VVP 产物每次命中按内容复验，目录级失效互不驱逐
 - `verilog/iverilogIncludeResolution.ts` — literal `include` 纯解析与 shadow 负依赖验证，不可验证时 fail-open

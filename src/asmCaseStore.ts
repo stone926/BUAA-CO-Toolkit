@@ -5,7 +5,7 @@ import * as path from 'path';
 import { randomBytes } from 'crypto';
 import * as vscode from 'vscode';
 import { getMemoryConfiguration, getProfile } from './config';
-import { ensureDirectory, pathExists, workspaceFolderForOrFirst } from './fsUtil';
+import { ensureDirectory, workspaceFolderForOrFirst } from './fsUtil';
 import { normalizePathKey } from './pathUtils';
 import { AppServices, ProjectProfile } from './types';
 import { resolveFileInput } from './workflowInputs';
@@ -31,6 +31,7 @@ import {
   AsmCaseSource,
   asmCaseId,
   asmCasePaths,
+  asmCaseProgramFileName,
   machineCodeWordCount,
   sha256Bytes
 } from './asmCaseStoreCore';
@@ -61,6 +62,7 @@ import {
 } from './courseTesting/machineCodeValidation';
 import {
   captureSourceGraph,
+  copySourceGraph,
   defaultSourceCaptureLimits,
   loadAndVerifySourceGraph,
   loadVerifiedSourceGraphInput,
@@ -69,11 +71,12 @@ import {
 } from './mips/replay/sourceBundle';
 import {
   createLegacyProgramImage,
+  observabilitySchemaDigest,
   oracleEvidenceDigests,
   parseStrictHexTextWords,
-  serializeObservabilitySchema,
   serializeProgramImage
 } from './mips/replay/programImage';
+import { encodeReplayJson } from './mips/replay/jsonStorage';
 import { courseInstructionImageWords } from './mips/core/assembler/artifacts';
 import { sha256Canonical, type CanonicalJson } from './mips/replay/canonical';
 import { assertContainedDirectoryPath, ensureContainedDirectoryPath } from './pathContainment';
@@ -149,6 +152,7 @@ export interface CreateAsmCaseOptions {
   metadata?: Record<string, string>;
   /** Explicit command snapshot; otherwise capture the resource-scoped setting once. */
   enginePlan?: CourseEnginePlan;
+  signal?: AbortSignal;
 }
 
 export async function resolveAsmCaseInput(title = '选择 MIPS ASM 文件'): Promise<vscode.Uri | undefined> {
@@ -175,77 +179,19 @@ export async function createAsmCaseFromAsm(
   if (asm.scheme !== 'file') {
     throw new Error(`ASM case capture requires a local file URI: ${asm.toString()}`);
   }
+  options.signal?.throwIfAborted();
   const asmBytes = await readBoundedRegularFile(asm.fsPath, {
     maximumBytes: defaultSourceCaptureLimits.maxBytes,
     label: 'ASM root source'
   });
-  const asmHash = sha256Bytes(asmBytes);
-  const root = caseWorkspaceRoot(options.resource ?? asm);
-  const createdAt = options.createdAt ?? new Date();
-  const paths = await nextAsmCasePaths(root, createdAt, asmHash);
-  const caseDir = vscode.Uri.file(paths.caseDir);
-  await ensureContainedDirectoryPath(root, paths.caseDir);
-
-  const caseAsm = vscode.Uri.file(paths.asm);
-  await vscode.workspace.fs.writeFile(caseAsm, asmBytes);
-  const sourceBundle = await captureSourceGraph(
-    asm.fsPath,
-    paths.caseDir,
-    asmBytes,
-    { ...defaultSourceCaptureLimits },
-    { allowedRoot: options.sourceRoot?.fsPath ?? root }
-  );
-  const sourceBundleManifest = await sourceBundleManifestFields(sourceBundle, paths.caseDir);
-
-  const p7 = normalizeP7Metadata(options.p7);
-  const stdin = options.stdin ? await copyStdinSnapshot(options.stdin, paths.stdinDir) : undefined;
-
-  const profile = getProfile(options.resource ?? asm);
-  const initialEngine = initialCaseEngineSelection(
-    options.resource ?? asm,
-    profile,
-    options.stdin !== undefined,
-    options.enginePlan
-  );
-  let manifest = createV2Manifest(
-    path.basename(paths.caseDir),
-    createdAt,
-    profile,
-    initialEngine.memoryConfiguration,
-    asm.fsPath,
-    {
-      path: 'program.asm',
-      sha256: asmHash,
-      bytes: asmBytes.byteLength
-    },
-    options.source ?? { kind: 'selected' },
-    stdin?.snapshot,
-    p7,
-    sourceBundleManifest,
-    initialEngine.assembler,
-    initialEngine.executor
-  );
-  if (options.metadata) {
-    manifest = mergeAsmCaseMetadata(manifest, options.metadata);
-  }
-  const instructionResource = options.engineResource ?? asm;
-  const instructionRoot = customInstructionsForResource(instructionResource).root;
-  manifest = await captureCaseScriptInstructions(paths.caseDir, manifest, instructionRoot,
-    options.enginePlan?.primaryEngineId === 'custom-mars' ? null : options.enginePlan?.scriptInstructions);
-  const manifestUri = vscode.Uri.file(paths.manifest);
-  await assertContainedDirectoryPath(root, paths.caseDir);
-  await writeManifestAtomic(paths.manifest, manifest);
-
-  return {
-    id: manifest.caseId,
-    dir: caseDir,
-    manifestUri,
-    asm: caseAsm,
-    machineCode: vscode.Uri.file(paths.machineCode),
-    sourceAsm: vscode.Uri.file(sourceBundle.rootMaterializedPath),
-    stdin: stdin?.uri,
-    manifest
-  };
+  return await createAsmCaseWithCapturedSource(asm.fsPath, sha256Bytes(asmBytes), {
+    ...options,
+    resource: options.resource ?? asm,
+    engineResource: options.engineResource ?? asm,
+    source: options.source ?? { kind: 'selected' }
+  }, (root, paths) => captureSourceGraph(asm.fsPath, paths.caseDir, asmBytes, { ...defaultSourceCaptureLimits }, {
+    allowedRoot: options.sourceRoot?.fsPath ?? root
+  }, { rootSnapshotPath: asmCaseProgramFileName }));
 }
 
 export async function createAsmCaseFromText(
@@ -260,69 +206,81 @@ export async function createAsmCaseFromText(
       `ASM root source size ${bytes.byteLength} exceeds the capture limit ${defaultSourceCaptureLimits.maxBytes}`
     );
   }
-  const asmHash = sha256Bytes(bytes);
+  return await createAsmCaseWithCapturedSource(fileName, sha256Bytes(bytes), options, (root, paths) =>
+    captureSourceGraph(paths.asm, paths.caseDir, undefined, { ...defaultSourceCaptureLimits }, { allowedRoot: root }, {
+      rootSnapshotPath: asmCaseProgramFileName,
+      inlineRoot: bytes
+    }));
+}
+
+/** Capture a fresh case from the verified original SourceUnits of an archive. */
+export async function createAsmCaseFromSavedSource(
+  original: AsmCase,
+  options: Omit<CreateAsmCaseOptions, 'stdin'>
+): Promise<AsmCase> {
+  assertWorkspaceTrustedForCaseCapture();
+  assertWritableV2Case(original);
+  const { originalAsmPath, asmSnapshot, program: { sourceGraph } } = original.manifest;
+  if (!sourceGraph) throw new Error('原用例没有保存完整的 ASM/include 闭包');
+  return await createAsmCaseWithCapturedSource(
+    originalAsmPath, asmSnapshot.sha256, options,
+    (_root, paths) => copySourceGraph(original.dir.fsPath, sourceGraph, asmSnapshot, paths.caseDir, asmCaseProgramFileName),
+    async (stdinDir) => {
+      const archived = await readAsmCaseStdinBytes(original);
+      return archived ? await writeStdinSnapshot(archived.file, stdinDir, archived.bytes) : undefined;
+    }
+  );
+}
+
+async function createAsmCaseWithCapturedSource(
+  originalAsmPath: string,
+  asmHash: string,
+  options: CreateAsmCaseOptions,
+  capture: (root: string, paths: ReturnType<typeof asmCasePaths>) => Promise<CapturedSourceBundle>,
+  captureStdin: (directory: string) => Promise<CapturedStdinSnapshot | undefined> = async (directory) =>
+    options.stdin ? await copyStdinSnapshot(options.stdin, directory) : undefined
+): Promise<AsmCase> {
+  options.signal?.throwIfAborted();
   const root = caseWorkspaceRoot(options.resource);
   const createdAt = options.createdAt ?? new Date();
-  const paths = await nextAsmCasePaths(root, createdAt, asmHash);
-  const caseDir = vscode.Uri.file(paths.caseDir);
-  await ensureContainedDirectoryPath(root, paths.caseDir);
+  const paths = await reserveAsmCasePaths(root, createdAt, asmHash);
+  const reserved = await fs.promises.lstat(paths.caseDir);
+  try {
+    const sourceBundle = await capture(root, paths);
+    options.signal?.throwIfAborted();
+    const rootSource = sourceBundle.graph.units[0];
+    const asmSnapshot = { path: asmCaseProgramFileName, sha256: rootSource.contentHash, bytes: rootSource.bytes };
+    const sourceBundleManifest = await sourceBundleManifestFields(sourceBundle, paths.caseDir);
+    const stdin = await captureStdin(paths.stdinDir);
+    const profile = getProfile(options.resource);
+    const initialEngine = initialCaseEngineSelection(options.resource, profile, stdin !== undefined, options.enginePlan);
+    let manifest = createV2Manifest(
+      path.basename(paths.caseDir), createdAt, profile, initialEngine.memoryConfiguration,
+      originalAsmPath, asmSnapshot, options.source ?? { kind: 'builtin' },
+      stdin?.snapshot, normalizeP7Metadata(options.p7), sourceBundleManifest, initialEngine.assembler, initialEngine.executor
+    );
+    if (options.metadata) manifest = mergeAsmCaseMetadata(manifest, options.metadata);
+    const instructionRoot = options.engineResource ? customInstructionsForResource(options.engineResource).root : root;
+    manifest = await captureCaseScriptInstructions(paths.caseDir, manifest, instructionRoot,
+      options.enginePlan?.primaryEngineId === 'custom-mars' ? null : options.enginePlan?.scriptInstructions);
+    await assertContainedDirectoryPath(root, paths.caseDir);
+    options.signal?.throwIfAborted();
+    await writeManifestAtomic(paths.manifest, manifest);
 
-  const caseAsm = vscode.Uri.file(paths.asm);
-  await vscode.workspace.fs.writeFile(caseAsm, bytes);
-  const sourceBundle = await captureSourceGraph(
-    caseAsm.fsPath,
-    paths.caseDir,
-    bytes,
-    { ...defaultSourceCaptureLimits },
-    { allowedRoot: root }
-  );
-  const sourceBundleManifest = await sourceBundleManifestFields(sourceBundle, paths.caseDir);
-  const p7 = normalizeP7Metadata(options.p7);
-  const stdin = options.stdin ? await copyStdinSnapshot(options.stdin, paths.stdinDir) : undefined;
-  const profile = getProfile(options.resource);
-  const initialEngine = initialCaseEngineSelection(
-    options.resource,
-    profile,
-    options.stdin !== undefined,
-    options.enginePlan
-  );
-  let manifest = createV2Manifest(
-    path.basename(paths.caseDir),
-    createdAt,
-    profile,
-    initialEngine.memoryConfiguration,
-    fileName,
-    {
-      path: 'program.asm',
-      sha256: asmHash,
-      bytes: bytes.byteLength
-    },
-    options.source ?? { kind: 'builtin' },
-    stdin?.snapshot,
-    p7,
-    sourceBundleManifest,
-    initialEngine.assembler,
-    initialEngine.executor
-  );
-  if (options.metadata) {
-    manifest = mergeAsmCaseMetadata(manifest, options.metadata);
+    return {
+      id: manifest.caseId,
+      dir: vscode.Uri.file(paths.caseDir),
+      manifestUri: vscode.Uri.file(paths.manifest),
+      asm: vscode.Uri.file(paths.asm),
+      machineCode: vscode.Uri.file(paths.machineCode),
+      sourceAsm: vscode.Uri.file(sourceBundle.rootMaterializedPath),
+      stdin: stdin?.uri,
+      manifest
+    };
+  } catch (error) {
+    await removeUnpublishedCase(root, paths.caseDir, reserved).catch(() => undefined);
+    throw error;
   }
-  manifest = await captureCaseScriptInstructions(paths.caseDir, manifest, root,
-    options.enginePlan?.primaryEngineId === 'custom-mars' ? null : options.enginePlan?.scriptInstructions);
-  const manifestUri = vscode.Uri.file(paths.manifest);
-  await assertContainedDirectoryPath(root, paths.caseDir);
-  await writeManifestAtomic(paths.manifest, manifest);
-
-  return {
-    id: manifest.caseId,
-    dir: caseDir,
-    manifestUri,
-    asm: caseAsm,
-    machineCode: vscode.Uri.file(paths.machineCode),
-    sourceAsm: vscode.Uri.file(sourceBundle.rootMaterializedPath),
-    stdin: stdin?.uri,
-    manifest
-  };
 }
 
 export async function prepareAsmCaseMachineCode(
@@ -337,18 +295,14 @@ export async function prepareAsmCaseMachineCode(
   if (planProfileError) {
     return sourceIntegrityAssembleFailure(planProfileError);
   }
-  try {
-    await assertAsmCaseSourceSnapshotCurrent(asmCase);
-  } catch (error) {
-    return sourceIntegrityAssembleFailure(error);
-  }
   const graphReference = asmCase.manifest.program.sourceGraph;
   if (!graphReference) {
     return sourceIntegrityAssembleFailure('v2 case has no captured SourceUnit graph');
   }
   let verifiedSource: Awaited<ReturnType<typeof loadVerifiedSourceGraphInput>>;
   try {
-    verifiedSource = await loadVerifiedSourceGraphInput(asmCase.dir.fsPath, graphReference.path);
+    verifiedSource = await loadVerifiedSourceGraphInput(asmCase.dir.fsPath, graphReference);
+    await assertAsmCaseSourceFiles(asmCase, verifiedSource.graph);
   } catch (error) {
     return sourceIntegrityAssembleFailure(error);
   }
@@ -523,15 +477,13 @@ export async function prepareAsmCaseMachineCode(
       p7RiInstruction: dump.resolvedRun.p7RiInstruction
     }
     : undefined;
-  const imageBytes = serializeProgramImage(programImage);
-  const observabilityBytes = serializeObservabilitySchema();
-  const imagePath = path.join(asmCase.dir.fsPath, 'program', 'image.json');
-  const observabilityPath = path.join(asmCase.dir.fsPath, 'program', 'observability.json');
-  await writeImmutableReplayArtifact(imagePath, imageBytes);
-  await writeImmutableReplayArtifact(observabilityPath, observabilityBytes);
+  const priorImage = asmCase.manifest.program.image;
+  const compact = priorImage ? priorImage.path.endsWith('.gz') : options.courseTrace === true;
+  const storedImage = await encodeReplayJson(serializeProgramImage(programImage), maximumReplayProgramImageBytes, compact);
+  const imagePath = path.join(asmCase.dir.fsPath, 'program', `image${storedImage.suffix}`);
+  await writeImmutableReplayArtifact(imagePath, storedImage.bytes);
   await fs.promises.chmod(asmCase.machineCode.fsPath, 0o444).catch(() => undefined);
-  const imageSnapshot = snapshotForCaseFile(asmCase.dir.fsPath, imagePath, imageBytes);
-  const observabilitySnapshot = snapshotForCaseFile(asmCase.dir.fsPath, observabilityPath, observabilityBytes);
+  const imageSnapshot = snapshotForCaseFile(asmCase.dir.fsPath, imagePath, storedImage.bytes);
   const dutInput = {
     path: machineCode.path,
     sha256: machineCode.sha256,
@@ -552,7 +504,7 @@ export async function prepareAsmCaseMachineCode(
       ...asmCase.manifest.program,
       machineCode,
       image: imageSnapshot,
-      observability: observabilitySnapshot,
+      ...(asmCase.manifest.program.observability ? {} : { observabilitySchemaSha256: observabilitySchemaDigest() }),
       dutInput,
       imageFingerprint: programImage.fingerprint,
       assembler: {
@@ -565,7 +517,6 @@ export async function prepareAsmCaseMachineCode(
       program: {
         ...(asmCase.manifest.artifacts?.program ?? {}),
         image: imageSnapshot,
-        observability: observabilitySnapshot,
         dutInput
       }
     }
@@ -661,15 +612,17 @@ export async function recordAsmCaseOracleResult(
     throw new Error('oracle traceOut artifact is not lossless UTF-8');
   }
   const traceEvidence = oracleEvidenceDigests(traceText, completeConfiguration.traceLevel ?? 1);
+  // A text-only MARS provider also reports the instruction count for DUT timing.
+  // Only the builtin engine or commit-specific fields require a structured sidecar.
   const structuredFields = [
     result.events,
-    result.instructions,
     result.eventCount,
     result.eventDigest,
     result.finalStateDigest,
     result.eventArtifact
   ];
-  const hasStructuredEvidence = structuredFields.some((value) => value !== undefined);
+  const hasStructuredEvidence = result.descriptor.id === BUILTIN_TS_ENGINE_ID
+    || structuredFields.some((value) => value !== undefined);
   let evidence = traceEvidence;
   if (hasStructuredEvidence) {
     if (!result.events || result.instructions === undefined || result.eventCount === undefined
@@ -690,7 +643,7 @@ export async function recordAsmCaseOracleResult(
     if (sha256Bytes(eventBytes) !== eventReference.sha256.toLowerCase()) {
       throw new Error('oracle events artifact no longer matches its case-local snapshot');
     }
-    const artifactEvidence = parseStructuredExecutionEvidence(eventBytes);
+    const artifactEvidence = await parseStructuredExecutionEvidence(eventBytes);
     if (!asmCase.manifest.program.imageFingerprint
       || artifactEvidence.imageFingerprint !== asmCase.manifest.program.imageFingerprint) {
       throw new Error('structured oracle evidence does not bind the captured ProgramImage');
@@ -1109,15 +1062,29 @@ export function isAsmFile(uri: vscode.Uri): boolean {
 
 const asmCaseInputExcludeGlob = '**/{node_modules,out,.git,.co/cases,.co/out,.co/iverilog,.co/isim,.co/logisim,.co/tmp,.co/trash}/**';
 
-async function nextAsmCasePaths(root: string, createdAt: Date, asmHash: string): Promise<ReturnType<typeof asmCasePaths>> {
+async function reserveAsmCasePaths(root: string, createdAt: Date, asmHash: string): Promise<ReturnType<typeof asmCasePaths>> {
+  await ensureContainedDirectoryPath(root, path.join(root, CO_CASES_DIR));
   for (let attempt = 0; attempt < 100; attempt++) {
     const candidateDate = attempt === 0 ? createdAt : new Date(createdAt.getTime() + attempt);
     const paths = asmCasePaths(root, asmCaseId(candidateDate, asmHash));
-    if (!await pathExists(paths.caseDir)) {
+    try {
+      await fs.promises.mkdir(paths.caseDir);
       return paths;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
     }
   }
-  return asmCasePaths(root, asmCaseId(new Date(), `${asmHash}${randomBytes(4).toString('hex')}`));
+  const paths = asmCasePaths(root, asmCaseId(new Date(), randomBytes(4).toString('hex')));
+  await fs.promises.mkdir(paths.caseDir);
+  return paths;
+}
+
+async function removeUnpublishedCase(root: string, caseDir: string, reserved: fs.Stats): Promise<void> {
+  await assertContainedDirectoryPath(root, caseDir);
+  const current = await fs.promises.lstat(caseDir);
+  if (current.dev === reserved.dev && current.ino === reserved.ino) {
+    await fs.promises.rm(caseDir, { recursive: true, force: true });
+  }
 }
 
 function caseWorkspaceRoot(resource?: vscode.Uri): string {
@@ -1131,10 +1098,12 @@ function caseWorkspaceRoot(resource?: vscode.Uri): string {
   return process.cwd();
 }
 
-async function copyStdinSnapshot(stdin: vscode.Uri, stdinDir: string): Promise<{
+interface CapturedStdinSnapshot {
   uri: vscode.Uri;
   snapshot: NonNullable<AsmCaseManifest['stdin']>;
-}> {
+}
+
+async function copyStdinSnapshot(stdin: vscode.Uri, stdinDir: string): Promise<CapturedStdinSnapshot> {
   if (stdin.scheme !== 'file') {
     throw new Error(`标准输入快照要求本地文件 URI：${stdin.toString()}`);
   }
@@ -1142,22 +1111,22 @@ async function copyStdinSnapshot(stdin: vscode.Uri, stdinDir: string): Promise<{
     maximumBytes: maximumReplayStdinBytes,
     label: 'stdin snapshot'
   });
-  const text = bytes.toString('utf8');
-  if (!Buffer.from(text, 'utf8').equals(bytes)) {
-    throw new Error(`标准输入必须是无损 UTF-8 文本：${stdin.fsPath}`);
-  }
+  return await writeStdinSnapshot(stdin.fsPath, stdinDir, bytes);
+}
+
+async function writeStdinSnapshot(file: string, stdinDir: string, bytes: Buffer): Promise<CapturedStdinSnapshot> {
+  decodeStdinSnapshot(bytes, `标准输入必须是无损 UTF-8 文本：${file}`);
   await ensureDirectory(vscode.Uri.file(stdinDir));
-  const uri = vscode.Uri.file(path.join(stdinDir, path.basename(stdin.fsPath)));
-  await vscode.workspace.fs.writeFile(uri, bytes);
-  return {
-    uri,
-    snapshot: {
-      originalPath: stdin.fsPath,
-      path: `stdin/${path.basename(stdin.fsPath)}`,
-      sha256: sha256Bytes(bytes),
-      bytes: bytes.byteLength
-    }
+  const fileName = path.basename(file);
+  const uri = vscode.Uri.file(path.join(stdinDir, fileName));
+  const snapshot = {
+    originalPath: file,
+    path: `stdin/${fileName}`,
+    sha256: sha256Bytes(bytes),
+    bytes: bytes.byteLength
   };
+  await vscode.workspace.fs.writeFile(uri, bytes);
+  return { uri, snapshot };
 }
 
 function normalizeP7Metadata(explicit: AsmCaseP7Metadata | undefined): AsmCaseP7Metadata | undefined {
@@ -1204,35 +1173,39 @@ export async function assertAsmCaseSourceSnapshotCurrent(
   asmCase: AsmCase
 ): Promise<SourceGraphBundle | undefined> {
   assertWritableV2Case(asmCase);
+  const graphReference = asmCase.manifest.program.sourceGraph;
+  const graph = graphReference
+    ? await loadAndVerifySourceGraph(asmCase.dir.fsPath, graphReference)
+    : undefined;
+  await assertAsmCaseSourceFiles(asmCase, graph);
+  return graph;
+}
+
+async function assertAsmCaseSourceFiles(
+  asmCase: AsmCase & { manifest: AsmCaseManifestV2 },
+  graph: SourceGraphBundle | undefined
+): Promise<void> {
   const expected = asmCase.manifest.asmSnapshot;
   const snapshotFile = await caseSnapshotFile(asmCase, expected.path, 'ASM root snapshot');
   if (normalizePathKey(asmCase.asm.fsPath) !== normalizePathKey(snapshotFile)) {
     throw new Error('ASM case root URI is not the manifest-bound case-local snapshot');
   }
-  const snapshotBytes = await readIntegrityFile(
-    snapshotFile,
-    'case-local ASM snapshot',
-    expected,
-    maximumReplaySourceBytes
-  );
-  assertSnapshotBytes(snapshotBytes, expected, 'case-local ASM snapshot');
-
-  const graphReference = asmCase.manifest.program.sourceGraph;
-  if (graphReference) {
-    const graph = await loadAndVerifySourceGraph(asmCase.dir.fsPath, graphReference.path);
-    const root = graph.units.find((unit) => unit.id === graph.rootId);
-    if (!root || root.contentHash !== expected.sha256 || root.bytes !== expected.bytes) {
+  const root = graph?.units[0];
+  if (root) {
+    if (root.contentHash !== expected.sha256.toLowerCase() || root.bytes !== expected.bytes) {
       throw new Error('captured SourceUnit graph root does not match case-local ASM snapshot');
     }
     const expectedMaterialized = path.join(asmCase.dir.fsPath, ...root.materializedPath.split('/'));
     if (normalizePathKey(expectedMaterialized) !== normalizePathKey(asmCase.sourceAsm.fsPath)) {
       throw new Error('ASM provider source is not the immutable SourceUnit graph root');
     }
-    return graph;
   }
-
-  if (normalizePathKey(asmCase.sourceAsm.fsPath) === normalizePathKey(asmCase.asm.fsPath)) {
-    return undefined;
+  if (root?.blobPath !== expected.path) {
+    const bytes = await readIntegrityFile(snapshotFile, 'case-local ASM snapshot', expected, maximumReplaySourceBytes);
+    assertSnapshotBytes(bytes, expected, 'case-local ASM snapshot');
+  }
+  if (root || normalizePathKey(asmCase.sourceAsm.fsPath) === normalizePathKey(asmCase.asm.fsPath)) {
+    return;
   }
   const sourceBytes = await readIntegrityFile(
     asmCase.sourceAsm.fsPath,
@@ -1241,7 +1214,6 @@ export async function assertAsmCaseSourceSnapshotCurrent(
     maximumReplaySourceBytes
   );
   assertSnapshotBytes(sourceBytes, expected, 'ASM source');
-  return undefined;
 }
 
 export async function asmCaseSourceSnapshotIssue(asmCase: AsmCase): Promise<string | undefined> {
@@ -1258,6 +1230,11 @@ export async function asmCaseSourceSnapshotIssue(asmCase: AsmCase): Promise<stri
  * workspace path is provenance only and is never a second live input source.
  */
 export async function readAsmCaseStdinSnapshot(asmCase: AsmCase): Promise<string | undefined> {
+  const input = await readAsmCaseStdinBytes(asmCase);
+  return input ? decodeStdinSnapshot(input.bytes, 'case-local stdin snapshot is not lossless UTF-8') : undefined;
+}
+
+async function readAsmCaseStdinBytes(asmCase: AsmCase): Promise<{ file: string; bytes: Buffer } | undefined> {
   assertWritableV2Case(asmCase);
   const expected = asmCase.manifest.stdin;
   if (!expected) {
@@ -1282,9 +1259,13 @@ export async function readAsmCaseStdinSnapshot(asmCase: AsmCase): Promise<string
     maximumReplayStdinBytes
   );
   assertSnapshotBytes(bytes, expected, 'case-local stdin snapshot');
+  return { file, bytes };
+}
+
+function decodeStdinSnapshot(bytes: Buffer, invalidMessage: string): string {
   const text = bytes.toString('utf8');
   if (!Buffer.from(text, 'utf8').equals(bytes)) {
-    throw new Error('case-local stdin snapshot is not lossless UTF-8');
+    throw new Error(invalidMessage);
   }
   return text;
 }
@@ -1350,7 +1331,7 @@ async function completeReplayRunConfiguration(
 ): Promise<ManifestRunConfiguration> {
   const graphReference = asmCase.manifest.program.sourceGraph;
   const graph = verifiedSourceGraph ?? (graphReference
-    ? await loadAndVerifySourceGraph(asmCase.dir.fsPath, graphReference.path)
+    ? await loadAndVerifySourceGraph(asmCase.dir.fsPath, graphReference)
     : undefined);
   if (configuration.profile !== resolvedRun.profile) {
     throw new Error(`requested profile ${configuration.profile} differs from executed profile ${resolvedRun.profile}`);
@@ -1424,24 +1405,30 @@ async function sourceBundleManifestFields(
     maximumBytes: maximumReplayManifestBytes,
     label: 'captured source graph JSON'
   });
+  const graph = snapshotForCaseFile(caseDir, captured.graphPath, graphBytes);
   const artifacts: Record<string, ManifestArtifactReference> = {
-    graph: snapshotForCaseFile(caseDir, captured.graphPath, graphBytes)
+    graph
   };
   for (const unit of captured.graph.units) {
+    const blob = {
+      path: unit.blobPath,
+      sha256: unit.contentHash,
+      bytes: unit.bytes
+    };
+    artifacts[`blob/${unit.contentHash}`] = blob;
+    if (unit.materializedPath === unit.blobPath) {
+      artifacts[`materialized/${unit.id}`] = blob;
+      continue;
+    }
     const materialized = path.join(caseDir, ...unit.materializedPath.split('/'));
     const materializedBytes = await readBoundedRegularFile(materialized, {
       maximumBytes: maximumReplaySourceBytes,
       label: `captured source materialization ${unit.id}`
     });
-    artifacts[`blob/${unit.contentHash}`] = {
-      path: unit.blobPath,
-      sha256: unit.contentHash,
-      bytes: unit.bytes
-    };
     artifacts[`materialized/${unit.id}`] = snapshotForCaseFile(caseDir, materialized, materializedBytes);
   }
   return {
-    graph: snapshotForCaseFile(caseDir, captured.graphPath, graphBytes),
+    graph,
     artifacts
   };
 }

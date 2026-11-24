@@ -38,6 +38,8 @@ import { programImageIssues } from '../replay/programImage';
 import { builtinExecutionEngineArtifact } from '../replay/builtinEngineArtifact';
 import { canonicalJson, sha256Canonical, type CanonicalJson } from '../replay/canonical';
 import { writeFileAtomicReplace } from '../replay/atomicFile';
+import { maximumReplayTraceBytes } from '../replay/boundedFile';
+import { encodeReplayJson } from '../replay/jsonStorage';
 import type { WorkerJob, WorkerOutboundMessage } from '../host/workerProtocol';
 import { courseExecutionImagePayload } from '../host/mipsWorkerRequests';
 import { hex8Address } from '../core/values';
@@ -102,6 +104,7 @@ interface BuiltinExecuteSnapshot {
   readonly interruptSchedule: readonly number[];
   readonly p7RiInstruction: boolean;
   readonly runOutputFile?: vscode.Uri;
+  readonly compressEventArtifact: boolean;
   readonly revealOutput?: boolean;
   readonly signal?: AbortSignal;
 }
@@ -269,7 +272,8 @@ export class BuiltinTsExecutionProvider implements MipsExecutionProvider {
     const rawText = snapshot.trace
       ? formatArchitecturalWrites(outcome.trace ?? [])
       : '';
-    const eventDigest = sha256Canonical(commitEventsCanonical(events) as CanonicalJson);
+    const canonicalEvents = commitEventsCanonical(events) as CanonicalJson;
+    const eventDigest = sha256Canonical(canonicalEvents);
     const stop = builtinStop(outcome.status, outcome.haltReason, outcome.haltPc, outcome.diagnostic);
     const success = outcome.status === 'halted' && outcome.haltReason !== 'cancelled';
     const status = builtinStatus(success, stop.kind, outcome.diagnostic, rawText);
@@ -296,7 +300,7 @@ export class BuiltinTsExecutionProvider implements MipsExecutionProvider {
       rawText,
       snapshot.trace
     );
-    const eventArtifact = await writeBuiltinEventArtifact(outputFile, {
+    const eventArtifact = await writeBuiltinEventArtifact(outputFile, snapshot.compressEventArtifact, {
       schemaRevision: 1,
       eventSchema: 'buaa-co-commit-event-v1',
       engine: this.descriptor,
@@ -308,7 +312,7 @@ export class BuiltinTsExecutionProvider implements MipsExecutionProvider {
       eventCount: outcome.eventCount,
       eventDigest,
       finalStateDigest: outcome.finalStateDigest,
-      events: commitEventsCanonical(events) as CanonicalJson,
+      events: canonicalEvents,
       coverage: outcome.coverage ?? [],
       checkpoints: outcome.checkpoints
     });
@@ -403,8 +407,9 @@ export class BuiltinTsExecutionProvider implements MipsExecutionProvider {
       }
       : undefined;
     const outputFile = await writeBuiltinRunOutput(snapshot.runOutputFile, rawText, snapshot.trace);
-    const eventDigest = sha256Canonical(commitEventsCanonical(workerEvents) as CanonicalJson);
-    const eventArtifact = await writeBuiltinEventArtifact(outputFile, {
+    const canonicalEvents = commitEventsCanonical(workerEvents) as CanonicalJson;
+    const eventDigest = sha256Canonical(canonicalEvents);
+    const eventArtifact = await writeBuiltinEventArtifact(outputFile, snapshot.compressEventArtifact, {
       schemaRevision: 1,
       eventSchema: 'buaa-co-commit-event-v1',
       engine: this.descriptor,
@@ -416,7 +421,7 @@ export class BuiltinTsExecutionProvider implements MipsExecutionProvider {
       eventCount: value.eventCount,
       eventDigest,
       finalStateDigest: value.finalStateDigest,
-      events: commitEventsCanonical(workerEvents) as CanonicalJson,
+      events: canonicalEvents,
       coverage: value.coverage ?? [],
       checkpoints: value.checkpoints ?? []
     });
@@ -625,6 +630,7 @@ function snapshotRequest(request: ExecuteRequest, signal?: AbortSignal): Builtin
     interruptSchedule: Object.freeze([...(request.interruptSchedule ?? [])]),
     p7RiInstruction: request.p7RiInstruction === true,
     runOutputFile: request.runOutputFile ? cloneUri(request.runOutputFile) : undefined,
+    compressEventArtifact: request.compressEventArtifact === true,
     revealOutput: request.revealOutput,
     signal
   });
@@ -707,12 +713,14 @@ async function writeBuiltinRunOutput(
 
 async function writeBuiltinEventArtifact(
   outputFile: vscode.Uri | undefined,
+  compact: boolean,
   value: unknown
 ): Promise<vscode.Uri | undefined> {
   if (!outputFile) return undefined;
-  const eventArtifact = vscode.Uri.file(`${outputFile.fsPath}.events.json`);
   const bytes = Buffer.from(`${canonicalJson(value as CanonicalJson)}\n`, 'utf8');
-  await writeFileAtomic(eventArtifact.fsPath, bytes);
+  const stored = await encodeReplayJson(bytes, maximumReplayTraceBytes, compact);
+  const eventArtifact = vscode.Uri.file(`${outputFile.fsPath}.events${stored.suffix}`);
+  await writeFileAtomic(eventArtifact.fsPath, stored.bytes);
   return eventArtifact;
 }
 

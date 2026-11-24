@@ -1,22 +1,25 @@
-// @index logisim-prep — 课程 Logisim 用例电路的稳定文件命名
+// @index logisim-prep — 在用例内创建本次 Logisim 仿真独占的 ROM 注入电路
+import * as fs from 'fs/promises';
+import { randomUUID } from 'crypto';
 import * as path from 'path';
-import { sanitizeFileStem } from '../pathUtils';
+import { maximumReplaySnapshotBytes } from '../mips/replay/boundedFile';
+import { ensureContainedDirectoryPath } from '../pathContainment';
 
-export function preparedCircuitFileName(circuitFile: string, asmFile: string, root?: string): string {
-  const circuitStem = path.basename(circuitFile, path.extname(circuitFile));
-  const asmStem = root
-    ? path.relative(root, asmFile)
-    : path.basename(asmFile, path.extname(asmFile));
-  return `${sanitizeLogisimFileStem(circuitStem)}.${sanitizeLogisimFileStem(removeKnownAsmExtension(asmStem))}.circ`;
-}
-
-function sanitizeLogisimFileStem(value: string): string {
-  return sanitizeFileStem(value, {
-    stripExtension: true,
-    fallback: 'case'
-  });
-}
-
-function removeKnownAsmExtension(value: string): string {
-  return value.replace(/\.(asm|s|mips)$/i, '');
+export async function createLogisimRunCircuit(caseDirectory: string, content: string): Promise<string> {
+  const size = Buffer.byteLength(content, 'utf8');
+  if (size > maximumReplaySnapshotBytes) {
+    throw new Error(`ASM case logisim preparedCircuit size ${size} exceeds the hard limit ${maximumReplaySnapshotBytes}`);
+  }
+  const directory = path.join(caseDirectory, 'logisim');
+  await ensureContainedDirectoryPath(caseDirectory, directory);
+  const file = path.join(directory, `cpu-${randomUUID().slice(0, 8)}.circ`);
+  try {
+    await fs.writeFile(file, content, { encoding: 'utf8', flag: 'wx' });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'EEXIST') {
+      await fs.rm(file, { force: true }).catch(() => undefined);
+    }
+    throw error;
+  }
+  return file;
 }

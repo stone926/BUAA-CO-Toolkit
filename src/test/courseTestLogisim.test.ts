@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { URI } from 'vscode-uri';
 
 const p3PipelineState = vi.hoisted(() => ({
   directCopyArtifact: vi.fn(),
@@ -7,7 +8,14 @@ const p3PipelineState = vi.hoisted(() => ({
   readTextFile: vi.fn(),
   setMainCircuit: vi.fn(),
   updateMetadata: vi.fn(),
+  updateArtifacts: vi.fn(),
+  writeTextFile: vi.fn(),
   writeArtifact: vi.fn()
+}));
+
+const logisimTempFiles = vi.hoisted(() => ({
+  rm: vi.fn(async () => undefined),
+  writeFile: vi.fn(async () => undefined)
 }));
 
 vi.mock('vscode', async () => {
@@ -31,26 +39,39 @@ vi.mock('../asmCaseStore', async (importOriginal) => ({
   ...await importOriginal<typeof import('../asmCaseStore')>(),
   asmCaseSourceSnapshotIssue: vi.fn(async () => undefined),
   copyAsmCaseArtifact: p3PipelineState.directCopyArtifact,
+  updateAsmCaseArtifacts: p3PipelineState.updateArtifacts,
   updateAsmCaseMetadata: p3PipelineState.updateMetadata,
   writeAsmCaseArtifact: p3PipelineState.writeArtifact
 }));
 
 vi.mock('../courseTesting/logisimTrace', () => ({
+  formatLogisimTraceEvents: vi.fn(() => 'canonical trace'),
+  parseLogisimTraceOutput: vi.fn(() => ({ rows: [{}], events: [{}] })),
   p3LogisimMaxWords: 4096,
   prepareP3LogisimMachineCode: p3PipelineState.prepareMachineCode,
-  setLogisimMainCircuit: p3PipelineState.setMainCircuit
+  setLogisimMainCircuit: p3PipelineState.setMainCircuit,
+  validateP3LogisimFetchTrace: vi.fn(() => ({ warnings: [] }))
 }));
+
+vi.mock('fs/promises', async (importOriginal) => ({
+  ...await importOriginal<typeof import('fs/promises')>(),
+  ...logisimTempFiles
+}));
+vi.mock('../pathContainment', () => ({ ensureContainedDirectoryPath: vi.fn(async () => undefined) }));
 
 vi.mock('../courseTesting/logisimReset', () => ({
   prepareP3LogisimReset: (text: string, traceSpec: unknown) => ({ text, traceSpec, applied: false })
 }));
 
 vi.mock('../fsUtil', () => ({
+  ensureDirectory: vi.fn(async () => undefined),
   readTextFile: p3PipelineState.readTextFile,
+  writeTextFile: p3PipelineState.writeTextFile,
   workspaceFolderFor: vi.fn(() => undefined)
 }));
 
-vi.mock('../language/logisim/rom', () => ({
+vi.mock('../language/logisim/rom', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../language/logisim/rom')>(),
   injectMachineCodeIntoLogisimRom: p3PipelineState.injectMachineCode
 }));
 
@@ -150,9 +171,7 @@ describe('course test Logisim helpers', () => {
     }));
   });
 
-  it('copies the P3 circuit template through the injected pipeline', async () => {
-    const expected = new Error('pipeline copy reached');
-    const unexpected = new Error('direct artifact path reached');
+  it('does not archive the injected circuit or duplicate code before a DUT run', async () => {
     const circuit = { fsPath: 'E:/workspace/cpu.circ' };
     const asmCase = {
       id: 'case-1',
@@ -161,16 +180,22 @@ describe('course test Logisim helpers', () => {
       asm: { fsPath: 'E:/workspace/.co/cases/case-1/program.asm' },
       sourceAsm: { fsPath: 'E:/workspace/.co/cases/case-1/source/main.asm' },
       machineCode: { fsPath: 'E:/workspace/.co/cases/case-1/code.txt' },
-      manifest: {}
+      manifest: { source: { kind: 'selected', asmFiles: [] } }
     };
-    const copyArtifact = vi.fn(async () => { throw expected; });
+    const copyArtifact = vi.fn(async () => undefined);
+    const runOracle = vi.fn(async () => ({
+      ok: false,
+      preflight: { ok: false, diagnostics: [{ code: 'test.stop', message: 'stop after artifacts' }], descriptor: { id: 'builtin-ts' } }
+    }));
     const pipeline = {
       prepareProgram: vi.fn(async () => ({
         ok: true,
         outputFile: asmCase.machineCode,
         image: {}
       })),
-      copyArtifact
+      validateProgram: vi.fn(() => []),
+      copyArtifact,
+      runOracle
     };
     p3PipelineState.readTextFile.mockResolvedValue('1000ffff\n00000000\n');
     p3PipelineState.prepareMachineCode.mockReturnValue({
@@ -185,7 +210,7 @@ describe('course test Logisim helpers', () => {
       fsPath: `E:/workspace/.co/cases/case-1/logisim/${name}`
     }));
     p3PipelineState.directCopyArtifact.mockResolvedValue(undefined);
-    p3PipelineState.updateMetadata.mockRejectedValue(unexpected);
+    p3PipelineState.updateMetadata.mockResolvedValue(undefined);
 
     const result = await runP3LogisimTraceCase(
       { output: { appendLine: vi.fn() } } as never,
@@ -202,14 +227,12 @@ describe('course test Logisim helpers', () => {
         } as never
       }
     );
-    expect(result).toMatchObject({ status: 'error', stage: 'dut', message: expected.message });
-    expect(copyArtifact).toHaveBeenCalledWith(
-      asmCase,
-      'logisim',
-      circuit,
-      'circuit-template.circ',
-      'circuitTemplate'
-    );
+    expect(result).toMatchObject({ status: 'error', stage: 'oracle' });
+    const writtenNames = p3PipelineState.writeArtifact.mock.calls.map((call) => call[2]);
+    expect(writtenNames).toEqual(['logisim-trace-diagnostic.txt', 'logisim-trace-spec.json']);
+    expect(writtenNames).not.toContain('logisim-code.txt');
+    expect(writtenNames).not.toContain('circuit-template.circ');
+    expect(copyArtifact).not.toHaveBeenCalledWith(asmCase, 'logisim', circuit, 'circuit-template.circ', 'circuitTemplate');
     expect(p3PipelineState.directCopyArtifact).not.toHaveBeenCalled();
   });
 
@@ -290,6 +313,117 @@ describe('course test Logisim helpers', () => {
     expect(runFullStackShadow).not.toHaveBeenCalled();
     expect(verifyConfiguredFixedMarsReference).not.toHaveBeenCalled();
   });
+
+  it('cleans a passing temporary circuit and archives the same circuit for DUT failures', async () => {
+    const fixture = automaticP3Fixture();
+    const pipeline = automaticP3Pipeline(fixture, vi.fn(async () => successfulOracleInvocation()));
+    const passedCircuit = await runP3LogisimTraceCase(
+      fixture.services,
+      { asm: fixture.asm as never, asmCase: fixture.asmCase as never },
+      {
+        source: { kind: 'generator' },
+        artifactOutputMode: 'case',
+        pipeline: {
+          ...pipeline,
+          compareTraces: vi.fn(() => ({
+            matched: true,
+            summary: { oracleEvents: 1, dutEvents: 1, matchedEvents: 1, diffEvents: 0 },
+            firstDiffIndex: -1
+          })),
+          runLogisimDut: vi.fn(async (_services, _setup, circuit) => ({
+            result: { ok: true, exitCode: 0 }, stdout: 'row', stderr: '', rowsSeen: 1, haltedByPc: true
+          }))
+        } as never,
+        logisim: fixture.logisim as never
+      }
+    );
+
+    expect(passedCircuit).toMatchObject({ status: 'passed' });
+    expect(passedCircuit).not.toHaveProperty('logisimCircuit');
+    expect(passedCircuit).toMatchObject({ dutRawOut: expect.stringContaining('test.logisim.out') });
+    expect(passedCircuit.dutOut).toContain('test.sim.out');
+    expect(logisimTempFiles.writeFile).toHaveBeenCalledOnce();
+    expect(logisimTempFiles.rm).toHaveBeenCalledOnce();
+    expect(p3PipelineState.updateArtifacts).not.toHaveBeenCalledWith(
+      fixture.asmCase,
+      'logisim',
+      expect.objectContaining({ preparedCircuit: expect.any(String) })
+    );
+
+    vi.clearAllMocks();
+    const failedFixture = automaticP3Fixture();
+    const failedPipeline = automaticP3Pipeline(failedFixture, vi.fn(async () => successfulOracleInvocation()));
+    failedPipeline.runLogisimDut = vi.fn(async () => ({
+      result: { ok: false, exitCode: 1 }, stdout: 'partial rows', stderr: 'Logisim failed', rowsSeen: 1, haltedByPc: false
+    })) as never;
+    const failed = await runP3LogisimTraceCase(
+      failedFixture.services,
+      { asm: failedFixture.asm as never, asmCase: failedFixture.asmCase as never },
+      {
+        source: { kind: 'generator' },
+        artifactOutputMode: 'case',
+        pipeline: failedPipeline as never,
+        logisim: failedFixture.logisim as never
+      }
+    );
+
+    const tempPath = URI.file((logisimTempFiles.writeFile.mock.calls[0] as unknown as [string])[0]);
+    expect(tempPath.path).toMatch(/\/logisim\/cpu-[0-9a-f]{8}\.circ$/i);
+    expect(failed).toMatchObject({ status: 'error', logisimCircuit: tempPath.fsPath, dutRawOut: expect.any(String) });
+    expect(p3PipelineState.updateArtifacts).toHaveBeenCalledWith(failedFixture.asmCase, 'logisim', { preparedCircuit: tempPath.fsPath });
+    expect(logisimTempFiles.rm).not.toHaveBeenCalled();
+  });
+
+  it('cleans cancelled circuits without archiving a prepared circuit or partial case output', async () => {
+    const fixture = automaticP3Fixture();
+    const pipeline = automaticP3Pipeline(fixture, vi.fn(async () => successfulOracleInvocation()));
+    pipeline.runLogisimDut = vi.fn(async () => ({
+      result: { ok: false, stopped: true, stopReason: 'cancelled' },
+      stdout: 'partial rows', stderr: '', rowsSeen: 1, haltedByPc: false
+    })) as never;
+
+    const result = await runP3LogisimTraceCase(
+      fixture.services,
+      { asm: fixture.asm as never, asmCase: fixture.asmCase as never },
+      {
+        source: { kind: 'generator' },
+        artifactOutputMode: 'case',
+        pipeline: pipeline as never,
+        logisim: fixture.logisim as never
+      }
+    );
+
+    expect(result).toMatchObject({ status: 'error', cancelled: true });
+    expect(result).not.toHaveProperty('dutRawOut');
+    expect(result).not.toHaveProperty('logisimCircuit');
+    expect(p3PipelineState.updateArtifacts).not.toHaveBeenCalledWith(
+      fixture.asmCase,
+      'logisim',
+      expect.objectContaining({ preparedCircuit: expect.any(String) })
+    );
+    expect(logisimTempFiles.rm).toHaveBeenCalledOnce();
+  });
+
+  it('removes a partially written temporary circuit when file creation fails', async () => {
+    const fixture = automaticP3Fixture();
+    const pipeline = automaticP3Pipeline(fixture, vi.fn(async () => successfulOracleInvocation()));
+    logisimTempFiles.writeFile.mockRejectedValueOnce(new Error('partial write'));
+
+    const result = await runP3LogisimTraceCase(
+      fixture.services,
+      { asm: fixture.asm as never, asmCase: fixture.asmCase as never },
+      {
+        source: { kind: 'generator' },
+        artifactOutputMode: 'case',
+        pipeline: pipeline as never,
+        logisim: fixture.logisim as never
+      }
+    );
+
+    expect(result).toMatchObject({ status: 'error', stage: 'dut' });
+    expect(logisimTempFiles.rm).toHaveBeenCalledOnce();
+    expect(pipeline.runLogisimDut).not.toHaveBeenCalled();
+  });
 });
 
 function automaticP3Fixture() {
@@ -354,6 +488,8 @@ function automaticP3Pipeline(
     validateProgram: vi.fn(() => []),
     copyArtifact: vi.fn(async () => undefined),
     updateArtifacts: vi.fn(async () => undefined),
+    runLogisimDut: vi.fn(),
+    compareTraces: vi.fn(),
     recordOracle: vi.fn(async () => undefined),
     runOracle
   };

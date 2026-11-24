@@ -248,7 +248,8 @@ describe('P1 module runs with .co/tb testbenches', () => {
 
     expect(result).toMatchObject({ moduleName: 'co_generated_auto_tb', kind: 'generated' });
     expect(result?.sourceUri).toBeUndefined();
-    expect(testbenchCompileSources(workspaceFolder, result!).map(normalized)).toEqual(['e:/work/.co/iverilog/co_generated_auto_tb.v']);
+    expect(result?.generatedText).toContain('module co_generated_auto_tb;');
+    expect(testbenchCompileSources(workspaceFolder, result!)).toEqual([]);
   });
 });
 

@@ -23,7 +23,7 @@ vi.mock('vscode', async () => {
 const engine = { id: 'builtin-ts', semanticsRevision: 1, capabilitiesRevision: 1 };
 
 describe('loadCaseInspection', () => {
-  it('loads a verified image and resolves its PC to the case-local source line and traces', async () => {
+  it.each(['include', 'compact'] as const)('resolves a verified PC and traces for a %s source graph', async (layout) => {
     // Hosted Windows runners may expose TEMP through a DOS short-path alias.
     const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'co-inspection-')));
     try {
@@ -33,17 +33,25 @@ describe('loadCaseInspection', () => {
       const sourceDir = path.join(root, 'source');
       await fs.mkdir(caseDir, { recursive: true });
       await fs.mkdir(sourceDir, { recursive: true });
-      const sourcePath = path.join(sourceDir, 'input.asm');
-      const sourceText = '.include "part.asm"\n.text\nnop\n';
+      const caseAsm = path.join(caseDir, 'program.asm');
       const includeText = '.text\nincluded: add $t0, $zero, $zero\n';
-      await fs.writeFile(sourcePath, sourceText);
-      await fs.writeFile(path.join(sourceDir, 'part.asm'), includeText);
-      const bundle = await captureSourceGraph(sourcePath, caseDir, undefined, undefined, { allowedRoot: sourceDir });
-      const rootUnit = bundle.graph.units.find((unit) => unit.id === bundle.graph.rootId)!;
+      const compact = layout === 'compact';
+      const sourceText = compact ? includeText : '.include "part.asm"\n.text\nnop\n';
       const asmBytes = Buffer.from(sourceText, 'utf8');
+      const sourcePath = path.join(sourceDir, 'input.asm');
+      if (!compact) {
+        await fs.writeFile(sourcePath, sourceText);
+        await fs.writeFile(path.join(sourceDir, 'part.asm'), includeText);
+        await fs.writeFile(caseAsm, asmBytes);
+      }
+      const bundle = compact
+        ? await captureSourceGraph(caseAsm, caseDir, undefined, undefined, { allowedRoot: root }, {
+          rootSnapshotPath: 'program.asm', inlineRoot: asmBytes
+        })
+        : await captureSourceGraph(sourcePath, caseDir, undefined, undefined, { allowedRoot: sourceDir });
+      const mappedSource = bundle.graph.units[compact ? 0 : 1];
       const traceBytes = Buffer.from('@00003000: $8 <= 00000000\n', 'utf8');
       const dutBytes = Buffer.from('@00003000: $8 <= 00000001\n', 'utf8');
-      await fs.writeFile(path.join(caseDir, 'program.asm'), asmBytes);
       await fs.writeFile(path.join(caseDir, 'code.txt'), '00000020\n');
       await fs.writeFile(path.join(caseDir, 'oracle.trace'), traceBytes);
       await fs.mkdir(path.join(caseDir, 'verilog'), { recursive: true });
@@ -56,7 +64,7 @@ describe('loadCaseInspection', () => {
         sourceMap: [{
           segmentIndex: 0,
           wordIndex: 0,
-          sourceId: bundle.graph.units.find((unit) => unit.id !== rootUnit.id)!.id,
+          sourceId: mappedSource.id,
           startOffset: includeText.indexOf('included:')
         }],
         inputGraph: bundle.graph.units.map((unit) => ({ id: unit.id, contentHash: unit.contentHash }))
@@ -105,9 +113,8 @@ describe('loadCaseInspection', () => {
       expect(inspection.logs[0]).not.toHaveProperty('text');
       expect(await loadCaseWritebackTexts(inspection)).toEqual({ oracle: traceBytes.toString('utf8'), dut: dutBytes.toString('utf8') });
       const location = findSourceAtPc(inspection, 0x3000);
-      const includedUnit = bundle.graph.units.find((unit) => unit.id !== rootUnit.id)!;
       expect(location).toMatchObject({ pc: 0x3000, line: 2, text: 'included: add $t0, $zero, $zero' });
-      expect(location?.uri.fsPath.toLowerCase()).toBe(path.join(caseDir, includedUnit.materializedPath.replace(/\//g, path.sep)).toLowerCase());
+      expect(location?.uri.fsPath.toLowerCase()).toBe(path.join(caseDir, ...mappedSource.materializedPath.split('/')).toLowerCase());
       expect(location?.uri.fsPath).not.toContain('private');
       expect(findSourceAtPc(inspection, 0x3004)).toBeUndefined();
 

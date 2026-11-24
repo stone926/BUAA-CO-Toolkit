@@ -13,7 +13,8 @@ import {
   prepareAsmCaseMachineCode,
   createAsmCaseFromAsm,
   readAsmCaseStdinSnapshot,
-  recordAsmCaseOracleResult
+  recordAsmCaseOracleResult,
+  writeAsmCaseArtifact
 } from '../../asmCaseStore';
 import { executeWithPreflight } from '../../mips/providers/providerResolver';
 import { runVerilogSimulation } from '../../verilog/simulationRunner';
@@ -49,7 +50,8 @@ vi.mock('../../asmCaseStore', () => ({
   readAsmCaseStdinSnapshot: vi.fn(async () => undefined),
   recordAsmCaseOracleResult: vi.fn(async () => undefined),
   readAsmCaseManifestForAsm: vi.fn(async () => undefined),
-  updateAsmCaseArtifacts: vi.fn(async () => undefined)
+  updateAsmCaseArtifacts: vi.fn(async () => undefined),
+  writeAsmCaseArtifact: vi.fn(async () => URI.file('E:/work/.co/cases/case-1/verilog/testbench.v'))
 }));
 
 vi.mock('../../mips/providers/providerResolver', () => ({
@@ -96,6 +98,7 @@ vi.mock('../../courseTesting/p7ProbeCheck', () => ({
 }));
 
 const callOrder: string[] = [];
+const privateTestbenchText = generatedRuntimeTestbenchText('module co_generated_auto_tb; endmodule\n');
 const testProgramImage = createLegacyProgramImage(
   '00000000\n1000ffff\n00000000\n',
   [{ id: 'root', contentHash: 'b'.repeat(64) }]
@@ -209,7 +212,7 @@ describe('course trace runner orchestration', () => {
           libDir: 'E:/runtime/lib', iverilogPath: 'E:/runtime/bin/iverilog.exe',
           vvpPath: 'E:/runtime/bin/vvp.exe'
         },
-        testbench: { moduleName: 'co_generated_auto_tb', kind: 'generated' },
+        testbench: { moduleName: 'co_generated_auto_tb', kind: 'generated', generatedText: privateTestbenchText },
         compileCacheHit: false,
         generated: {
           compiled: URI.file('E:/work/.co/iverilog/simulation.vvp'),
@@ -242,6 +245,7 @@ describe('course trace runner orchestration', () => {
     const result = await runCourseTraceCase(services(), { asm: URI.file('E:/work/src/test.asm') });
 
     expect(result.status).toBe('passed');
+    expect(writeAsmCaseArtifact).not.toHaveBeenCalled();
     expect(callOrder).toEqual(expect.arrayContaining(['create-case', 'dump', 'oracle', 'iverilog', 'compare']));
     expect(callOrder.indexOf('create-case')).toBeLessThan(callOrder.indexOf('dump'));
     expect(callOrder.indexOf('dump')).toBeLessThan(callOrder.indexOf('oracle'));
@@ -370,6 +374,7 @@ describe('course trace runner orchestration', () => {
       status: 'failed', stage: 'compare',
       firstDiff: { reason: expect.stringContaining('字节使能应为 0010') }
     });
+    expect(writeAsmCaseArtifact).toHaveBeenCalledExactlyOnceWith(expect.anything(), 'verilog', 'testbench.v', privateTestbenchText, 'testbenchSnapshot');
   });
 
   it('accepts a native ProgramImage assembler without a legacy source-reassembly binding', async () => {
@@ -806,7 +811,29 @@ describe('course trace runner orchestration', () => {
     const result = await runCourseTraceCase(services(), { asm: currentCase.asm, asmCase: currentCase });
     expect(vi.mocked(checkP7Probe).mock.calls[0][0]).toBe('complete line\n');
     expect(result.status).toBe(observed ? 'failed' : 'error');
+    expect(writeAsmCaseArtifact).not.toHaveBeenCalled();
     if (observed) expect(result.message).toBe('forbidden write');
+  });
+
+  it.each(['passed', 'failed', 'error'] as const)('keeps the P7 testbench according to the result of a completed probe (%s)', async status => {
+    const currentCase = makeAsmCase({ p7: { probe: { version: 1, logBase: 0x2800, recordWords: 8, scenarios: [] } } } as never);
+    const simulate = vi.mocked(runVerilogSimulation).getMockImplementation()!;
+    vi.mocked(runVerilogSimulation).mockImplementationOnce(async (...args) => ({
+      ...(await simulate(...args))!,
+      simResult: createTestRunResult({ stdout: status === 'error' ? 'trace\n' : 'trace\nCO_P7_HALT pc=00003004\n' })
+    }));
+    vi.mocked(checkP7Probe).mockReturnValueOnce({
+      passed: status !== 'failed', records: [], diagnostics: [], failures: status === 'failed'
+        ? [{ scenarioId: 1, kind: 'ades', message: 'forbidden write', observed: true }]
+        : []
+    });
+    if (status === 'failed') vi.mocked(writeAsmCaseArtifact).mockRejectedValueOnce(new Error('disk unavailable'));
+
+    const result = await runCourseTraceCase(services(), { asm: currentCase.asm, asmCase: currentCase });
+
+    expect(result).toMatchObject({ status, stage: 'probe' });
+    if (status === 'passed') expect(writeAsmCaseArtifact).not.toHaveBeenCalled();
+    else expect(writeAsmCaseArtifact).toHaveBeenCalledExactlyOnceWith(currentCase, 'verilog', 'testbench.v', privateTestbenchText, 'testbenchSnapshot');
   });
 
   it.each(['mars', 'verify-both'] as const)(

@@ -36,6 +36,8 @@ P3–P7 自动化测试：生成 ASM → 内置 TS assembler/ProgramImage → �
 
 **特殊点结果可见。** 特殊范围说明不替代测试判定：历史保存具体首个失败（场景、PC、期望与实际等有界摘要），显示通过/失败/错误；无明确终态时显示“无结果”或“已取消”，不从测试类别或产物推断通过。历史面板仅在打开时监视本工作区 `.co/cases/*/case.json`，合并变更后串行刷新。持续页在特殊点开始/结束时立即刷新，并在轮次表上方展示最近含特殊点的一轮及其真实结果；运行中的点尚无正误判定，特殊点的失败或工具错误不会中断其余测试。
 
+**单点文件。** 无 include、无额外输入的 P4–P6 通过点保存 8 个文件，分别是用例清单、ASM、源码图、机器码、程序映像、参考写回、参考事件和 CPU 写回。较大的映像与参考事件无损压缩。P7 定向检查只产生 DUT 侧运行记录。stdin、自定义指令、故障日志和请求的波形按实际使用情况保存。Icarus 私有 testbench 在编译缓存中复用，发生 DUT 故障时随用例保存。P3 在仿真时注入 ROM，DUT 故障用例保留当次电路。
+
 ## Pipeline
 
 - `pipeline/courseTracePipeline.ts` — 可注入的课程 Trace pipeline 对象（image policy、builtin oracle、backend-neutral DUT 执行与差分比较）

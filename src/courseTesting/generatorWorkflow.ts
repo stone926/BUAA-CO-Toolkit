@@ -223,6 +223,7 @@ export async function runGeneratorAndCollectAsms(
         },
         createdAt: generatedAt,
         enginePlan,
+        signal: options.signal,
         p7: {
           interruptSchedule: generated.interruptSchedule,
           probe: generated.probe

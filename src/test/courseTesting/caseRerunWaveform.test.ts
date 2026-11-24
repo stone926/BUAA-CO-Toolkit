@@ -6,6 +6,7 @@ import { spawnSync } from 'child_process';
 import * as vscode from 'vscode';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { courseRerunWaveformCapture } from '../../courseTesting/caseRerunWaveform';
+import { createAutomaticIverilogRunDirectory } from '../../verilog/automaticIverilogFiles';
 import { runVerilogSimulation, type VerilogSimulationRunOutput } from '../../verilog/simulationRunner';
 import { createTestServices, createTestRunResult } from '../helpers/appServices';
 import { parseVcd } from '../../waveform/vcd/vcdReader';
@@ -52,29 +53,37 @@ endmodule
 `);
     vi.mocked(vscode.workspace.fs.createDirectory).mockImplementation(async (uri) => { await fs.mkdir(uri.fsPath, { recursive: true }); });
     vi.mocked(runVerilogSimulation).mockImplementation(async (_services, options = {}) => {
-      const context = {
-        folder: { uri: vscode.Uri.file(root), name: 'fixture', index: 0 },
-        outDir: vscode.Uri.file(root),
-        testbench: { moduleName: 'private_course_tb', sourceUri: vscode.Uri.file(source) },
-        sourceFiles: [vscode.Uri.file(source)]
-      };
-      const tops = await options.generatedTopModules!(context as never);
-      for (const top of tops) await fs.writeFile(path.join(root, top.fileName), top.text);
-      await beforeCompile?.();
-      const compile = spawnSync(compiler, [
-        '-B', path.join(runtimeRoot, 'lib', 'ivl'), '-g2005', '-s', 'private_course_tb',
-        ...tops.flatMap((top) => ['-s', top.moduleName]), '-o', 'simulation.vvp', source,
-        ...tops.map((top) => top.fileName)
-      ], { cwd: root, encoding: 'utf8', timeout: 20000 });
-      const compileResult = createTestRunResult({ ok: compile.status === 0, exitCode: compile.status, stderr: compile.stderr, stdout: compile.stdout });
-      const output = { generated: { outDir: vscode.Uri.file(root) }, compileResult } as VerilogSimulationRunOutput;
-      if (compileResult.ok && options.acceptCompileResult!(compileResult)) {
-        const run = spawnSync(simulator, ['-N', 'simulation.vvp'], { cwd: root, encoding: 'utf8', timeout: 20000 });
-        output.simResult = createTestRunResult({ ok: run.status === 0, exitCode: run.status, stdout: run.stdout, stderr: run.stderr });
-        output.simOut = vscode.Uri.file(path.join(path.dirname(dump.fsPath), 'program.sim.out'));
-        await fs.writeFile(output.simOut.fsPath, run.stdout);
+      const scratch = await createAutomaticIverilogRunDirectory();
+      try {
+        const context = {
+          folder: { uri: vscode.Uri.file(root), name: 'fixture', index: 0 },
+          outDir: vscode.Uri.file(scratch.directory),
+          testbench: { moduleName: 'private_course_tb', sourceUri: vscode.Uri.file(source) },
+          sourceFiles: [vscode.Uri.file(source)]
+        };
+        const tops = await options.generatedTopModules!(context as never);
+        for (const top of tops) await fs.writeFile(path.join(scratch.directory, top.fileName), top.text);
+        await beforeCompile?.();
+        const processOptions = { cwd: scratch.directory, encoding: 'utf8' as const, timeout: 20000 };
+        const compile = spawnSync(compiler, [
+          '-B', path.join(runtimeRoot, 'lib', 'ivl'), '-g2005', '-s', 'private_course_tb',
+          ...tops.flatMap((top) => ['-s', top.moduleName]), '-o', 'simulation.vvp', source,
+          ...tops.map((top) => top.fileName)
+        ], processOptions);
+        const compileResult = createTestRunResult({ ok: compile.status === 0, exitCode: compile.status, stderr: compile.stderr, stdout: compile.stdout });
+        const output = { generated: { outDir: context.outDir }, compileResult } as VerilogSimulationRunOutput;
+        if (compileResult.ok && options.acceptCompileResult!(compileResult)) {
+          const run = spawnSync(simulator, ['-N', 'simulation.vvp'], processOptions);
+          output.simResult = createTestRunResult({ ok: run.status === 0, exitCode: run.status, stdout: run.stdout, stderr: run.stderr });
+          output.simOut = options.simOutputUri ?? vscode.Uri.file(path.join(path.dirname(dump.fsPath), 'program.sim.out'));
+          await fs.mkdir(path.dirname(output.simOut.fsPath), { recursive: true });
+          await fs.writeFile(output.simOut.fsPath, run.stdout);
+          await options.onSimulationComplete?.(output);
+        }
+        return output;
+      } finally {
+        await scratch.dispose();
       }
-      return output;
     });
   });
   afterEach(async () => { await fs.rm(root, { recursive: true, force: true }); });
@@ -90,7 +99,9 @@ endmodule
     };
     const run = await capture.runDut(services, options);
     expect(run?.simResult?.ok, run?.simResult?.stderr).toBe(true);
-    expect(capture.waveform?.fsPath).toBe(dump.fsPath);
+    await expect(fs.stat(run!.generated.outDir.fsPath)).rejects.toMatchObject({ code: 'ENOENT' });
+    expect(run?.simResult?.stdout).toContain('VCD info: dumpfile co-wave/program.vcd opened for output.');
+    expect(capture.waveform?.fsPath, capture.issue).toBe(dump.fsPath);
     expect(capture.issue).toBeUndefined();
     expect(vi.mocked(runVerilogSimulation).mock.calls[0][1]).toMatchObject(options);
     const data = parseVcd(await fs.readFile(dump.fsPath));
@@ -119,10 +130,14 @@ endmodule
   });
 
   it('reports missing dump provenance without inventing a waveform path', async () => {
-    vi.mocked(runVerilogSimulation).mockResolvedValue({
-      generated: { outDir: vscode.Uri.file(root) },
-      compileResult: createTestRunResult(), simResult: createTestRunResult({ stdout: 'CPU trace only' })
-    } as VerilogSimulationRunOutput);
+    vi.mocked(runVerilogSimulation).mockImplementation(async (_services, options) => {
+      const output = {
+        generated: { outDir: vscode.Uri.file(root) },
+        compileResult: createTestRunResult(), simResult: createTestRunResult({ stdout: 'CPU trace only' })
+      } as VerilogSimulationRunOutput;
+      await options?.onSimulationComplete?.(output);
+      return output;
+    });
     const capture = courseRerunWaveformCapture(dump);
     await capture.runDut(services, { nonInteractive: true });
     expect(capture.waveform).toBeUndefined();

@@ -1,4 +1,5 @@
 import * as fs from 'fs/promises';
+import { promises as nativeFs } from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
@@ -8,7 +9,8 @@ import { getProfile } from '../../config';
 import { rerunCourseTestCase } from '../../courseTesting/caseRerun';
 import { defaultCourseTracePipeline, runCourseTraceCase } from '../../courseTesting/traceRunner';
 import { resolveP3LogisimTraceSetup } from '../../courseTestLogisim';
-import { loadVerifiedSourceGraphInput } from '../../mips/replay/sourceBundle';
+import { captureSourceGraph, loadVerifiedSourceGraphInput } from '../../mips/replay/sourceBundle';
+import { sha256Bytes } from '../../asmCaseStoreCore';
 import { resolveCourseEnginePlan } from '../../mips/providers/courseEnginePolicy';
 import { createTestServices } from '../helpers/appServices';
 import { runVerilogSimulation } from '../../verilog/simulationRunner';
@@ -83,9 +85,14 @@ describe('saved automatic case rerun', () => {
     const manifest = copied.manifest;
     if (manifest.version !== 2) throw new Error('Expected v2');
     const graph = await loadVerifiedSourceGraphInput(copied.dir.fsPath, manifest.program.sourceGraph!.path);
-    expect(graph.sourceGraphInput.sources.map((unit) => unit.text).join('\n')).toContain('ori $t0,$0,1');
+    expect(original.manifest.version).toBe(2);
+    if (original.manifest.version !== 2) throw new Error('Expected v2');
+    const archived = await loadVerifiedSourceGraphInput(original.dir.fsPath, original.manifest.program.sourceGraph!.path);
+    expect(graph.sourceGraphInput).toEqual(archived.sourceGraphInput);
+    expect(graph.graph.graphFingerprint).toBe(archived.graph.graphFingerprint);
     expect(await fs.readFile(copied.stdin!.fsPath, 'utf8')).toBe('7\n');
     expect(item.stdin?.fsPath).toBe(original.stdin!.fsPath);
+    expect(manifest.stdin).toEqual({ ...original.manifest.stdin, originalPath: original.stdin!.fsPath });
     expect(manifest.metadata).toMatchObject({ 'source.seed': '123', 'source.instructionCount': '1118', 'rerun.originalCaseId': original.id });
     expect(manifest.metadata?.['source.sessionId']).toBeUndefined();
     expect(manifest.metadata?.['test.status']).toBeUndefined();
@@ -93,6 +100,40 @@ describe('saved automatic case rerun', () => {
     expect(manifest.oracle.engine.id).toContain('builtin');
     expect(await fs.readFile(original.manifestUri.fsPath)).toEqual(manifestBytes);
     expect(defaultCourseTracePipeline).not.toHaveBeenCalled();
+  });
+
+  it('reruns an old three-file single-source case with one independent ASM snapshot', async () => {
+    const file = path.join(root, 'old.asm');
+    const text = '.text\n_co_test_end:\nbeq $0,$0,_co_test_end\nnop\n';
+    await fs.writeFile(file, text);
+    const original = await createAsmCaseFromAsm(vscode.Uri.file(file));
+    if (original.manifest.version !== 2) throw new Error('Expected v2');
+    const graphFile = path.join(original.dir.fsPath, 'source', 'graph.json');
+    await fs.chmod(graphFile, 0o644);
+    await fs.unlink(graphFile);
+    const legacy = await captureSourceGraph(file, original.dir.fsPath);
+    const graphBytes = await fs.readFile(legacy.graphPath);
+    const snapshot = { path: 'source/graph.json', bytes: graphBytes.byteLength, sha256: sha256Bytes(graphBytes) };
+    const unit = legacy.graph.units[0];
+    original.manifest.program.sourceGraph = snapshot;
+    original.manifest.artifacts!.source = {
+      graph: snapshot,
+      [`blob/${unit.contentHash}`]: { ...original.manifest.asmSnapshot, path: unit.blobPath },
+      [`materialized/${unit.id}`]: { ...original.manifest.asmSnapshot, path: unit.materializedPath }
+    };
+    original.sourceAsm = vscode.Uri.file(legacy.rootMaterializedPath);
+    await fs.writeFile(original.manifestUri.fsPath, JSON.stringify(original.manifest));
+    expect(original.sourceAsm.fsPath).not.toBe(original.asm.fsPath);
+    await fs.unlink(file);
+
+    const { result } = await rerunCourseTestCase(services, original);
+    expect(result.stage, result.message).toBe('compare');
+    const rerun = vi.mocked(runCourseTraceCase).mock.calls[0][1].asmCase!;
+    expect(rerun.sourceAsm.fsPath).toBe(rerun.asm.fsPath);
+    expect(rerun.asm.fsPath).not.toBe(original.asm.fsPath);
+    expect(await fs.readFile(rerun.asm.fsPath, 'utf8')).toBe(text);
+    expect(await fs.readdir(path.join(rerun.dir.fsPath, 'source'))).toEqual(['graph.json']);
+    expect(await asmCaseSourceSnapshotIssue(rerun)).toBeUndefined();
   });
 
   it('refuses a changed course profile without creating a result bound to the original case', async () => {
@@ -114,6 +155,36 @@ describe('saved automatic case rerun', () => {
     expect(result.caseId).toBeUndefined();
     expect(runCourseTraceCase).not.toHaveBeenCalled();
     expect(await fs.readdir(path.dirname(original.dir.fsPath))).toHaveLength(1);
+  });
+
+  it('rejects stdin altered only during the archive copy and leaves no new case', async () => {
+    const original = await savedCase(true);
+    const archive = original.stdin!.fsPath;
+    const graph = path.join(original.dir.fsPath, 'source', 'graph.json');
+    const open = nativeFs.open.bind(nativeFs);
+    let copyStarted = false;
+    const fileOpen = vi.spyOn(nativeFs, 'open').mockImplementation(async (file, ...options) => {
+      if (typeof file === 'string' && path.relative(graph, file) === '') {
+        copyStarted = true;
+        await fs.writeFile(archive, '9\n');
+      }
+      const handle = await open(file, ...options);
+      if (copyStarted && typeof file === 'string' && path.relative(archive, file) === '') {
+        const close = handle.close.bind(handle);
+        vi.spyOn(handle, 'close').mockImplementation(async () => {
+          await close();
+          await fs.writeFile(archive, '7\n');
+        });
+      }
+      return handle;
+    });
+    try {
+      const { result } = await rerunCourseTestCase(services, original);
+      expect(result).toMatchObject({ status: 'error', message: expect.stringContaining('stdin snapshot 已偏离 case manifest') });
+      expect(runCourseTraceCase).not.toHaveBeenCalled();
+      expect(await fs.readdir(path.dirname(original.dir.fsPath))).toEqual([original.id]);
+    } finally { fileOpen.mockRestore(); }
+    expect(await fs.readFile(archive, 'utf8')).toBe('7\n');
   });
 
   it('routes P3 through the existing Logisim setup and refuses VCD capture', async () => {
@@ -143,10 +214,14 @@ describe('saved automatic case rerun', () => {
   it('preserves the CPU failure verdict when waveform capture fails', async () => {
     const original = await savedCase();
     vi.mocked(defaultCourseTracePipeline).mockImplementation((overrides) => overrides as never);
-    vi.mocked(runVerilogSimulation).mockResolvedValue({
-      generated: { outDir: vscode.Uri.file(root) }, compileResult: createTestRunResult(),
-      simResult: createTestRunResult({ stdout: 'CPU output without a dump declaration' })
-    } as never);
+    vi.mocked(runVerilogSimulation).mockImplementation(async (_services, options) => {
+      const output = {
+        generated: { outDir: vscode.Uri.file(root) }, compileResult: createTestRunResult(),
+        simResult: createTestRunResult({ stdout: 'CPU output without a dump declaration' })
+      } as never;
+      await options?.onSimulationComplete?.(output);
+      return output;
+    });
     vi.mocked(runCourseTraceCase).mockImplementation(async (_services, item, options) => {
       await options!.pipeline!.runDut(services, { nonInteractive: true });
       return { asm: item.asm.fsPath, caseId: item.asmCase!.id, status: 'failed', stage: 'compare', message: 'CPU difference' };
@@ -187,7 +262,7 @@ describe('saved automatic case rerun', () => {
     const original = await savedCase();
     if (original.manifest.version !== 2) throw new Error('Expected v2');
     original.manifest.program.sourceGraph!.sha256 = 'f'.repeat(64);
-    expect(await asmCaseSourceSnapshotIssue(original)).toBeUndefined();
+    expect(await asmCaseSourceSnapshotIssue(original)).toContain('已偏离 manifest 指纹');
     const { result } = await rerunCourseTestCase(services, original);
     expect(result.message).toContain('已偏离 manifest 指纹');
     expect(runCourseTraceCase).not.toHaveBeenCalled();

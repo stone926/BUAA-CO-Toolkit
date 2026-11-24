@@ -1,7 +1,6 @@
 // @index verilog-testbench-resolver — Verilog testbench 发现、生成和 case 记录
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { CO_IVERILOG_DIR } from '../constants';
 import {
   getProfile,
   getTestbench,
@@ -10,7 +9,7 @@ import {
 import { buildTestbench, moduleAtPosition, type CustomInstructionEncodingMask } from '../language/verilog/moduleUtils';
 import { isCompleteVerilogModuleDeclaration, parseVerilogModuleDeclarations } from '../language/verilog/moduleDeclarations';
 import type { VerilogModule } from '../language/verilog/model';
-import { ensureDirectory, isFile, pathExists, workspaceFolderFor, workspaceFolderForOrFirst, writeTextFile } from '../fsUtil';
+import { isFile, workspaceFolderFor, workspaceFolderForOrFirst } from '../fsUtil';
 import { AppServices } from '../types';
 import { P7ProbeMetadata } from '../courseTesting/builtinAsmGenerator';
 import type { MutableVerilogModuleProvider } from '../language/verilog/moduleProvider';
@@ -18,14 +17,14 @@ import type { ConcreteProjectProfile } from '../projectProfile';
 import {
   AsmCase,
   copyAsmCaseArtifact,
-  updateAsmCaseMetadata
+  updateAsmCaseMetadata,
+  writeAsmCaseArtifact
 } from '../asmCaseStore';
 import { sha256Bytes } from '../asmCaseStoreCore';
 import {
   automaticRuntimeTestbenchName,
   generatedRuntimeTestbenchText,
   isCustomTestbenchPath,
-  isGeneratedRuntimeTestbench,
   isPrivateRuntimeTestbenchPath,
   p7AutoRuntimeTestbenchName,
   verilogProjectExcludeGlob
@@ -63,7 +62,7 @@ export interface TestbenchResolution {
   sourceUri?: vscode.Uri;
   generatedUri?: vscode.Uri;
   sha256?: string;
-  /** Retained private template text; shared compilation need not reopen the slot copy. */
+  /** Private template resolved in memory and written only at its compile location. */
   generatedText?: string;
 }
 
@@ -76,8 +75,6 @@ export interface TestbenchResolutionOptions {
   customInstructionEncodings?: readonly CustomInstructionEncodingMask[];
   /** Internal automation lane: suppress UI/path details and let the runner control termination. */
   nonInteractive?: boolean;
-  /** Private automatic simulation directory; prevents case-specific P7 stimuli from racing. */
-  runtimeDirectory?: vscode.Uri;
   /** Prepare CPU input before creating its runnable user template; false cancels. */
   beforeCreateUserCpuTestbench?: (uri: vscode.Uri, profile: UserCpuTestbenchProfile) => Promise<boolean>;
 }
@@ -122,8 +119,7 @@ export function testbenchCompileSources(
 
 /**
  * For P7 automated trace runs that inject an external interrupt, generate a dedicated testbench
- * (the official P7 interrupt testbench with the interrupt block active and target_pc baked in)
- * under .co/iverilog, without overwriting the student's own testbench.
+ * (the official P7 interrupt testbench with the interrupt block active and target_pc baked in).
  */
 export async function ensureP7InterruptTestbench(
   _services: AppServices,
@@ -142,29 +138,13 @@ export async function ensureP7InterruptTestbench(
   if (!topDefinition) {
     return undefined;
   }
-  const folder = workspaceFolderFor(resource) ?? workspaceFolderForOrFirst(topDefinition.uri);
-  const baseDir = folder?.uri.fsPath ?? path.dirname(topDefinition.uri.fsPath);
-  const outDir = options.runtimeDirectory ?? vscode.Uri.file(path.join(baseDir, CO_IVERILOG_DIR));
-  await ensureDirectory(outDir);
-  const tbUri = vscode.Uri.file(path.join(outDir.fsPath, `${p7AutoRuntimeTestbenchName}.v`));
   const testbenchText = buildTestbench(topDefinition.module, p7AutoRuntimeTestbenchName, {
     profile: 'P7',
     interruptSchedule,
     p7Probe,
     customInstructionEncodings: options.customInstructionEncodings
   });
-  const sha256 = await writeGeneratedRuntimeTestbench(tbUri, testbenchText, options);
-  if (!sha256) {
-    return undefined;
-  }
-  return {
-    moduleName: p7AutoRuntimeTestbenchName,
-    kind: 'p7-auto',
-    designSourceUri: topDefinition.uri,
-    generatedUri: tbUri,
-    generatedText: generatedRuntimeTestbenchText(testbenchText),
-    sha256
-  };
+  return privateTestbenchResolution(p7AutoRuntimeTestbenchName, 'p7-auto', topDefinition.uri, testbenchText);
 }
 
 export async function ensureRunnableTestbench(
@@ -186,24 +166,12 @@ export async function ensureRunnableTestbench(
     if (!topDefinition) {
       return undefined;
     }
-    const tbUri = await privateRuntimeTestbenchUri(topDefinition.uri, automaticRuntimeTestbenchName, options.runtimeDirectory);
     const testbenchText = buildTestbench(topDefinition.module, automaticRuntimeTestbenchName, {
-        finishDelay: false,
-        profile: getProfile(topDefinition.uri),
-        customInstructionEncodings: options.customInstructionEncodings
-      });
-    const sha256 = await writeGeneratedRuntimeTestbench(tbUri, testbenchText, options);
-    if (!sha256) {
-      return undefined;
-    }
-    return {
-      moduleName: automaticRuntimeTestbenchName,
-      kind: 'generated',
-      designSourceUri: topDefinition.uri,
-      generatedUri: tbUri,
-      generatedText: generatedRuntimeTestbenchText(testbenchText),
-      sha256
-    };
+      finishDelay: false,
+      profile: getProfile(topDefinition.uri),
+      customInstructionEncodings: options.customInstructionEncodings
+    });
+    return privateTestbenchResolution(automaticRuntimeTestbenchName, 'generated', topDefinition.uri, testbenchText);
   }
 
   const configuredTestbench = getTestbench(resource);
@@ -334,11 +302,13 @@ export async function findUserTestbenchSourceUris(
 }
 
 export async function recordTestbenchForAsmCase(asmCase: AsmCase, resolution: TestbenchResolution): Promise<void> {
-  const source = resolution.sourceUri ?? resolution.generatedUri;
   const metadata: Record<string, string> = {
     'dut.verilog.testbenchModule': resolution.moduleName,
     'dut.verilog.testbenchKind': resolution.kind
   };
+  // Private shells are reproduced from case inputs. Keep their exact identity
+  // without treating a mutable compile-cache source as a historical artifact.
+  const source = resolution.sourceUri;
   if (source) {
     metadata['dut.verilog.testbenchSource'] = source.fsPath;
     await copyAsmCaseArtifact(
@@ -353,10 +323,25 @@ export async function recordTestbenchForAsmCase(asmCase: AsmCase, resolution: Te
       })
     );
     return;
-  } else if (resolution.sha256) {
+  }
+  if (resolution.sha256) {
     metadata['dut.verilog.testbenchSha256'] = resolution.sha256;
   }
   await updateAsmCaseMetadata(asmCase, metadata);
+}
+
+export async function savePrivateTestbenchFailure(
+  asmCase: AsmCase,
+  resolution: TestbenchResolution,
+  services: AppServices,
+  signal?: AbortSignal
+): Promise<void> {
+  if (signal?.aborted || resolution.generatedText === undefined || resolution.sourceUri) return;
+  try {
+    await writeAsmCaseArtifact(asmCase, 'verilog', 'testbench.v', resolution.generatedText, 'testbenchSnapshot');
+  } catch {
+    services.output.appendLine('Icarus Verilog 私有 testbench 未能写入测试历史');
+  }
 }
 
 async function resolveActiveModuleTestbench(
@@ -422,14 +407,6 @@ async function createAndOpenUserTestbench(
     }
   }
   await vscode.window.showTextDocument(tbUri, { preview: false });
-}
-
-async function privateRuntimeTestbenchUri(resource: vscode.Uri, moduleName: string, runtimeDirectory?: vscode.Uri): Promise<vscode.Uri> {
-  const folder = workspaceFolderForOrFirst(resource);
-  const baseDir = folder?.uri.fsPath ?? path.dirname(resource.fsPath);
-  const outDir = runtimeDirectory ?? vscode.Uri.file(path.join(baseDir, CO_IVERILOG_DIR));
-  await ensureDirectory(outDir);
-  return vscode.Uri.file(path.join(outDir.fsPath, `${moduleName}.v`));
 }
 
 async function testbenchCandidates(
@@ -513,37 +490,14 @@ async function scanWorkspaceModulesByName(resource: vscode.Uri, moduleName: stri
   return found;
 }
 
-async function writeGeneratedRuntimeTestbench(
-  uri: vscode.Uri,
-  testbenchText: string,
-  options: TestbenchResolutionOptions = {}
-): Promise<string | undefined> {
-  const next = generatedRuntimeTestbenchText(testbenchText);
-  const sha256 = sha256Bytes(Buffer.from(next, 'utf8'));
-  if (await pathExists(uri.fsPath)) {
-    const existing = await readTextFileSafe(uri);
-    if (!isGeneratedRuntimeTestbench(existing)) {
-      if (!options.nonInteractive) {
-        vscode.window.showErrorMessage(`不会覆盖非插件生成的 testbench：${uri.fsPath}`);
-      }
-      return undefined;
-    }
-    if (existing === next) {
-      return sha256;
-    }
-  }
-  await writeTextFile(uri, next);
-  return sha256;
-}
-
-async function readTextFileSafe(uri: vscode.Uri): Promise<string> {
-  try {
-    const bytes = await vscode.workspace.fs.readFile(uri);
-    return Buffer.from(bytes).toString('utf8');
-  } catch {
-    // 读取失败时按空文件处理，调用方只用它做生成标记检查
-    return '';
-  }
+function privateTestbenchResolution(
+  moduleName: string,
+  kind: 'generated' | 'p7-auto',
+  designSourceUri: vscode.Uri,
+  text: string
+): TestbenchResolution {
+  const generatedText = generatedRuntimeTestbenchText(text);
+  return { moduleName, kind, designSourceUri, generatedText, sha256: sha256Bytes(Buffer.from(generatedText, 'utf8')) };
 }
 
 async function activeModuleDefinition(resource: vscode.Uri | undefined): Promise<VerilogModuleDefinition | undefined> {

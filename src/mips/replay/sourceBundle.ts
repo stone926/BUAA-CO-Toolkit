@@ -25,6 +25,20 @@ export interface SourceCapturePolicy {
   allowedRoot: string;
 }
 
+interface SourceFileSnapshot {
+  readonly path: string;
+  readonly sha256: string;
+  readonly bytes: number;
+}
+
+type SourceGraphReference = string | SourceFileSnapshot;
+
+interface CaseSourceLayout {
+  readonly rootSnapshotPath: string;
+  /** Generated root bytes available before any case file exists. */
+  readonly inlineRoot?: Buffer;
+}
+
 export const defaultSourceCaptureLimits: Readonly<SourceCaptureLimits> = Object.freeze({
   maxDepth: 32,
   maxUnits: 256,
@@ -86,24 +100,22 @@ interface IncludeDirective {
 }
 
 /**
- * Capture the root plus every recursive MARS `.include "..."` input exactly once. Original
- * bytes live in content-addressed blobs. A separate rewritten materialization keeps include
- * semantics while removing all dependencies on original absolute paths.
+ * Capture the root and recursive MARS includes. Keep original bytes and
+ * materialize rewritten directives when the case must resolve them locally.
  */
 export async function captureSourceGraph(
   rootFile: string,
   caseDir: string,
   expectedRootBytes?: Uint8Array,
   limits: SourceCaptureLimits = { ...defaultSourceCaptureLimits },
-  policy: SourceCapturePolicy = { allowedRoot: path.dirname(path.resolve(rootFile)) }
+  policy: SourceCapturePolicy = { allowedRoot: path.dirname(path.resolve(rootFile)) },
+  caseLayout?: CaseSourceLayout
 ): Promise<CapturedSourceBundle> {
   assertLimits(limits);
   const allowedRoot = await fs.promises.realpath(policy.allowedRoot);
   if (!(await fs.promises.stat(allowedRoot)).isDirectory()) {
     throw new Error(`source capture allowedRoot is not a directory: ${policy.allowedRoot}`);
   }
-  const sourceDir = path.join(caseDir, 'source');
-
   const units: DiscoveredUnit[] = [];
   // Stable MARS stores the include filename string in one global HashMap. It
   // does not realpath-normalize it, so `lib.asm` and `./lib.asm` are distinct.
@@ -112,15 +124,19 @@ export async function captureSourceGraph(
 
   const discover = async (file: string, depth: number): Promise<DiscoveredUnit> => {
     if (depth > limits.maxDepth) throw new Error(`source include depth exceeds ${limits.maxDepth}`);
-    const realPath = await fs.promises.realpath(file);
+    const inlineRoot = depth === 0 ? caseLayout?.inlineRoot : undefined;
+    const realPath = inlineRoot
+      ? path.join(await fs.promises.realpath(path.dirname(file)), path.basename(file))
+      : await fs.promises.realpath(file);
     assertPathContained(allowedRoot, realPath);
     if (units.length >= limits.maxUnits) throw new Error(`source graph exceeds ${limits.maxUnits} units`);
 
-    const bytes = await readBoundedRegularFile(realPath, {
+    const bytes = inlineRoot ?? await readBoundedRegularFile(realPath, {
       maximumBytes: limits.maxBytes - totalBytes,
       label: `source graph byte limit for ${realPath}`
     });
     totalBytes += bytes.byteLength;
+    if (totalBytes > limits.maxBytes) throw new Error(`source graph exceeds ${limits.maxBytes} bytes`);
     if (depth === 0 && expectedRootBytes && !Buffer.from(expectedRootBytes).equals(bytes)) {
       throw new Error('root ASM changed while its immutable case snapshot was being captured');
     }
@@ -153,22 +169,49 @@ export async function captureSourceGraph(
   };
 
   const root = await discover(rootFile, 0);
+  return persistSourceGraph(caseDir, root, units, limits, caseLayout?.rootSnapshotPath);
+}
+
+async function persistSourceGraph(
+  caseDir: string,
+  root: DiscoveredUnit,
+  units: readonly DiscoveredUnit[],
+  limits: SourceCaptureLimits,
+  rootSnapshotPath?: string
+): Promise<CapturedSourceBundle> {
+  if (rootSnapshotPath && !safeRelative(rootSnapshotPath)) {
+    throw new Error(`unsafe case root source path: ${rootSnapshotPath}`);
+  }
   const edges: SourceGraphEdge[] = [];
   const graphUnits: SourceGraphUnit[] = [];
+  const blobsByHash = new Map<string, string>();
   for (const unit of units) {
     const materializedName = `${unit.id}${safeAsmExtension(unit.realPath)}`;
-    const materializedRelative = posixPath('source', 'materialized', materializedName);
+    const unchanged = unit.directives.length === 0;
+    const materializedRelative = rootSnapshotPath && unit === root && unchanged
+      ? rootSnapshotPath
+      : posixPath('source', 'materialized', materializedName);
+    // Reuse unchanged assembler files as immutable blobs. Each include still
+    // gets a distinct materialized name to match MARS filename identity.
+    let blobRelative = blobsByHash.get(unit.contentHash);
+    if (blobRelative === undefined) {
+      if (rootSnapshotPath && unit === root) blobRelative = rootSnapshotPath;
+      else if (rootSnapshotPath && unchanged) blobRelative = materializedRelative;
+      else blobRelative = posixPath('source', 'blobs', `${unit.contentHash}.bin`);
+      await writeImmutableFile(path.join(caseDir, ...blobRelative.split('/')), unit.bytes);
+      blobsByHash.set(unit.contentHash, blobRelative);
+    }
     const rewritten = rewriteIncludes(unit, materializedName, units);
-    const blobRelative = posixPath('source', 'blobs', `${unit.contentHash}.bin`);
-    await writeImmutableFile(path.join(caseDir, ...blobRelative.split('/')), unit.bytes);
-    await writeImmutableFile(path.join(caseDir, ...materializedRelative.split('/')), rewritten);
+    if (materializedRelative !== blobRelative) {
+      await writeImmutableFile(path.join(caseDir, ...materializedRelative.split('/')), rewritten);
+    }
     graphUnits.push({
       id: unit.id,
       contentHash: unit.contentHash,
       bytes: unit.bytes.byteLength,
       blobPath: blobRelative,
       materializedPath: materializedRelative,
-      materializedHash: sha256Bytes(rewritten),
+      materializedHash: unchanged ? unit.contentHash : sha256Bytes(rewritten),
       provenanceUri: unit.provenanceUri
     });
     unit.directives.forEach((directive, ordinal) => {
@@ -193,7 +236,7 @@ export async function captureSourceGraph(
     edges
   };
   graph.graphFingerprint = sourceGraphFingerprint(graph);
-  const graphPath = path.join(sourceDir, 'graph.json');
+  const graphPath = path.join(caseDir, 'source', 'graph.json');
   await writeImmutableFile(graphPath, Buffer.from(`${canonicalJson(graph as unknown as CanonicalJson)}\n`, 'utf8'));
   const rootUnit = graphUnits.find((unit) => unit.id === root.id)!;
   return {
@@ -202,6 +245,31 @@ export async function captureSourceGraph(
     rootMaterializedPath: path.join(caseDir, ...rootUnit.materializedPath.split('/')),
     inputGraph: graphUnits.map((unit) => ({ id: unit.id, contentHash: unit.contentHash }))
   };
+}
+
+/** Copy authenticated original source bytes, preserving provenance and include spelling. */
+export async function copySourceGraph(
+  caseDir: string,
+  graphSnapshot: SourceFileSnapshot,
+  expectedRoot: SourceFileSnapshot,
+  destination: string,
+  rootSnapshotPath: string
+): Promise<CapturedSourceBundle> {
+  const { graph, rawUnits } = await loadAndVerifySourceGraphState(caseDir, graphSnapshot);
+  const root = rawUnits.get(graph.rootId)!;
+  if (root.contentHash !== expectedRoot.sha256.toLowerCase() || root.bytes.byteLength !== expectedRoot.bytes) {
+    throw new Error('captured SourceUnit graph root does not match case-local ASM snapshot');
+  }
+  if (graph.units[0].blobPath !== expectedRoot.path) {
+    const originalFile = await resolveContainedRegularFile(caseDir, expectedRoot.path);
+    const originalBytes = await readBoundedRegularFile(originalFile, {
+      maximumBytes: graph.limits.maxBytes,
+      expectedBytes: expectedRoot.bytes,
+      label: 'case-local ASM snapshot'
+    });
+    if (!originalBytes.equals(root.bytes)) throw new Error('case-local ASM snapshot does not match the captured SourceUnit root');
+  }
+  return persistSourceGraph(destination, root, [...rawUnits.values()], graph.limits, rootSnapshotPath);
 }
 
 function assertPathContained(root: string, candidate: string): void {
@@ -228,21 +296,31 @@ export function sourceGraphFingerprint(graph: Omit<SourceGraphBundle, 'graphFing
   });
 }
 
-export async function loadAndVerifySourceGraph(caseDir: string, graphRelativePath: string): Promise<SourceGraphBundle> {
-  return (await loadAndVerifySourceGraphState(caseDir, graphRelativePath)).graph;
+export async function loadAndVerifySourceGraph(
+  caseDir: string,
+  reference: SourceGraphReference
+): Promise<SourceGraphBundle> {
+  return (await loadAndVerifySourceGraphState(caseDir, reference)).graph;
 }
 
 async function loadAndVerifySourceGraphState(
   caseDir: string,
-  graphRelativePath: string
+  reference: SourceGraphReference
 ): Promise<{ graph: SourceGraphBundle; rawUnits: Map<string, DiscoveredUnit> }> {
+  const snapshot = typeof reference === 'string' ? undefined : reference;
+  const graphRelativePath = typeof reference === 'string' ? reference : reference.path;
   const graphFile = await resolveContainedRegularFile(caseDir, graphRelativePath);
+  const graphBytes = await readBoundedRegularFile(graphFile, {
+    maximumBytes: maximumSourceGraphJsonBytes,
+    expectedBytes: snapshot?.bytes,
+    label: 'source graph JSON'
+  });
+  if (snapshot && sha256Bytes(graphBytes) !== snapshot.sha256.toLowerCase()) {
+    throw new Error('ASM/include 闭包已偏离 manifest 指纹');
+  }
   let graph: unknown;
   try {
-    graph = JSON.parse((await readBoundedRegularFile(graphFile, {
-      maximumBytes: maximumSourceGraphJsonBytes,
-      label: 'source graph JSON'
-    })).toString('utf8')) as unknown;
+    graph = JSON.parse(graphBytes.toString('utf8')) as unknown;
   } catch (error) {
     throw new Error(`source graph JSON is invalid: ${error instanceof Error ? error.message : String(error)}`);
   }
@@ -250,17 +328,18 @@ async function loadAndVerifySourceGraphState(
   if (structural.length) throw new Error(structural.join('; '));
   const typed = graph as SourceGraphBundle;
   const rawUnits = new Map<string, DiscoveredUnit>();
-  const materializedFiles = new Map<string, string>();
+  const blobReads = new Map<string, Buffer>();
   for (const unit of typed.units) {
-    const [blob, materialized] = await Promise.all([
-      resolveContainedRegularFile(caseDir, unit.blobPath),
-      resolveContainedRegularFile(caseDir, unit.materializedPath)
-    ]);
-    const blobBytes = await readBoundedRegularFile(blob, {
-      maximumBytes: typed.limits.maxBytes,
-      expectedBytes: unit.bytes,
-      label: `source graph unit ${unit.id} blob`
-    });
+    let blobBytes = blobReads.get(unit.blobPath);
+    if (!blobBytes) {
+      const blob = await resolveContainedRegularFile(caseDir, unit.blobPath);
+      blobBytes = await readBoundedRegularFile(blob, {
+        maximumBytes: typed.limits.maxBytes,
+        expectedBytes: unit.bytes,
+        label: `source graph unit ${unit.id} blob`
+      });
+      blobReads.set(unit.blobPath, blobBytes);
+    }
     if (blobBytes.byteLength !== unit.bytes || sha256Bytes(blobBytes) !== unit.contentHash) {
       throw new Error(`source graph unit ${unit.id} blob bytes/hash mismatch`);
     }
@@ -294,22 +373,26 @@ async function loadAndVerifySourceGraphState(
         targetId: declaredEdges[index].to
       }))
     });
-    materializedFiles.set(unit.id, materialized);
   }
   for (const unit of typed.units) {
+    const original = rawUnits.get(unit.id)!;
     const reconstructed = rewriteIncludes(
-      rawUnits.get(unit.id)!,
+      original,
       path.basename(unit.materializedPath),
       [...rawUnits.values()]
     );
-    if (sha256Bytes(reconstructed) !== unit.materializedHash) {
+    const reconstructedHash = reconstructed === original.bytes ? original.contentHash : sha256Bytes(reconstructed);
+    if (reconstructedHash !== unit.materializedHash) {
       throw new Error(`source graph unit ${unit.id} materialized view is not derived from its immutable blob/edges`);
     }
-    const materializedBytes = await readBoundedRegularFile(materializedFiles.get(unit.id)!, {
-      maximumBytes: typed.limits.maxBytes,
-      expectedBytes: reconstructed.byteLength,
-      label: `source graph unit ${unit.id} materialized view`
-    });
+    const materializedBytes = blobReads.get(unit.materializedPath) ?? await readBoundedRegularFile(
+      await resolveContainedRegularFile(caseDir, unit.materializedPath),
+      {
+        maximumBytes: typed.limits.maxBytes,
+        expectedBytes: reconstructed.byteLength,
+        label: `source graph unit ${unit.id} materialized view`
+      }
+    );
     if (!materializedBytes.equals(reconstructed)) {
       throw new Error(`source graph unit ${unit.id} materialized bytes do not equal the derived view`);
     }
@@ -338,9 +421,9 @@ export interface VerifiedSourceGraphInput {
 /** Load the immutable original source identities used by both production assembly and replay. */
 export async function loadVerifiedSourceGraphInput(
   caseDir: string,
-  graphRelativePath: string
+  reference: SourceGraphReference
 ): Promise<VerifiedSourceGraphInput> {
-  const { graph, rawUnits } = await loadOriginalSourceGraph(caseDir, graphRelativePath);
+  const { graph, rawUnits } = await loadAndVerifySourceGraphState(caseDir, reference);
   return {
     graph,
     sourceGraphInput: {
@@ -376,7 +459,7 @@ export async function materializeSourceGraph(
     includes: Array<{ fromId: string; specifier: string; toId: string }>;
   };
 }> {
-  const { graph, rawUnits } = await loadOriginalSourceGraph(caseDir, graphRelativePath);
+  const { graph, rawUnits } = await loadAndVerifySourceGraphState(caseDir, graphRelativePath);
   await fs.promises.mkdir(destination, { recursive: true });
   for (const unit of graph.units) {
     const discovered = rawUnits.get(unit.id)!;
@@ -408,15 +491,6 @@ export async function materializeSourceGraph(
       }))
     }
   };
-}
-
-async function loadOriginalSourceGraph(
-  caseDir: string,
-  graphRelativePath: string
-): Promise<{ graph: SourceGraphBundle; rawUnits: Map<string, DiscoveredUnit> }> {
-  // The verifier already read, hashed and parsed every immutable blob. Reuse those
-  // exact bytes as one atomic snapshot instead of reopening every file immediately.
-  return await loadAndVerifySourceGraphState(caseDir, graphRelativePath);
 }
 
 export function sourceGraphIssues(value: unknown): string[] {
@@ -660,7 +734,8 @@ async function resolveContainedRegularFile(rootDir: string, relativePath: string
   const real = await fs.promises.realpath(candidate);
   const relative = path.relative(root, real);
   if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) throw new Error('source bundle path escapes case directory');
-  const stat = await fs.promises.lstat(real);
+  const stat = await fs.promises.lstat(candidate);
+  if (path.relative(candidate, real)) throw new Error('source bundle path contains a symlink');
   if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('source bundle path is not a regular non-symlink file');
   return real;
 }

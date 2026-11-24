@@ -1,4 +1,4 @@
-# test-suite | src/test/ | 313 test files | 框架: Vitest
+# test-suite | src/test/ | 316 test files | 框架: Vitest
 
 `helpers/testTimeouts.ts` 统一测试时限：Vitest 默认单测 60 秒、准备/清理钩子 120 秒，真实 Icarus 子进程 30 秒，给并发编译和大量文件操作预留调度余量；性能回归及专门验证取消/超时行为的用例保留自身预算，不改变生产工具时限。
 
@@ -18,7 +18,7 @@
 | `test/`（根） | 60 | 配置/Profile、工具链、进程、报告、侧边栏、模板、fixture 快照 |
 | `test/courseTesting/` | 53 | 生成器、oracle 差分、manifest v1/v2、probe 场景与 DUT 契约 |
 | `test/mipsCore/` | 27 | ISA golden、汇编器、执行器、devices/events 与架构调试会话 |
-| `test/verilog/` | 20 | 真实 bundled Icarus：语言语义差分、内置诊断正反例、诊断位置、时间尺度、格式化等价性、DM store 契约、runtime/runner/缓存失效 |
+| `test/verilog/` | 22 | 真实 bundled Icarus 的语言语义、诊断、时间尺度、格式化等价性、DM store 契约、运行目录与编译缓存 |
 | `test/waveform/` | 11 | VCD 解析、进制与反汇编、视窗/标记/行模型、宿主与面板、设计 dump |
 | `test/mips{Providers,Host,Replay,Cli,Debug}/` | 31 | engine plan、Worker protocol v2/ACK/cancel、bundle 完整性、JSONL CLI 与工作台会话/Worker 边界 |
 | `test/mips/` | 4 | 跨模块集成 |
@@ -31,6 +31,8 @@ Verilog 修复回归包含类型化四态常量与上下文传播、非零/升�
 `language/verilog/projectInference.test.ts` 覆盖自动工程的嵌套目录边界、共享模块/include、真实歧义、增量更新、显式配置优先及扫描期间诊断抑制；`verilog/projectConfiguration.test.ts` 检查快速修复的工作区设置写入与已有配置保护。外部编译源集合和宿主模块注册表另验证与 LSP 推断一致。
 
 `verilog/languageSemantics.test.ts` 在中文空格路径中使用真实 bundled Icarus `-g2005` 与 VVP，比对 22 个数值表达式、5 个四态/越界表达式、time64 和常量折叠前后结果；runtime 不存在时按真实工具测试约定跳过。
+
+`verilog/automaticIverilogFiles.test.ts` 验证两个并发仿真的文件隔离、进程退出后的回收及共享编译缓存保留。`courseTesting/manifestCodec.test.ts`、`mipsReplay/programImage.test.ts` 和 `courseTesting/builtinExecutionProvider.test.ts` 覆盖旧快照、压缩证据的摘要校验及解压大小上限。
 
 `courseTesting/logisimReset.test.ts` 覆盖派生电路复位、输出列与显式外观兼容、复位行剔除及歧义报错。`verilog/userCpuTestbenchRuntime.test.ts` 使用真实 bundled Icarus 检查 P4–P7 自动与用户 TB：初始拉高 reset，保持至 20 ns，P4/P5 覆盖 2 个上升沿、P6/P7 覆盖 5 个上升沿，首次有效执行 PC 为 0x3000。
 

@@ -10,6 +10,7 @@ import {
   asmCaseSourceSnapshotIssue,
   copyAsmCaseArtifact,
   createAsmCaseFromAsm,
+  createAsmCaseFromText,
   listAsmCaseManifests,
   machineCodeValidationOutputMessage,
   maximumAsmCaseIndexEntries,
@@ -40,6 +41,7 @@ import {
 import { builtinExecutionEngineArtifact } from '../mips/replay/builtinEngineArtifact';
 import { resolveCourseEnginePlan } from '../mips/providers/courseEnginePolicy';
 import { canonicalJson, sha256Canonical, type CanonicalJson } from '../mips/replay/canonical';
+import { loadVerifiedSourceGraphInput } from '../mips/replay/sourceBundle';
 
 const vscodeState = vi.hoisted(() => ({
   state: undefined as ReturnType<typeof import('./helpers/vscodeMock').createVscodeMockState> | undefined
@@ -99,6 +101,75 @@ function createCase(): AsmCase {
 }
 
 describe('ASM case manifest v2 artifact storage', () => {
+  it('writes generated ASM once and reserves distinct manifests for simultaneous identical inputs', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'co 生成 ASM-'));
+    temporaryRoots.push(root);
+    const resource = URI.file(path.join(root, 'mips.v'));
+    const createdAt = new Date('2026-08-27T10:00:00Z');
+    const enginePlan = { ...resolveCourseEnginePlan('builtin', 'P5'), scriptInstructions: null };
+    const text = '.text\r\nori $1, $0, 42\r\n';
+    vscodeState.state!.config.set('co.project.profile', 'P5');
+    try {
+      const options = { resource, createdAt, enginePlan };
+      const [first, second] = await Promise.all([
+        createAsmCaseFromText('first.asm', text, options),
+        createAsmCaseFromText('second.asm', text, options)
+      ]);
+      expect(first.id).not.toBe(second.id);
+      for (const [asmCase, name] of [[first, 'first.asm'], [second, 'second.asm']] as const) {
+        const manifest = asmCase.manifest as AsmCaseManifestV2;
+        expect(manifest.originalAsmPath).toBe(name);
+        expect(asmCase.sourceAsm.fsPath).toBe(asmCase.asm.fsPath);
+        expect(fs.readFileSync(asmCase.asm.fsPath, 'utf8')).toBe(text);
+        expect(fs.readdirSync(path.join(asmCase.dir.fsPath, 'source'))).toEqual(['graph.json']);
+        const graphRef = manifest.program.sourceGraph!;
+        const source = await loadVerifiedSourceGraphInput(asmCase.dir.fsPath, graphRef);
+        const unit = source.graph.units[0];
+        expect(source.sourceGraphInput.sources[0].text).toBe(text);
+        expect(unit.blobPath).toBe(manifest.asmSnapshot.path);
+        expect(unit.materializedPath).toBe(manifest.asmSnapshot.path);
+        expect(manifest.artifacts?.source?.[`blob/${unit.contentHash}`]).toEqual(manifest.asmSnapshot);
+        expect(manifest.artifacts?.source?.[`materialized/${unit.id}`]).toEqual(manifest.asmSnapshot);
+        expect(await asmCaseSourceSnapshotIssue(asmCase)).toBeUndefined();
+        expect((await readAsmCaseManifestForAsm(asmCase.sourceAsm))?.caseId).toBe(asmCase.id);
+      }
+      fs.chmodSync(first.asm.fsPath, 0o644);
+      fs.writeFileSync(first.asm.fsPath, text.replace('42', '43'));
+      expect(await asmCaseSourceSnapshotIssue(first)).toMatch(/blob bytes\/hash mismatch/);
+      expect(await asmCaseSourceSnapshotIssue(second)).toBeUndefined();
+    } finally { vscodeState.state!.config.delete('co.project.profile'); }
+  });
+
+  it('removes a generated case cancelled before its first manifest is published', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'co-cancel-source-'));
+    temporaryRoots.push(root);
+    const resource = URI.file(path.join(root, 'mips.v'));
+    const controller = new AbortController();
+    const writeFile = fs.promises.writeFile.bind(fs.promises);
+    vi.spyOn(fs.promises, 'writeFile').mockImplementation(async (...args) => {
+      await writeFile(...args);
+      if (typeof args[0] === 'string' && path.basename(args[0]).startsWith('graph.json.tmp-')) controller.abort();
+    });
+    await expect(createAsmCaseFromText('generated.asm', 'nop\n', { resource, signal: controller.signal }))
+      .rejects.toMatchObject({ name: 'AbortError' });
+    expect(fs.readdirSync(path.join(root, '.co', 'cases'))).toEqual([]);
+  });
+
+  it('rejects a selected ASM changed between its initial read and source capture', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'co-changed-source-'));
+    temporaryRoots.push(root);
+    const source = URI.file(path.join(root, 'main.asm'));
+    fs.writeFileSync(source.fsPath, 'nop\n');
+    const mkdir = fs.promises.mkdir.bind(fs.promises);
+    vi.spyOn(fs.promises, 'mkdir').mockImplementation(async (...args: Parameters<typeof mkdir>) => {
+      const result = await mkdir(...args);
+      if (typeof args[0] === 'string' && path.basename(args[0]) === 'cases') fs.writeFileSync(source.fsPath, 'syscall\n');
+      return result;
+    });
+    await expect(createAsmCaseFromAsm(source)).rejects.toThrow(/root ASM changed/);
+    expect(fs.readdirSync(path.join(root, '.co', 'cases'))).toEqual([]);
+  });
+
   it('captures external ASM includes within their source root while the CPU workspace owns the case', async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'co-external-source-'));
     temporaryRoots.push(root);
@@ -109,11 +180,11 @@ describe('ASM case manifest v2 artifact storage', () => {
     const cpu = URI.file(path.join(cpuRoot, 'mips.v'));
     const source = URI.file(path.join(sourceRoot, 'main.asm'));
     fs.writeFileSync(cpu.fsPath, 'module mips; endmodule');
-    fs.writeFileSync(source.fsPath, '.include "body.s"\n_end: beq $0, $0, _end\nnop\n');
+    fs.writeFileSync(source.fsPath, '.include "body.s"\n.include "copy.s"\n_end: beq $0, $0, _end\nnop\n');
     fs.writeFileSync(path.join(sourceRoot, 'body.s'), 'ori $1, $0, 42\n');
+    fs.writeFileSync(path.join(sourceRoot, 'copy.s'), 'ori $1, $0, 42\n');
     vscodeState.state!.workspaceFolders.push({ uri: URI.file(cpuRoot), name: 'CPU 工程' });
     vscodeState.state!.config.set('co.project.profile', 'P5');
-    vi.mocked(vscode.workspace.fs.writeFile).mockImplementationOnce(async (uri, bytes) => { await fs.promises.writeFile(uri.fsPath, bytes); });
     try {
       const captured = await createAsmCaseFromAsm(source, {
         resource: cpu, sourceRoot: URI.file(sourceRoot), source: { kind: 'selected' }, enginePlan: resolveCourseEnginePlan('builtin', 'P5')
@@ -121,10 +192,21 @@ describe('ASM case manifest v2 artifact storage', () => {
       expect(path.relative(cpuRoot, captured.dir.fsPath)).toMatch(/^\.co[\\/]cases[\\/]/);
       expect(captured.manifest.profile).toBe('P5');
       expect(captured.manifest.originalAsmPath).toBe(source.fsPath);
+      const manifest = captured.manifest as AsmCaseManifestV2;
+      const graph = (await loadVerifiedSourceGraphInput(captured.dir.fsPath, manifest.program.sourceGraph!)).graph;
+      const [rootUnit, firstLeaf, secondLeaf] = graph.units;
+      expect(rootUnit.blobPath).toBe(manifest.asmSnapshot.path);
+      expect(rootUnit.materializedPath).not.toBe(rootUnit.blobPath);
+      expect(firstLeaf.blobPath).toBe(firstLeaf.materializedPath);
+      expect(secondLeaf.blobPath).toBe(firstLeaf.blobPath);
+      expect(secondLeaf.materializedPath).not.toBe(firstLeaf.materializedPath);
+      expect(fs.readdirSync(path.join(captured.dir.fsPath, 'source')).sort()).toEqual(['graph.json', 'materialized']);
       expect(await asmCaseSourceSnapshotIssue(captured)).toBeUndefined();
       fs.writeFileSync(path.join(sourceRoot, 'body.s'), 'ori $1, $0, 99\n');
       expect(await asmCaseSourceSnapshotIssue(captured)).toBeUndefined();
-      expect(fs.readFileSync(captured.sourceAsm.fsPath, 'utf8')).toContain('source-0001.s');
+      const materialized = fs.readFileSync(captured.sourceAsm.fsPath, 'utf8');
+      expect(materialized).toContain('source-0001.s');
+      expect(materialized).toContain('source-0002.s');
     } finally { vscodeState.state!.config.delete('co.project.profile'); }
   });
 
