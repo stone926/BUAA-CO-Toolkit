@@ -214,7 +214,8 @@ export function verifyBundledIverilogCourseCompatibility({
     machineCode: p7MachineCode,
     expectedTestbenchText: [
       "module mips_tb;",
-      "parameter target_pc = 32'h00003010;",
+      "case (macroscopic_pc)",
+      "32'h3010: co_irq_index = 0;",
       "always @(negedge clk) begin",
       "(m_int_addr & 32'hfffffffc) == 32'h7f20",
       '$display("%d@%h: $%d <= %h"',

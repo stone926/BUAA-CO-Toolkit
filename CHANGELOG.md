@@ -4,6 +4,8 @@ All notable changes to BUAA CO Toolkit are documented in this file.
 
 ## [Unreleased]
 
+- 发布下方 1.6.1 的全部改进。1.6.1 候选在上架前被旧版 P7 中断安装包验收断言拦截，现已同步验收脚本至当前模板。
+
 ## [1.6.1] - 2026-11-24
 
 - 统一自定义指令的编辑器识别、终端执行、机器码导出和 CPU 测试。工作区优先加载 JS/TS 定义，仅有 `.class` 时自动使用配置的魔改 MARS。未知指令、缺少 JAR 或 JAR 不兼容时会显示具体原因。
