@@ -105,7 +105,11 @@ async function verifyCourseFailure({ folder, result, bounded, waitFor }) {
     });
     assert.equal(vscode.window.activeTextEditor.document.lineAt(source.row).text.trim(), source.text);
     assertNoNewGroups();
-    assert.ok(path.relative(originalDirectory, source.file).startsWith(`source${path.sep}`), 'Source navigation must use the saved case');
+    const caseRoot = await fs.realpath(originalDirectory);
+    const openedSource = await fs.realpath(vscode.window.activeTextEditor.document.uri.fsPath);
+    const relativeSource = path.relative(caseRoot, openedSource);
+    assert.ok(relativeSource && !path.isAbsolute(relativeSource) && relativeSource.split(path.sep)[0] !== '..',
+      `Source navigation must use a file inside the saved case: ${openedSource}`);
 
     await send('Open semantic writeback comparison', failure, { action: 'compare' });
     await waitFor('Writeback comparison at first difference', () => comparison?.panel.webview.html.includes('class="different selected"'));
