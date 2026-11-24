@@ -179,15 +179,19 @@ test('default CLI generates GPR coverage, the anchor, every probe shard and retu
   const { automaticReturnVariants } = require(
     path.join(testCliDir, 'dist', 'src', 'courseTesting', 'builtinAsm', 'p7', 'probeReturnProgram.js')
   );
-  assert.equal(caseDirs.length, 2 + automaticProbeShards.length + automaticReturnVariants.length);
+  const expectedProbeShards = [
+    ...automaticProbeShards, ...automaticReturnVariants.map(() => 'return'),
+    'architecture', 'im-boundaries', 'reset'
+  ];
+  assert.equal(caseDirs.length, 2 + expectedProbeShards.length);
   const manifests = caseDirs.map((caseDir) => JSON.parse(fs.readFileSync(path.join(caseDir, 'case.json'), 'utf8')));
   assert.deepEqual(
     manifests.map((manifest) => manifest.metadata?.['source.mode']).sort(),
-    ['anchor', 'off', ...automaticProbeShards.map(() => 'probe'), ...automaticReturnVariants.map(() => 'probe')].sort()
+    ['anchor', 'off', ...expectedProbeShards.map(() => 'probe')].sort()
   );
   assert.deepEqual(
     manifests.map((manifest) => manifest.metadata?.['source.probeShard']).filter(Boolean).sort(),
-    [...automaticProbeShards, ...automaticReturnVariants.map(() => 'return')].sort()
+    expectedProbeShards.sort()
   );
   assert.deepEqual(
     manifests.filter((manifest) => manifest.metadata?.['source.probeShard'] === 'return')
