@@ -24,3 +24,5 @@ conformance/.cache/
 # Local Java compilation output. The extension ships this one compiled class.
 *.class
 !resources/mars/_co_internal_unknown_instruction.class
+
+.agents/
