@@ -81,16 +81,20 @@ export function registerMarsWorkbench(context: vscode.ExtensionContext, services
     }));
     // Includes may use arbitrary extensions; filter notifications against the captured closure.
     const watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(rootUri, '**/*'));
-    resources.push(watcher, watcher.onDidChange(changed => {
-      if (affectsSource(changed) && !capturedSource(changed)) { controller.markSourceChanged(); return; }
+    const checkSourceUpdate = (changed: vscode.Uri): void => {
       const source = capturedSource(changed);
-      if (!source) return;
+      if (!source) {
+        if (affectsSource(changed)) controller.markSourceChanged();
+        return;
+      }
       void readBoundedRegularFile(changed.fsPath, { maximumBytes: 8 * 1024 * 1024, label: 'MARS source update' }).then(bytes => {
         if (!disposed && capturedSource(changed) === source && bytes.toString('utf8') !== source.text) controller.markSourceChanged();
       }, () => { if (!disposed && capturedSource(changed) === source) controller.markSourceChanged(); });
-    }),
+    };
+    // A delayed create event can arrive after its include was already captured by Assemble.
+    resources.push(watcher, watcher.onDidChange(checkSourceUpdate),
       watcher.onDidDelete(changed => { if (affectsSource(changed)) controller.markSourceChanged(); }),
-      watcher.onDidCreate(changed => { if (affectsSource(changed)) controller.markSourceChanged(); }));
+      watcher.onDidCreate(checkSourceUpdate));
     resources.push(panel.webview.onDidReceiveMessage((raw: unknown) => {
       const request = parseWorkbenchRequest(raw);
       if (!request || disposed) return;

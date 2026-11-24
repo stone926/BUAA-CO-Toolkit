@@ -7,6 +7,7 @@ All notable changes to BUAA CO Toolkit are documented in this file.
 ## [1.6.2] - 2026-11-24
 
 - 发布下方 1.6.1 的全部改进。1.6.1 候选在上架前被旧版 P7 中断安装包验收断言拦截，现已同步验收脚本至当前模板。
+- 修复调试工作台在汇编后收到迟到的 include 创建事件时误判源码已改变的问题。
 
 ## [1.6.1] - 2026-11-24
 

@@ -7,6 +7,9 @@ const state = vi.hoisted(() => ({
   groups: [] as Array<{ isActive?: boolean; viewColumn: number; tabs: Array<{ input: unknown }> }>,
   showTextDocument: vi.fn(async (..._args: unknown[]) => undefined),
   openTextDocument: vi.fn(async (uri: unknown) => ({ uri, languageId: 'mipsasm', lineCount: 40 })),
+  onCreate: undefined as ((uri: URI) => void) | undefined,
+  sources: [] as { uri: string; text: string }[],
+  sourceChanged: vi.fn(),
   panel: undefined as { webview: { html: string; onDidReceiveMessage(listener: (message: unknown) => void): { dispose(): void }; postMessage(): Promise<boolean> }; onDidDispose(listener: () => void): { dispose(): void } } | undefined
 }));
 
@@ -46,7 +49,7 @@ vi.mock('vscode', async () => {
       getWorkspaceFolder: () => ({ uri: Uri.file('E:/work') }),
       onDidChangeTextDocument: vi.fn(() => ({ dispose: vi.fn() })),
       createFileSystemWatcher: vi.fn(() => ({
-        onDidCreate: vi.fn(() => ({ dispose: vi.fn() })),
+        onDidCreate: vi.fn((listener: (uri: URI) => void) => { state.onCreate = listener; return { dispose: vi.fn() }; }),
         onDidChange: vi.fn(() => ({ dispose: vi.fn() })),
         onDidDelete: vi.fn(() => ({ dispose: vi.fn() })), dispose: vi.fn()
       }))
@@ -58,7 +61,8 @@ vi.mock('vscode', async () => {
 
 vi.mock('../../mips/debug/controller', () => ({
   MarsWorkbenchController: class {
-    sources = [];
+    sources = state.sources;
+    markSourceChanged = state.sourceChanged;
     image = undefined;
     constructor() {}
     sourceAtAddress() { return { source: { uri: URI.file('E:/work/include.asm').toString() }, line: 12 }; }
@@ -79,6 +83,7 @@ vi.mock('../../mips/replay/boundedFile', () => ({ readBoundedRegularFile: vi.fn(
 import * as vscode from 'vscode';
 import { Commands } from '../../constants';
 import { registerMarsWorkbench } from '../../mips/debug/workbench';
+import { readBoundedRegularFile } from '../../mips/replay/boundedFile';
 
 describe('MARS workbench source navigation', () => {
   beforeEach(() => {
@@ -87,6 +92,8 @@ describe('MARS workbench source navigation', () => {
     state.listener = undefined;
     state.panel = undefined;
     state.groups = [];
+    state.onCreate = undefined;
+    state.sources = [];
   });
 
   it('reveals include source in its existing editor group without creating another split', async () => {
@@ -102,5 +109,22 @@ describe('MARS workbench source navigation', () => {
     expect(state.showTextDocument).toHaveBeenCalledWith(expect.objectContaining({
       uri: expect.objectContaining({ fsPath: source.fsPath.toLowerCase() })
     }), expect.objectContaining({ viewColumn: 5, selection: expect.objectContaining({ startLine: 11 }) }));
+  });
+
+  it('accepts a late create notification for an include already in the assembled source snapshot', async () => {
+    const include = URI.file('E:/work/include.asm');
+    const text = '.eqv RESULT 7\n';
+    state.sources = [{ uri: include.toString(), text }];
+    vi.mocked(readBoundedRegularFile).mockResolvedValueOnce(Buffer.from(text));
+    registerMarsWorkbench({ extensionUri: URI.file('E:/extension'), subscriptions: [] } as never,
+      { mipsRuntime: {}, output: { appendLine: vi.fn() } } as never);
+    await state.command?.(URI.file('E:/work/main.asm'));
+    state.onCreate?.(include);
+    await Promise.resolve();
+    expect(readBoundedRegularFile).toHaveBeenCalledWith(include.fsPath, expect.anything());
+    expect(state.sourceChanged).not.toHaveBeenCalled();
+    vi.mocked(readBoundedRegularFile).mockResolvedValueOnce(Buffer.from('.eqv RESULT 9\n'));
+    state.onCreate?.(include);
+    await vi.waitFor(() => expect(state.sourceChanged).toHaveBeenCalledOnce());
   });
 });
