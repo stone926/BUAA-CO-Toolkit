@@ -9,6 +9,7 @@ import {
   AssemblerDiagnostic,
   AssemblerDiagnosticCode,
   assemblerDiagnostic,
+  unknownInstructionDiagnostic,
   SourceSpan
 } from './diagnostics';
 import {
@@ -28,6 +29,7 @@ import {
   expandLoadStorePseudo,
   expandPseudoInstruction,
   expandTwoOperandLogicalPseudo,
+  isBuiltinPseudoMnemonic,
   PseudoExpansionOptions
 } from './pseudo';
 import {
@@ -1042,6 +1044,9 @@ function statementWork(statement: ParsedStatement, state: AssemblyState): WorkRe
     if (!mnemonic) {
       return { ok: false, diagnostic: assemblerDiagnostic('asm.syntax.invalid-statement', '无法识别的语句', statementSpan(statement), statement.expansionStack) };
     }
+    if (!isBuiltinPseudoMnemonic(mnemonic) && !marsIntegerExtensionMnemonics.includes(mnemonic) && !marsInstructionByMnemonic.has(mnemonic)) {
+      return { ok: false, diagnostic: unknownInstructionDiagnostic(mnemonic, statement.mnemonicSpan, statement.expansionStack) };
+    }
     const expansionOptions = pseudoOptions(state);
     const expansion = expandPseudoInstruction(
       { mnemonic, operands: parsedOperands },
@@ -1052,8 +1057,7 @@ function statementWork(statement: ParsedStatement, state: AssemblyState): WorkRe
       return {
         ok: false,
         diagnostic: assemblerDiagnostic(
-          /不支持的 pseudo/.test(expansion.error ?? '') && !marsIntegerExtensionMnemonics.includes(mnemonic)
-            && !marsInstructionByMnemonic.has(mnemonic) ? 'asm.instruction.unknown' : 'asm.pseudo.unsupported',
+          'asm.pseudo.unsupported',
           expansion.error ?? `未知指令 ${mnemonic}`,
           statement.mnemonicSpan,
           statement.expansionStack
@@ -1402,12 +1406,7 @@ function encodeWorkInstruction(
   const entry = isaInstructionByMnemonic.get(instruction.mnemonic);
   if (!entry) {
     return {
-      diagnostic: assemblerDiagnostic(
-        'asm.instruction.unknown',
-        `展开后的未知指令 ${instruction.mnemonic}`,
-        instruction.origin.span,
-        instruction.origin.expansionStack
-      )
+      diagnostic: unknownInstructionDiagnostic(instruction.mnemonic, instruction.origin.span, instruction.origin.expansionStack)
     };
   }
   const operands = instruction.operands;

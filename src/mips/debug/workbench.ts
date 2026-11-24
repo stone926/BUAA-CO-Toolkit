@@ -11,7 +11,8 @@ import { isMarsMemoryConfiguration } from '../core/profiles/marsMemoryLayout';
 import type { DebugMode } from '../core/debug/api';
 import { imageSegmentWords, wordsToHexText } from '../core/assembler/artifacts';
 import { writeFileAtomicReplace } from '../replay/atomicFile';
-import { captureScriptInstructions, createScriptRuntime, inspectScriptInstructions } from '../host/scriptInstructions';
+import { customInstructionsForResource } from '../host/customInstructionResource';
+import { customInstructionRelativeDirectory } from '../host/customInstructionFiles';
 import { buildMarsWorkbenchHtml } from './html';
 import { parseWorkbenchRequest } from './messages';
 import { captureWorkbenchSource, showAssemblyDiagnostics, workbenchSourcesCurrent } from './source';
@@ -41,17 +42,23 @@ export function registerMarsWorkbench(context: vscode.ExtensionContext, services
     const ordinaryMode: Extract<DebugMode, { kind: 'mars' }> = { kind: 'mars',
       memoryConfiguration: isMarsMemoryConfiguration(memory) ? memory : 'Default', delayedBranching: useDelayedBranching(uri) };
     const profile = getProfile(uri);
-    const folder = vscode.workspace.getWorkspaceFolder(uri);
+    const workspace = customInstructionsForResource(uri);
+    const rootUri = vscode.Uri.file(workspace.root);
     let updateTimer: ReturnType<typeof setTimeout> | undefined;
     let nextState: WorkbenchState | undefined;
     const controller = new MarsWorkbenchController({
       sourcePath: uri.fsPath, mode: isCourseProfile(profile) ? { kind: 'course', profile } : ordinaryMode,
       ordinaryMode, runtime: services.mipsRuntime,
       captureRuntime: async signal => {
-        const bundle = await captureScriptInstructions(folder?.uri.fsPath ?? path.dirname(uri.fsPath), { signal });
-        return bundle ? { ...createScriptRuntime(bundle, services.mipsRuntime), instructionMetadata: await inspectScriptInstructions(bundle, services.mipsRuntime, undefined, { signal }) } : services.mipsRuntime!;
+        const instructions = await workspace.select({ signal, runtime: services.mipsRuntime });
+        if (instructions.kind === 'mars') {
+          throw new Error('Java .class 使用外部 Mars 引擎；可在终端中运行。工作台的单步和断点需要 JS/TS 自定义指令定义。');
+        }
+        return instructions.kind === 'script'
+          ? { ...instructions.runtime, instructionMetadata: await instructions.inspect(signal) }
+          : services.mipsRuntime!;
       },
-      capture: () => captureWorkbenchSource(uri, folder?.uri.fsPath ?? path.dirname(uri.fsPath)),
+      capture: () => captureWorkbenchSource(uri, workspace.root),
       sourcesCurrent: workbenchSourcesCurrent,
       changed: state => {
         nextState = state;
@@ -65,7 +72,7 @@ export function registerMarsWorkbench(context: vscode.ExtensionContext, services
     let disposed = false;
     let exportBusy = false;
     const resources: vscode.Disposable[] = [diagnostics];
-    const affectsSource = (candidate: vscode.Uri) => candidate.toString().startsWith(vscode.Uri.joinPath(folder?.uri ?? vscode.Uri.file(path.dirname(uri.fsPath)), '.co/custom-instructions').toString() + '/')
+    const affectsSource = (candidate: vscode.Uri) => candidate.toString().startsWith(vscode.Uri.joinPath(rootUri, customInstructionRelativeDirectory).toString() + '/')
       || candidate.toString() === uri.toString()
       || controller.sources.some(source => source.uri && vscode.Uri.parse(source.uri).toString() === candidate.toString());
     const capturedSource = (candidate: vscode.Uri) => controller.sources.find(source => source.uri && vscode.Uri.parse(source.uri).toString() === candidate.toString());
@@ -73,7 +80,7 @@ export function registerMarsWorkbench(context: vscode.ExtensionContext, services
       if (event.contentChanges.length && affectsSource(event.document.uri) && capturedSource(event.document.uri)?.text.replace(/^\uFEFF/, '') !== event.document.getText()) controller.markSourceChanged();
     }));
     // Includes may use arbitrary extensions; filter notifications against the captured closure.
-    const watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(folder?.uri ?? vscode.Uri.file(path.dirname(uri.fsPath)), '**/*'));
+    const watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(rootUri, '**/*'));
     resources.push(watcher, watcher.onDidChange(changed => {
       if (affectsSource(changed) && !capturedSource(changed)) { controller.markSourceChanged(); return; }
       const source = capturedSource(changed);
@@ -82,7 +89,8 @@ export function registerMarsWorkbench(context: vscode.ExtensionContext, services
         if (!disposed && capturedSource(changed) === source && bytes.toString('utf8') !== source.text) controller.markSourceChanged();
       }, () => { if (!disposed && capturedSource(changed) === source) controller.markSourceChanged(); });
     }),
-      watcher.onDidDelete(changed => { if (affectsSource(changed)) controller.markSourceChanged(); }));
+      watcher.onDidDelete(changed => { if (affectsSource(changed)) controller.markSourceChanged(); }),
+      watcher.onDidCreate(changed => { if (affectsSource(changed)) controller.markSourceChanged(); }));
     resources.push(panel.webview.onDidReceiveMessage((raw: unknown) => {
       const request = parseWorkbenchRequest(raw);
       if (!request || disposed) return;

@@ -1,11 +1,12 @@
 // @index mips-lsp — Workspace-scoped custom ISA facts; no user code runs in the language server
 import { URI } from 'vscode-uri';
-import type { CustomInstructionMetadata, CustomInstructionMode } from '../../mips/core/custom/api';
+import type { CustomInstructionMetadata } from '../../mips/core/custom/api';
 import { CustomInstructionRegistry, createCustomInstructionMetadataRegistry } from '../../mips/core/custom/registry';
 import { customAssemblerExtension } from '../../mips/core/custom/assembler';
+import { customInstructionModeForProfile } from '../../mips/core/custom/mode';
 import { parseAssemblerLine } from '../../mips/core/assembler/syntax';
 import type { CustomInstructionEncoding } from '../../mips/host/customMarsBridge';
-import { instructions, type MipsInstruction } from './resources';
+import type { MipsInstruction } from './resources';
 
 interface Facts {
   root: string;
@@ -47,25 +48,22 @@ function factsFor(uri: string): Facts | undefined {
   lookups.set(uri, result);
   return result;
 }
-function modeFor(profile: string): CustomInstructionMode { return /^P[3-7]$/.test(profile) ? profile as CustomInstructionMode : 'mars'; }
 export function customInstructionFactsRevision(uri: string): number { return factsFor(uri)?.revision ?? 0; }
 export function customInstructionDisplayFor(uri: string, profile: string, mnemonic: string): MipsCustomInstruction | undefined {
   const facts = factsFor(uri);
   const name = mnemonic.toLowerCase();
-  const script = facts?.registry.get(name, modeFor(profile));
+  const script = facts?.registry.get(name, customInstructionModeForProfile(profile));
   return script ? scriptInstructionDisplay(script, name) : facts?.mars.get(name);
 }
 export function* customInstructionDisplays(uri: string, profile: string): Iterable<MipsCustomInstruction> {
   const facts = factsFor(uri);
   if (!facts) return;
-  const mode = modeFor(profile);
+  const mode = customInstructionModeForProfile(profile);
   for (const script of facts.registry.metadata(mode)) {
     yield scriptInstructionDisplay(script, script.mnemonic);
     for (const alias of script.aliases ?? []) yield scriptInstructionDisplay(script, alias);
   }
-  for (const [name, display] of facts.mars) {
-    if (!facts.registry.get(name, mode)) yield display;
-  }
+  yield* facts.mars.values();
 }
 function scriptInstructionDisplay(item: CustomInstructionMetadata, mnemonic: string): MipsCustomInstruction {
   const operands = item.operands.map(op => op.kind === 'register' ? `$${op.field}` : op.kind === 'memory' ? `${op.offsetField}($${op.baseField})` : op.field);
@@ -81,7 +79,7 @@ function marsInstructionDisplays(entries: readonly CustomInstructionEncoding[]):
     if (typeof entry?.mnemonic !== 'string' || typeof entry.template !== 'string') continue;
     const name = entry.mnemonic.toLowerCase();
     const template = entry.template.trim();
-    if (!/^[a-z][a-z0-9_.]{0,63}$/.test(name) || Object.prototype.hasOwnProperty.call(instructions, name) || displays.has(name)
+    if (!/^[a-z][a-z0-9_.]{0,63}$/.test(name) || displays.has(name)
       || template.length > 256 || /[\r\n`]/.test(template)) continue;
     const statement = parseAssemblerLine({ sourceId: '', line: 1, text: template, startOffset: 0, endOffset: template.length, expansionStack: [] });
     if (statement.kind !== 'statement' || statement.mnemonic?.toLowerCase() !== name) continue;
@@ -97,7 +95,7 @@ export function customInstructionSyntaxIssue(uri: string, profile: string, line:
   if (!facts || /%[\w]+/.test(line)) return;
   const statement = parseAssemblerLine({ sourceId: uri, line: 1, text: line, startOffset: 0, endOffset: line.length, expansionStack: [] });
   if (statement.kind !== 'statement') return;
-  const mode = modeFor(profile);
+  const mode = customInstructionModeForProfile(profile);
   const extension = customAssemblerExtension(facts.registry, mode);
   const expanded = extension.expand(statement, { compactAddresses: false, maximumInstructionsPerStatement: 1 });
   if (!expanded) return;

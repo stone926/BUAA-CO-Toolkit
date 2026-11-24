@@ -1,7 +1,7 @@
 // @index mips-runner — 内部 MARS 命令：运行、标准输入、交互终端与兼容导出
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { getMachineCode, getMemoryConfiguration, getRunTimeout, shouldRevealOutput, useDelayedBranching } from './config';
+import { getMachineCode, getMemoryConfiguration, getProfile, getRunTimeout, shouldRevealOutput, useDelayedBranching } from './config';
 import { basenameNoExt, dirname, workspaceFolderFor } from './fsUtil';
 import { revealOutputChannel } from './process';
 import { AppServices, ProjectProfile, RunResult } from './types';
@@ -17,8 +17,8 @@ import { imageSegmentWords, wordsToHexText } from './mips/core/assembler/artifac
 import { writeFileAtomicReplace } from './mips/replay/atomicFile';
 import { readBoundedRegularFile } from './mips/replay/boundedFile';
 import type { EngineArtifactIdentity, ResolvedEngineRun } from './mips/providers/contracts';
-import { needsCustomMars } from './mips/providers/customMarsCommon';
-import { runCustomMarsConsole } from './mips/host/customMarsConsole';
+import { customInstructionsForResource } from './mips/host/customInstructionResource';
+import { isCourseProfile } from './mips/core/profiles/profileIds';
 
 export { buildMarsArgs } from './language/mips/marsArgs';
 export type MarsRunMode = 'run' | 'dumpText' | 'dumpKernel';
@@ -79,7 +79,7 @@ async function runTerminal(services: AppServices): Promise<void> {
   terminal.show();
 }
 
-/** Ordinary command API: builtin Worker first, complete custom Mars fallback before execution. */
+/** Command adapter for workspace-aware ASM execution and atomic output. */
 export async function runMarsFile(services: AppServices, asmUri: vscode.Uri, mode: MarsRunMode,
   options: MarsRunOptions = {}): Promise<MarsRunOutput | undefined> {
   const messages = options.showMessages !== false && !options.nonInteractive;
@@ -91,18 +91,15 @@ export async function runMarsFile(services: AppServices, asmUri: vscode.Uri, mod
     return { result: { ok: false, exitCode: null, commandLine: 'internal-mars', cwd: dirname(asmUri), stdout: '', stderr, timedOut: false } };
   }
   if (!options.nonInteractive && (options.revealOutput ?? shouldRevealOutput(asmUri))) revealOutputChannel(services.output, asmUri);
-  let output = await runInternalMars({
-    sourcePath: asmUri.fsPath, allowedRoot: workspaceFolderFor(asmUri)?.uri.fsPath ?? dirname(asmUri),
+  const workspaceInstructions = customInstructionsForResource(asmUri);
+  const profile = getProfile(asmUri);
+  const output = await runInternalMars({
+    sourcePath: asmUri.fsPath, allowedRoot: workspaceInstructions.root, workspaceInstructions,
+    ...(isCourseProfile(profile) ? { courseProfile: profile } : {}),
     memoryConfiguration: getMemoryConfiguration(asmUri) as MarsMemoryConfiguration,
     delayedBranching: useDelayedBranching(asmUri), timeoutMs: getRunTimeout(asmUri),
     maxSteps: options.maxSteps, stdin: options.stdin, signal: options.signal, runtime: services.mipsRuntime, console: options.console
   }, mode === 'run');
-  let external = false;
-  if (!options.signal?.aborted && !output.scriptInstructions && needsCustomMars(output.result, output.assemblyDiagnostics)) {
-    external = true;
-    try { output = await runCustomMarsConsole(asmUri, mode === 'run', options); }
-    catch (error) { output = { result: { ...output.result, stderr: error instanceof Error ? error.message : String(error) } }; }
-  }
   let outputFile: vscode.Uri | undefined;
   try {
     if (mode === 'run') {
@@ -119,7 +116,7 @@ export async function runMarsFile(services: AppServices, asmUri: vscode.Uri, mod
     if (output.result.stderr) services.output.appendLine(output.result.stderr);
   }
   if (messages) {
-    const engine = external ? '自定义 Mars' : '内置 MARS';
+    const engine = output.engine === 'custom-mars' ? '自定义 Mars' : '内置 MIPS';
     if (output.result.ok) vscode.window.showInformationMessage(mode === 'run' ? `${engine} 运行完成` : `${engine} 已导出机器码`);
     else vscode.window.showErrorMessage(`${engine} ${mode === 'run' ? '运行' : '导出'}失败：${output.result.stderr}`);
   }

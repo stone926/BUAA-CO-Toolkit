@@ -7,6 +7,7 @@
 export const p7ProbeExecutionInstructionBudget = 65_536;
 
 const minimumCourseTraceSimulationTimeUs = 200;
+const minimumUserAsmSimulationTimeUs = 10;
 const maximumCourseTraceSimulationTimeUs = 5_000;
 
 /**
@@ -32,18 +33,28 @@ export function courseTraceSimulationTime(maxSteps: number): string {
     throw new RangeError('course trace maxSteps must be a positive safe integer');
   }
 
-  const stepsAtMaximum = Math.ceil(
-    maximumCourseTraceSimulationTimeUs * 1_000 / nanosecondsPerCourseExecutionStep
-  );
-  if (maxSteps >= stepsAtMaximum) {
-    return `${maximumCourseTraceSimulationTimeUs}us`;
+  return `${simulationMicroseconds(maxSteps, minimumCourseTraceSimulationTimeUs)}us`;
+}
+
+/** Bound a selected P4–P6 program after the oracle has reached the standard halt loop. */
+export function userAsmSimulationTiming(maxSteps: number, executed: number | undefined): {
+  simTime: string;
+  simulationTimeoutMs?: number;
+} {
+  if (executed === undefined || !Number.isSafeInteger(executed) || executed <= 0 || executed > maxSteps) {
+    return { simTime: courseTraceSimulationTime(maxSteps) };
   }
-  const uncappedMicroseconds = Math.ceil(maxSteps * nanosecondsPerCourseExecutionStep / 1_000);
-  const microseconds = Math.min(
-    maximumCourseTraceSimulationTimeUs,
-    Math.max(minimumCourseTraceSimulationTimeUs, uncappedMicroseconds)
-  );
-  return `${microseconds}us`;
+  const duration = simulationMicroseconds(executed, minimumUserAsmSimulationTimeUs);
+  return {
+    simTime: `${duration}us`,
+    // A zero-delay RTL loop can stall simulated time before the watchdog fires.
+    ...(duration < minimumCourseTraceSimulationTimeUs ? { simulationTimeoutMs: 15_000 } : {})
+  };
+}
+
+function simulationMicroseconds(steps: number, minimum: number): number {
+  const duration = Math.ceil(steps * nanosecondsPerCourseExecutionStep / 1_000);
+  return Math.min(maximumCourseTraceSimulationTimeUs, Math.max(minimum, duration));
 }
 
 export {

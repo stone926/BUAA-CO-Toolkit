@@ -9,14 +9,14 @@ import {
   MipsAssemblerProvider,
   MipsExecutionProvider,
   ProviderPreflight,
-  ProviderRunContext
+  ProviderRunContext,
+  failedPreflight
 } from './contracts';
 import { BuiltinTsExecutionProvider } from './builtinExecutionProvider';
-import { BuiltinTsAssemblerProvider } from './builtinAssemblerProvider';
 import { ScriptAwareAssemblerProvider, ScriptAwareExecutionProvider } from './scriptInstructionProviders';
 import { CustomMarsAssemblerProvider, type CustomMarsSessions } from './customMarsAssemblerProvider';
 import { CustomMarsExecutionProvider } from './customMarsExecutionProvider';
-import { needsCustomMars } from './customMarsCommon';
+import { customInstructionsForResource } from '../host/customInstructionResource';
 import {
   BUILTIN_TS_ENGINE_ID,
   CUSTOM_MARS_ENGINE_ID,
@@ -30,8 +30,8 @@ import {
 /**
  * Provider resolver（计划第 5.3/9 节）。
  *
- * 生产注册内置和自定义 Mars 的完整参考栈；auto 在未知指令汇编失败后、
- * 程序执行前绑定自定义栈。普通控制台复用独立的 MARS 服务模式。
+ * 生产注册内置和自定义 Mars 的完整参考栈；auto 通过共享工作区指令入口
+ * 在汇编前选择，普通控制台使用同一选择策略。
  * 解析失败（preflight not ok）时调用方必须以
  * 结构化诊断结束任务——任何 provider 都不允许在部分执行后隐式 fallback。
  */
@@ -74,7 +74,7 @@ export function setProviderRegistry(registry: ProviderRegistry | undefined): voi
   }
 }
 
-export function resolveAssemblerProvider(
+export async function resolveAssemblerProvider(
   services: AppServices,
   request: AssembleRequest,
   selection?: CourseEnginePlan,
@@ -83,21 +83,43 @@ export function resolveAssemblerProvider(
   provider: MipsAssemblerProvider;
   preflight: ProviderPreflight;
   selection: CourseEnginePlan;
+  request: AssembleRequest;
 }> {
   const registry = registerDefaultProviders(services);
-  const effectiveSelection = selection ?? resolveCourseEnginePlan(
+  if (selection?.scriptInstructions !== undefined && request.scriptInstructions === undefined) {
+    request = { ...request, scriptInstructions: selection.scriptInstructions };
+  }
+  const resource = request.resourceUri ?? request.sourceUri;
+  let plan = selection ?? resolveCourseEnginePlan(
     'auto',
-    request.requirements?.profile ?? getProfile(request.sourceUri),
+    request.requirements?.profile ?? getProfile(resource),
     request.requirements
   );
-  return resolvePlannedProvider(
+  if (plan.mode === 'auto' && !request.expectedEngineArtifact) {
+    try {
+      const workspaceInstructions = await customInstructionsForResource(resource).select({
+        snapshot: request.scriptInstructions, runtime: services.mipsRuntime, signal: context?.signal
+      });
+      request = { ...request, workspaceInstructions };
+      if (workspaceInstructions.kind === 'mars') plan = resolveCourseEnginePlan('mars', plan.profile);
+    } catch (error) {
+      const provider = registry.assemblerProviders.find(entry => entry.descriptor.id === BUILTIN_TS_ENGINE_ID)
+        ?? registry.assemblerProviders[0];
+      if (!provider) throw error;
+      return { provider, request, selection: plan, preflight: failedPreflight(provider.descriptor, [{
+        code: 'custom-instructions.load-failed', message: error instanceof Error ? error.message : String(error)
+      }]) };
+    }
+  }
+  const resolved = await resolvePlannedProvider(
     registry.assemblerProviders,
-    effectiveSelection.primaryEngineId,
+    plan.primaryEngineId,
     request,
     'assembler',
-    effectiveSelection,
+    plan,
     context
   );
+  return { ...resolved, request };
 }
 
 export function resolveExecutionProvider(
@@ -255,30 +277,13 @@ export async function assembleWithPreflight(
   result?: AssembleResult;
   preflight: ProviderPreflight;
 }> {
-  if (selection?.scriptInstructions !== undefined && request.scriptInstructions === undefined) {
-    request = { ...request, scriptInstructions: selection.scriptInstructions };
-  }
-  const { provider, preflight, selection: initialSelection } = await resolveAssemblerProvider(
-    services,
-    request,
-    selection,
-    context
-  );
+  const { provider, preflight, selection: finalSelection, request: boundRequest } = await resolveAssemblerProvider(services, request, selection, context);
   if (!preflight.ok) {
     return { ok: false, preflight };
   }
-  let result = await provider.assemble(request, context);
-  if (initialSelection.mode === 'auto' && provider.descriptor.id === BUILTIN_TS_ENGINE_ID
-    && !request.scriptInstructions && !result.scriptInstructions
-    && !context?.signal?.aborted && needsCustomMars(result.status, result.assemblyDiagnostics)) {
-    const selected = resolveCourseEnginePlan('mars', request.requirements?.profile ?? getProfile(request.sourceUri));
-    const custom = await resolveAssemblerProvider(services, request, selected, context);
-    if (!custom.preflight.ok) return { ok: false, preflight: custom.preflight };
-    result = await custom.provider.assemble(request, context);
-    return { ok: result.ok, result: { ...result, enginePlan: selected }, preflight: custom.preflight };
-  }
+  const result = await provider.assemble(boundRequest, context);
   return { ok: result.ok, result: { ...result, enginePlan: result.executionBinding?.kind === 'script-instructions'
-    ? Object.freeze({ ...initialSelection, scriptInstructions: result.executionBinding.bundle }) : initialSelection }, preflight };
+    ? Object.freeze({ ...finalSelection, scriptInstructions: result.executionBinding.bundle }) : finalSelection }, preflight };
 }
 
 /** Convenience: run preflight, fail closed with a structured result when unsupported. */

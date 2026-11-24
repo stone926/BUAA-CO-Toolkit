@@ -7,6 +7,8 @@ import type { DebugMode, DebugSnapshot } from '../core/debug/api';
 import { DebugListing } from '../core/debug/listing';
 import { isCourseProfile } from '../core/profiles/profileIds';
 import { MarsDebugClient } from '../host/debugClient';
+import { mipsAssemblyJob } from '../host/mipsWorkerRequests';
+import { customInstructionAssemblyHint } from '../host/customInstructionService';
 import type { MarsRuntimeHost } from '../host/marsService';
 import type { captureAssemblyInput } from '../host/sourceInput';
 import type { WorkbenchRequest, WorkbenchState } from './protocol';
@@ -117,14 +119,19 @@ export class MarsWorkbenchController {
       if (generation !== this.generation || this.closed) return;
       this.sources = input.sources;
       this.runtime = this.options.captureRuntime ? await this.options.captureRuntime(abort.signal) : this.options.runtime;
-      const result = await this.runtime.runJob(this.mode.kind === 'mars'
-        ? { kind: 'mars-assemble', payload: { ...input, memoryConfiguration: this.mode.memoryConfiguration, delayedBranching: this.mode.delayedBranching } }
-        : { kind: 'assembler-assemble', payload: { ...input, profile: this.mode.profile } }, { signal: abort.signal });
+      const result = await this.runtime.runJob(mipsAssemblyJob(this.mode, input), { signal: abort.signal });
       if (generation !== this.generation || this.closed) return;
       if (result.kind !== 'result' || !result.ok) throw new Error(abort.signal.aborted ? '汇编已取消或超过 30 秒' : result.kind === 'result' ? result.error : '汇编返回无效结果');
       const assembly = result.payload as AssemblerServiceResult;
       this.options.diagnostics(assembly.diagnostics, this.sources);
-      if (!assembly.ok || !assembly.image) throw new Error(assembly.diagnostics.map(item => item.message).join('\n') || '汇编失败');
+      if (!assembly.ok || !assembly.image) {
+        const details = assembly.diagnostics.map(item => item.message);
+        const metadata = this.runtime.instructionMetadata;
+        const hint = customInstructionAssemblyHint(assembly.diagnostics, this.mode.kind === 'course' ? this.mode.profile : 'mars',
+          metadata ? 'script' : 'builtin', metadata);
+        if (hint) details.push(hint);
+        throw new Error(details.join('\n') || '汇编失败');
+      }
       const validationRevision = this.staleRevision;
       const sourcesCurrent = this.options.sourcesCurrent ? await this.options.sourcesCurrent(this.sources) : revision === this.staleRevision;
       if (generation !== this.generation || this.closed) return;

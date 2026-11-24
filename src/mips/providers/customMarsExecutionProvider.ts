@@ -1,7 +1,6 @@
 // @index mips-providers — 自定义 Mars 课程 oracle：复用同一依赖快照和权威映像，返回规范写回 Trace
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { invokeCustomMars } from '../host/customMarsBridge';
 import { writeFileAtomicReplace } from '../replay/atomicFile';
 import { iterCpuTraceEvents } from '../../language/mips/traceParser';
 import { courseProgramImagePolicyIssues } from '../../courseTesting/pipeline/courseImagePolicy';
@@ -33,7 +32,7 @@ export class CustomMarsExecutionProvider implements MipsExecutionProvider {
     if (!preflight.ok) return { ok: false, descriptor: this.descriptor, status: customMarsFailureStatus(preflight.diagnostics.map((d) => d.message).join('\n')) };
     const session = this.sessions.get(request.executionBinding!)!;
     try {
-      const { result, payload } = await invokeCustomMars(session.environment, { mode: 'execute', source: session.source,
+      const { result, payload } = await session.instructions.run({ mode: 'execute', source: session.source,
         profile: session.profile, layout: 'CompactLargeText', delayed: courseExecutionProfiles[session.profile].delaySlot,
         maxSteps: request.maxSteps, haltPc: request.haltPc, stdin: request.stdin, signal: context?.signal,
         interruptSchedule: request.interruptSchedule, expectedSegments: request.image.segments });
@@ -43,7 +42,7 @@ export class CustomMarsExecutionProvider implements MipsExecutionProvider {
       }
       const outputFile = request.runOutputFile ?? vscode.Uri.file(path.join(path.dirname(session.source), 'oracle.out'));
       await writeFileAtomicReplace(outputFile.fsPath, Buffer.from(result.stdout));
-      return { ok: true, status: result, descriptor: this.descriptor, engineArtifact: session.environment.identity,
+      return { ok: true, status: result, descriptor: this.descriptor, engineArtifact: session.instructions.identity, instructions: payload.instructions,
         ...(session.profile === 'P7' && (payload.timerTimingObserved ?? payload.timerActivated) ? { referenceTiming: 'p7-timer-observed' as const } : {}),
         outputFile, resolvedRun: session.resolvedRun,
         stop: { kind: 'halt-loop', haltPc: request.haltPc },

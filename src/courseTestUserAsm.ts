@@ -13,7 +13,7 @@ import { resolveP3LogisimTraceSetup } from './courseTestLogisim';
 import { tryAcquireCourseTestSession } from './courseTesting/courseTestSession';
 import { acceptsInspectionMessage } from './courseTesting/failureDiagnosis';
 import { discoverUserAsmInputs } from './courseTesting/userAsmInputs';
-import { createUserAsmBatchReport, runUserAsmBatch, type UserAsmReferenceMode } from './courseTesting/userAsmBatch';
+import { createUserAsmBatchReport, runUserAsmBatch } from './courseTesting/userAsmBatch';
 import { renderUserAsmBatchReport } from './courseTesting/userAsmBatchReport';
 import { runCourseTraceCase, type CourseTraceRunOptions } from './courseTesting/traceRunner';
 
@@ -26,7 +26,7 @@ export function requestUserAsmTestsStop(): boolean {
 }
 
 /** ASM input and CPU project are separate command arguments and remain separate through execution. */
-export async function runUserAsmTests(services: AppServices, input?: vscode.Uri, cpuResource?: vscode.Uri, referenceMode?: UserAsmReferenceMode): Promise<void> {
+export async function runUserAsmTests(services: AppServices, input?: vscode.Uri, cpuResource?: vscode.Uri): Promise<void> {
   const lease = tryAcquireCourseTestSession();
   if (!lease) {
     void vscode.window.showWarningMessage('已有一个测试任务正在运行');
@@ -35,7 +35,6 @@ export async function runUserAsmTests(services: AppServices, input?: vscode.Uri,
   const controller = new AbortController();
   activeUserAsmController = controller;
   try {
-    if (referenceMode !== undefined && referenceMode !== 'auto' && referenceMode !== 'mars') throw new Error('参考引擎仅支持 auto 或 mars');
     await vscode.commands.executeCommand('setContext', 'co.continuousTestRunning', true);
     await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: '用户汇编 CPU 测试', cancellable: true }, async (_progress, token) => {
       const cancellation = token.onCancellationRequested(() => controller.abort());
@@ -64,11 +63,9 @@ export async function runUserAsmTests(services: AppServices, input?: vscode.Uri,
           else cases.push({ asm });
           if (controller.signal.aborted) return;
         }
-        const reference = referenceMode ?? await pickReferenceMode();
-        if (!reference || controller.signal.aborted) return;
         const baseRunOptions: CourseTraceRunOptions = {
           cpuResource: cpu,
-          engineMode: reference,
+          engineMode: 'auto',
           sourceRoot: workspaceFolderFor(selected)?.uri ?? vscode.Uri.file(path.dirname(asms[0].fsPath))
         };
         if (profile === 'P3') {
@@ -80,7 +77,7 @@ export async function runUserAsmTests(services: AppServices, input?: vscode.Uri,
         const output = vscode.Uri.file(path.join(folder.uri.fsPath, CO_OUT_DIR));
         await ensureDirectory(output);
         const reportFile = vscode.Uri.file(path.join(output.fsPath, 'user-asm-test-report.json'));
-        const report = createUserAsmBatchReport(cpu, selected, cases.length, reference);
+        const report = createUserAsmBatchReport(cpu, selected, cases.length);
         const panel = vscode.window.createWebviewPanel('coUserAsmTestReport', '用户汇编 CPU 测试', vscode.ViewColumn.Active, {
           enableScripts: true, enableFindWidget: true, localResourceRoots: [], retainContextWhenHidden: true
         });
@@ -104,14 +101,17 @@ export async function runUserAsmTests(services: AppServices, input?: vscode.Uri,
           }
         });
         panel.onDidDispose(() => { disposed = true; listener.dispose(); if (report.running) controller.abort(); });
+        const updateView = (): void => {
+          if (!disposed) panel.webview.html = renderUserAsmBatchReport(report);
+        };
         const updateMonitor = async (): Promise<void> => {
           report.stopRequested = controller.signal.aborted;
           await writeTextFile(reportFile, JSON.stringify(report, null, 2) + '\n');
-          if (!disposed) panel.webview.html = renderUserAsmBatchReport(report);
+          updateView();
         };
         await updateMonitor();
         services.output.appendLine(`用户汇编 CPU 测试：${cpu.fsPath}；${cases.length} 个测试点`);
-        await runUserAsmBatch({ services, cases, cpuResource: cpu, report, signal: controller.signal, baseRunOptions, run: runCourseTraceCase, updateMonitor });
+        await runUserAsmBatch({ services, cases, cpuResource: cpu, report, signal: controller.signal, baseRunOptions, run: runCourseTraceCase, updateMonitor, updateView });
       } finally { cancellation.dispose(); }
     });
   } catch (error) {
@@ -156,12 +156,4 @@ async function pickAsmInput(defaultUri: vscode.Uri): Promise<vscode.Uri | undefi
     ...(!kind.directory ? { filters: { 'MIPS 汇编': ['asm', 's', 'mips'] } } : {})
   });
   return picked?.[0];
-}
-
-async function pickReferenceMode(): Promise<UserAsmReferenceMode | undefined> {
-  const picked = await vscode.window.showQuickPick([
-    { label: '自动选择（推荐）', description: '优先内置引擎；未知指令交给自定义 Mars', reference: 'auto' as const },
-    { label: '自定义 Mars', description: '始终按你的 Mars 和 .class 定义执行，适合修改已有指令语义', reference: 'mars' as const }
-  ], { title: '选择本次测试的参考引擎' });
-  return picked?.reference;
 }

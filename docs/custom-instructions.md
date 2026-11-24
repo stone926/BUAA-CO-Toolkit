@@ -172,7 +172,7 @@ generation: {
 
 ## 与 `.class` 共存及练习示例
 
-原有 `.class` 仍可放在同一目录。JS/TS 定义走内置完整汇编与执行链；显式选择 Mars 参考时，仍使用配置的 modded Mars 和 `.class`。没有 JS/TS 绑定时，用户 ASM 的 auto 路径可在执行前因未知指令选择完整 custom-Mars 引擎；已经绑定脚本后，未实现的指令会报错，不会拼接“脚本汇编 + `.class` 执行”的半套参考。
+编辑器、终端、机器码导出和用户汇编测试使用同一份工作区注册表。目录直属 JS/TS 定义优先交给内置引擎，只有 `.class` 时自动使用 `co.toolchain.mars` 指定的魔改 Mars。一次运行的汇编和执行绑定同一套定义。终端遇到仅在当前 Profile 生效的脚本指令时，按课程语义执行并输出写回记录。单步工作台支持 JS/TS 定义，流水线冲突分析使用内置课程指令的时序模型。
 
 23 个独立练习包及边界向量位于 [课程指令译本](../src/test/fixtures/customInstructions/README.md)。每个 `instruction.ts` 可作为参考；复制到工作区后，可用创建命令安装本地 SDK 类型声明。相同助记符或冲突编码的练习应分开测试，例如 `addei/lhogez`、`bonall/lwer`，不能全部同时加载。
 

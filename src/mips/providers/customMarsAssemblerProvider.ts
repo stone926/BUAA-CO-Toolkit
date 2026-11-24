@@ -9,15 +9,15 @@ import { courseInstructionImageWords, findCourseHaltPc, imageSegmentWords, words
 import { writeFileAtomicReplace } from '../replay/atomicFile';
 import { withCapturedAssemblySource } from '../host/sourceInput';
 import type { SourceUnit } from '../core/api';
-import { captureCustomMarsEnvironment, type CustomMarsEnvironment } from '../host/customMarsArtifacts';
-import { invokeCustomMars } from '../host/customMarsBridge';
+import { customInstructionsForResource } from '../host/customInstructionResource';
+import type { BoundMarsInstructions } from '../host/customInstructionService';
 import type { AssembleRequest, AssembleResult, MipsAssemblerProvider, ProviderExecutionBinding, ProviderRunContext, ResolvedEngineRun } from './contracts';
 import { failedPreflight, okPreflight } from './contracts';
 import { CUSTOM_MARS_CAPABILITIES, CUSTOM_MARS_DESCRIPTOR, customMarsFailureStatus, customMarsImage } from './customMarsCommon';
 import { resolveCourseEnginePlan } from './courseEnginePolicy';
 
 export interface CustomMarsAssemblySession {
-  environment: CustomMarsEnvironment; profile: CourseProfile; source: string;
+  instructions: BoundMarsInstructions; profile: CourseProfile; source: string;
   resolvedRun: ResolvedEngineRun;
 }
 export type CustomMarsSessions = WeakMap<ProviderExecutionBinding, CustomMarsAssemblySession>;
@@ -43,12 +43,15 @@ export class CustomMarsAssemblerProvider implements MipsAssemblerProvider {
     try {
       if (context?.signal?.aborted) throw new Error('自定义 Mars 汇编已取消');
       const resource = request.resourceUri ?? request.sourceUri;
-      const environment = await captureCustomMarsEnvironment(resource);
-      if (request.expectedEngineArtifact && identityKey(environment.identity) !== identityKey(request.expectedEngineArtifact)) {
+      const workspace = customInstructionsForResource(resource);
+      const selection = request.workspaceInstructions ?? await workspace.select({ policy: 'mars', signal: context?.signal });
+      if (selection.kind !== 'mars') throw new Error('未选择魔改 Mars 指令引擎');
+      const instructions = await selection.bind(context?.signal);
+      if (request.expectedEngineArtifact && identityKey(instructions.identity) !== identityKey(request.expectedEngineArtifact)) {
         throw new Error('自定义 Mars 或 .class 与原测试点记录的版本不同；请恢复 co.toolchain.mars 和 .co/custom-instructions 中的原版本后重跑');
       }
       const assemble = async (input: { sourcePath: string; sources: readonly SourceUnit[]; sourcePaths?: AssembleRequest['sourcePaths'] }): Promise<AssembleResult> => {
-        const { result, payload } = await invokeCustomMars(environment, { mode: 'assemble', source: input.sourcePath,
+        const { result, payload } = await instructions.run({ mode: 'assemble', source: input.sourcePath,
           profile: profile === 'P2' ? 'ordinary' : profile, layout: profile === 'P2' ? 'Default' : 'CompactLargeText',
           delayed: profile !== 'P2' && courseExecutionProfiles[profile].delaySlot, signal: context?.signal });
         if (!result.ok || !payload) return { ok: false, status: result, descriptor: this.descriptor };
@@ -61,17 +64,17 @@ export class CustomMarsAssemblerProvider implements MipsAssemblerProvider {
         const outputFile = request.target.outputFile ?? vscode.Uri.file(path.join(path.dirname(request.sourceUri.fsPath), 'code.txt'));
         if (request.writeOutput !== false) await writeFileAtomicReplace(outputFile.fsPath, Buffer.from(wordsToHexText(words)));
         const resolvedRun: ResolvedEngineRun = { profile, memoryConfiguration: profile === 'P2' ? 'Default' : 'course-contract-v1',
-          runtime: { kind: 'java', command: environment.java }, wallClockMs: environment.timeoutMs, p7RiInstruction: false,
+          runtime: { kind: 'java', command: instructions.java }, wallClockMs: instructions.timeoutMs, p7RiInstruction: false,
           javaVersion: payload.javaVersion };
         const binding = Object.freeze({ kind: 'source-reassembly' as const, providerId: this.descriptor.id,
           sourceUri: request.sourceUri, imageFingerprint: image.fingerprint });
-        if (profile !== 'P2' && request.sourceGraphInput) this.sessions.set(binding, { environment, profile, source: input.sourcePath, resolvedRun });
+        if (profile !== 'P2' && request.sourceGraphInput) this.sessions.set(binding, { instructions, profile, source: input.sourcePath, resolvedRun });
         return { ok: true, status: result, descriptor: this.descriptor, image, outputFile, courseHaltPc: haltPc,
           customInstructionEncodings: payload.customInstructions, executionBinding: binding,
-          engineArtifact: environment.identity, enginePlan: resolveCourseEnginePlan('mars', profile), resolvedRun };
+          engineArtifact: instructions.identity, enginePlan: resolveCourseEnginePlan('mars', profile), resolvedRun };
       };
       return request.sourceGraphInput ? await assemble({ ...request.sourceGraphInput, sourcePath: request.sourceUri.fsPath })
-        : await withCapturedAssemblySource(request.sourceUri.fsPath, environment.root, assemble);
+        : await withCapturedAssemblySource(request.sourceUri.fsPath, workspace.root, assemble);
     } catch (error) {
       return { ok: false, status: { ...customMarsFailureStatus(error), ...(context?.signal?.aborted ? { stopped: true, stopReason: 'cancelled' } : {}) }, descriptor: this.descriptor };
     }

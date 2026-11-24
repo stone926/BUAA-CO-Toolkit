@@ -1,11 +1,11 @@
 // @index mips-host — Public lazy capture, inspection and immutable script-bound runtime adapter
 import type { CustomInstructionMetadata, CustomInstructionMode } from '../core/custom/api';
+import type { Dirent } from 'fs';
 import { MipsRuntimeManager, ScriptJobOptions } from './runtimeManager';
 import { WorkerJob } from './workerProtocol';
 import { ScriptInstructionBundle, validateScriptInstructionBundle } from './scriptInstructionBundle';
 import * as path from 'path';
-import * as fs from 'fs/promises';
-export * from './scriptInstructionBundle';
+import { isScriptInstructionFile, readCustomInstructionFiles } from './customInstructionFiles';
 const snapshotCache = new Map<string, ScriptInstructionBundle>();
 const inspectionCache = new Map<string, readonly ScriptInstructionInspection[]>();
 
@@ -15,14 +15,15 @@ export interface ScriptRuntimeHost {
   runScriptJob?(bundle: ScriptInstructionBundle, job: WorkerJob, options?: ScriptJobOptions): ReturnType<MipsRuntimeManager['runJob']>;
 }
 
-export async function captureScriptInstructions(workspaceRoot: string, options: ScriptJobOptions = {}): Promise<ScriptInstructionBundle | undefined> {
-  const folder = path.join(workspaceRoot, '.co', 'custom-instructions');
-  let entries: import('fs').Dirent[];
-  try { entries = await fs.readdir(folder, { withFileTypes: true }); }
-  catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') { snapshotCache.delete(path.resolve(workspaceRoot)); return undefined; } throw error; }
-  if (!entries.some(entry => entry.isFile() && /\.(js|ts)$/.test(entry.name) && !entry.name.endsWith('.d.ts'))) { snapshotCache.delete(path.resolve(workspaceRoot)); return undefined; }
-  const runtime = new MipsRuntimeManager();
+export async function captureScriptInstructions(workspaceRoot: string, options: ScriptJobOptions = {}, files?: readonly Dirent[]): Promise<ScriptInstructionBundle | undefined> {
+  options.signal?.throwIfAborted();
   const key = path.resolve(workspaceRoot);
+  const entries = files ?? await readCustomInstructionFiles(key);
+  if (!entries.some(entry => entry.isFile() && isScriptInstructionFile(entry.name))) {
+    snapshotCache.delete(key);
+    return undefined;
+  }
+  const runtime = new MipsRuntimeManager();
   try {
     const result = await runtime.runIsolatedJob({ kind: 'script-capture', payload: { workspaceRoot: key, previous: snapshotCache.get(key) } }, options);
     if (result.kind !== 'result' || !result.ok) throw new Error(result.kind === 'result' ? result.error : 'Unexpected custom instruction capture response');

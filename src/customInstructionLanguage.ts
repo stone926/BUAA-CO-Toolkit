@@ -1,11 +1,14 @@
 // @index orchestration — Lazy custom instruction metadata publication to the language server
 import * as vscode from 'vscode';
 import type { CustomInstructionFactsUpdate } from './language/mips/customInstructionFacts';
-import { inspectCustomMarsInstructions } from './mips/host/customMarsBridge';
-import { captureScriptInstructions, inspectScriptInstructions } from './mips/host/scriptInstructions';
+import { customInstructionsForResource } from './mips/host/customInstructionResource';
+import { customInstructionRelativeDirectory, customInstructionWatchPattern } from './mips/host/customInstructionFiles';
+import type { WorkspaceCustomInstructions } from './mips/host/customInstructionService';
 
 interface WorkspaceInspection {
-  folder: vscode.WorkspaceFolder;
+  root: vscode.Uri;
+  resource: vscode.Uri;
+  workspace: WorkspaceCustomInstructions;
   watcher: vscode.FileSystemWatcher;
   timer?: ReturnType<typeof setTimeout>;
   controller?: AbortController;
@@ -21,33 +24,34 @@ export function startCustomInstructionLanguage(context: vscode.ExtensionContext,
   const update = (state: WorkspaceInspection): void => {
     if (state.timer) clearTimeout(state.timer);
     state.controller?.abort();
-    const { folder } = state;
+    const { root, workspace } = state;
     const controller = state.controller = new AbortController();
     state.timer = setTimeout(() => {
       state.timer = undefined;
       const { signal } = controller;
-      void Promise.allSettled([
-        inspectWorkspaceScripts(folder, signal),
-        inspectCustomMarsInstructions(folder.uri, signal)
-      ]).then(([scripts, classes]) => {
+      const diagnosticUri = vscode.Uri.joinPath(root, customInstructionRelativeDirectory);
+      void workspace.inspect(signal).then(facts => {
         if (signal.aborted) return;
-        const errors = [scripts, classes].flatMap(result => result.status === 'rejected' ? [new vscode.Diagnostic(
-          new vscode.Range(0, 0, 0, 1), `自定义指令加载失败：${result.reason instanceof Error ? result.reason.message : String(result.reason)}`,
+        diagnostics.delete(diagnosticUri);
+        return publish({ rootUri: root.toString(), ...facts });
+      }, error => {
+        if (signal.aborted) return;
+        diagnostics.set(diagnosticUri, [new vscode.Diagnostic(
+          new vscode.Range(0, 0, 0, 1), `自定义指令加载失败：${error instanceof Error ? error.message : String(error)}`,
           vscode.DiagnosticSeverity.Error
-        )] : []);
-        diagnostics.set(vscode.Uri.joinPath(folder.uri, '.co/custom-instructions'), errors);
-        return publish({ rootUri: folder.uri.toString(), instructions: scripts.status === 'fulfilled' ? scripts.value : [],
-          marsInstructions: classes.status === 'fulfilled' ? classes.value : [] });
+        )]);
+        return publish({ rootUri: root.toString(), instructions: [], marsInstructions: [] });
       });
     }, 250);
   };
   const opened = (document: vscode.TextDocument): void => {
     if (document.languageId !== 'mipsasm' || document.uri.scheme !== 'file') return;
-    const folder = vscode.workspace.getWorkspaceFolder(document.uri);
-    if (!folder || roots.has(folder.uri.toString())) return;
-    const watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(folder, '.co/custom-instructions/**/*.{js,ts,class,CLASS}'));
-    const state = { folder, watcher };
-    roots.set(folder.uri.toString(), state);
+    const workspace = customInstructionsForResource(document.uri);
+    const root = vscode.Uri.file(workspace.root);
+    if (roots.has(root.toString())) return;
+    const watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(root, customInstructionWatchPattern));
+    const state = { root, resource: document.uri, workspace, watcher };
+    roots.set(root.toString(), state);
     watcher.onDidCreate(() => update(state));
     watcher.onDidChange(() => update(state));
     watcher.onDidDelete(() => update(state));
@@ -58,29 +62,32 @@ export function startCustomInstructionLanguage(context: vscode.ExtensionContext,
     state.controller?.abort();
     state.watcher.dispose();
   };
+  const remove = (state: WorkspaceInspection): void => {
+    stop(state);
+    const rootUri = state.root.toString();
+    roots.delete(rootUri);
+    diagnostics.delete(vscode.Uri.joinPath(state.root, customInstructionRelativeDirectory));
+    void publish({ rootUri, removed: true });
+  };
   context.subscriptions.push(diagnostics, vscode.workspace.onDidOpenTextDocument(opened),
+    vscode.workspace.onDidCloseTextDocument(document => {
+      if (document.languageId !== 'mipsasm' || document.uri.scheme !== 'file' || vscode.workspace.getWorkspaceFolder(document.uri)) return;
+      const root = customInstructionsForResource(document.uri).root;
+      const state = roots.get(vscode.Uri.file(root).toString());
+      if (state && !vscode.workspace.textDocuments.some(other => other !== document
+        && other.languageId === 'mipsasm' && other.uri.scheme === 'file' && customInstructionsForResource(other.uri).root === root)) remove(state);
+    }),
     vscode.workspace.onDidChangeConfiguration(event => {
       for (const state of roots.values()) {
-        if (event.affectsConfiguration('co.toolchain.mars', state.folder.uri) || event.affectsConfiguration('co.toolchain.java', state.folder.uri)) update(state);
+        if (event.affectsConfiguration('co.toolchain.mars', state.resource) || event.affectsConfiguration('co.toolchain.java', state.resource)) update(state);
       }
     }),
-    vscode.workspace.onDidChangeWorkspaceFolders(event => {
-      for (const folder of event.removed) {
-        const rootUri = folder.uri.toString();
-        const state = roots.get(rootUri);
-        if (!state) continue;
-        stop(state);
-        roots.delete(rootUri);
-        diagnostics.delete(vscode.Uri.joinPath(folder.uri, '.co/custom-instructions'));
-        void publish({ rootUri, removed: true });
+    vscode.workspace.onDidChangeWorkspaceFolders(() => {
+      for (const state of roots.values()) {
+        if (customInstructionsForResource(state.resource).root !== state.workspace.root) remove(state);
       }
       vscode.workspace.textDocuments.forEach(opened);
     }),
     { dispose() { for (const state of roots.values()) stop(state); roots.clear(); } });
   vscode.workspace.textDocuments.forEach(opened);
-}
-
-async function inspectWorkspaceScripts(folder: vscode.WorkspaceFolder, signal: AbortSignal) {
-  const bundle = await captureScriptInstructions(folder.uri.fsPath, { signal });
-  return bundle ? inspectScriptInstructions(bundle, undefined, undefined, { signal }) : [];
 }

@@ -6,6 +6,7 @@ import * as os from 'os';
 import { MipsRuntimeManager } from '../../mips/host/runtimeManager';
 import { createScriptRuntime, inspectScriptInstructions, captureScriptInstructions } from '../../mips/host/scriptInstructions';
 import { ScriptInstructionBundle, validateScriptInstructionBundle } from '../../mips/host/scriptInstructionBundle';
+import { runInternalMars } from '../../mips/host/marsService';
 
 let directory: string;
 let workerPath: string;
@@ -112,6 +113,26 @@ describe('native JavaScript and TypeScript custom instruction workers', () => {
       const changed = await capture(runtime, root, first);
       expect(changed.digest).not.toBe(first.digest);
       expect(first.files.find(file => file.path === 'lib/value.ts')!.source).not.toContain('edited');
+    } finally { runtime.dispose(); }
+  });
+
+  it('runs a P6-only instruction in the console and keeps ordinary console syscalls available', async () => {
+    const runtime = manager();
+    try {
+      const root = await sourceCase('course-console', {
+        'main.ts': `const signed = (value: number) => value; export default ${descriptor.replace("['P6', 'mars']", "['P6']")};`,
+        'unused.class': 'The active script snapshot takes precedence.'
+      });
+      const sourcePath = path.join(root, 'main.asm');
+      const scriptInstructions = await capture(runtime, root);
+      const options = { sourcePath, allowedRoot: root, memoryConfiguration: 'Default' as const, delayedBranching: false,
+        courseProfile: 'P6' as const, timeoutMs: 10_000, runtime, scriptInstructions };
+      await fs.writeFile(sourcePath, '.text\naddi_custom $8,$0,7\nhalt: beq $0,$0,halt\nnop\n');
+      expect((await runInternalMars(options, true)).result).toMatchObject({
+        ok: true, stopReason: 'halt-loop', stdout: '@00003000: $8 <= 00000007\n'
+      });
+      await fs.writeFile(sourcePath, '.text\nli $a0,42\nli $v0,1\nsyscall\nli $v0,10\nsyscall\n');
+      expect((await runInternalMars(options, true)).result).toMatchObject({ ok: true, stdout: '42' });
     } finally { runtime.dispose(); }
   });
 

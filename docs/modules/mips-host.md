@@ -1,4 +1,4 @@
-# mips-host | src/mips/host/ | 23 files
+# mips-host | src/mips/host/ | 27 files
 
 懒启动 Worker 宿主。P2–P7 汇编与 P3–P7 课程执行经 `AppServices.mipsRuntime` 在生产路径运行于 Worker；普通 MARS 控制台执行也使用同一 Worker。激活阶段只构造 manager，首次任务才启动 Worker。direct lane 仅用于定向测试/无 runtime host，**不是**运行中 fallback。
 
@@ -11,10 +11,11 @@
 ## 普通 MARS
 
 - `sourceInput.ts` — 与课程 provider 共用的有界 source/include 快照读取
-- `customMarsArtifacts.ts` — 按原 ASM 上下文读取公开 Mars 设置，定向发现 class、登记内容寻址依赖、按次私有物化；内部类作为依赖
+- `customInstructionService.ts` / `customInstructionResource.ts` / `customInstructionFiles.ts` — 工作区指令发现、引擎选择、元数据检查及绑定执行的统一入口
+- `customMarsArtifacts.ts` — 登记选定的 JAR、class 和桥接依赖，按次私有物化
 - `customMarsBridge.ts` — 随包 Java bridge 的有界结构化协议、进程树取消、超时、输出限制和交互输入
 - `customMarsConsole.ts` — 普通运行/导出的自定义指令适配；保留原 ASM 目录作为 syscall cwd，外部进程只读捕获的源闭包
-- `marsService.ts` — 文件汇编到 ProgramImage、执行、取消/超时与输出上限编排
+- `marsService.ts` / `mipsWorkerRequests.ts` — 控制台汇编与执行、共享 Worker DTO、取消和超时。当前 Profile 的课程专用脚本指令用对应课程模式运行
 - `marsJobs.ts` — mars-execute 有界 DTO 与分片执行；P7 CPU 仍走 machine-execute
 - `marsIo.ts` — 控制台、标准输入、文件、时钟的异步宿主适配，不把文件系统引入核心
 - `marsTerminal.ts` — VS Code Pseudoterminal，行输入、回显、EOF、Ctrl+C 与关闭取消

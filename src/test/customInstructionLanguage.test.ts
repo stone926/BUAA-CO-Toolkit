@@ -61,7 +61,7 @@ describe('workspace custom instruction editor facts', () => {
     const unknowns = (input: TextDocument) => getMipsDiagnostics(input, settings, state).filter(item => item.code === 'unknown-instruction');
     expect(unknowns(source)).toHaveLength(2);
 
-    setCustomInstructionFacts(root, [definition], [
+    setCustomInstructionFacts(root, [], [
       { mnemonic: 'bds', mask: 0xfc00ffff, value: 10, template: 'bds $t1, $t2' },
       { mnemonic: 'ori', mask: 0xfc000000, value: 0x34000000, template: 'ori $t1' }
     ]);
@@ -74,7 +74,9 @@ describe('workspace custom instruction editor facts', () => {
       value: expect.stringContaining('```mipsasm-instruction\nbds $t1, $t2')
     });
     expect(getMipsSignatureHelp(source, { line: 0, character: 9 }, settings, state)?.signatures[0].label).toBe('bds $t1, $t2');
-    expect(getMipsDiagnostics(document('ori $1, $0, 1'), settings, state)).toEqual([]);
+    expect(getMipsHover(document('ori $1'), { line: 0, character: 1 }, settings, state)?.contents).toMatchObject({
+      value: expect.stringContaining('```mipsasm-instruction\nori $t1')
+    });
 
     removeCustomInstructionFacts(root);
     expect(unknowns(source)).toHaveLength(2);

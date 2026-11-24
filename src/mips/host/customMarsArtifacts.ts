@@ -2,12 +2,16 @@
 import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
-import type * as vscode from 'vscode';
-import { getJava, getMarsJar, getRunTimeout } from '../../config';
-import { workspaceFolderFor } from '../../fsUtil';
 import { resourcePath } from '../../resourcePaths';
 import type { EngineArtifactIdentity } from '../providers/contracts';
 import { ImmutableEngineArtifactRegistry, workspaceEngineRegistryRoot } from '../replay/engineRegistry';
+import { customInstructionDirectory } from './customInstructionFiles';
+
+export interface CustomMarsSettings {
+  jar: string;
+  java: string;
+  timeoutMs: number;
+}
 
 export interface CustomMarsEnvironment {
   readonly registry: ImmutableEngineArtifactRegistry;
@@ -19,38 +23,23 @@ export interface CustomMarsEnvironment {
   readonly bridge: EngineArtifactIdentity;
 }
 
-export function captureCustomMarsEnvironment(resource: vscode.Uri): Promise<CustomMarsEnvironment>;
-export function captureCustomMarsEnvironment(resource: vscode.Uri, options: { ifPresent: true }): Promise<CustomMarsEnvironment | undefined>;
-export async function captureCustomMarsEnvironment(resource: vscode.Uri, options?: { ifPresent: true }): Promise<CustomMarsEnvironment | undefined> {
-  const configured = getMarsJar(resource).trim();
-  if (!configured && !options?.ifPresent) throw new Error('ASM 含未知指令；请配置 co.toolchain.mars 为支持自定义指令的魔改 Mars jar 路径');
-  const root = workspaceFolderFor(resource)?.uri.fsPath ?? path.dirname(resource.fsPath);
+export async function captureCustomMarsEnvironment(
+  root: string, names: readonly string[], settings: CustomMarsSettings, signal?: AbortSignal
+): Promise<CustomMarsEnvironment> {
+  signal?.throwIfAborted();
+  const configured = settings.jar.trim();
+  if (!configured) throw new Error('发现自定义指令 .class，但未配置 co.toolchain.mars；请指定支持加载 .class 的魔改 Mars JAR');
   const jar = path.resolve(root, configured);
-  const checkJar = async () => {
-    if (!configured) throw new Error('请配置 co.toolchain.mars 为支持自定义指令的魔改 Mars jar 路径');
-    try { if (!(await fs.stat(jar)).isFile()) throw new Error('不是普通文件'); }
-    catch { throw new Error(`co.toolchain.mars 指向的 Mars jar 不存在或不可读：${jar}`); }
-  };
-  if (!options?.ifPresent) await checkJar();
-  const directory = path.join(root, '.co', 'custom-instructions');
-  let entries;
-  try { entries = await fs.readdir(directory, { withFileTypes: true }); }
-  catch (error) {
-    if (options?.ifPresent && (error as NodeJS.ErrnoException).code === 'ENOENT') return;
-    throw new Error(`未找到自定义指令 .class；请将课程文件放入 ${directory}`);
-  }
-  const names = entries.filter((entry) => entry.isFile() && /\.class$/i.test(entry.name)).map((entry) => entry.name).sort();
-  if (!names.some((name) => !name.includes('$'))) {
-    if (options?.ifPresent) return;
-    throw new Error(`未找到顶层自定义指令 .class；请将课程文件直接放入 ${directory}`);
-  }
-  if (options?.ifPresent) await checkJar();
+  try { if (!(await fs.stat(jar)).isFile()) throw new Error('不是普通文件'); }
+  catch { throw new Error(`co.toolchain.mars 指向的 Mars JAR 不存在或不可读：${jar}`); }
+  const directory = customInstructionDirectory(root);
   if (names.length > 256) throw new Error(`自定义指令目录 ${directory} 超过 256 个 class 文件`);
   const registry = new ImmutableEngineArtifactRegistry(workspaceEngineRegistryRoot(root), root);
   const runtime = await registry.registerFile('custom-mars-runtime', jar);
   const classes: EngineArtifactIdentity[] = [];
   let totalBytes = 0;
   for (const name of names) {
+    signal?.throwIfAborted();
     const file = path.join(directory, name);
     const stat = await fs.lstat(file);
     if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 8 * 1024 * 1024) throw new Error(`自定义 class 不是有界普通文件：${file}`);
@@ -60,7 +49,7 @@ export async function captureCustomMarsEnvironment(resource: vscode.Uri, options
   }
   const bridge = (await registry.registerFile('custom-mars-bridge', resourcePath('mars', 'bridge', 'mars-bridge.jar'))).identity;
   return { registry, identity: { ...runtime.identity, dependencies: [bridge, ...classes] },
-    java: getJava(resource), timeoutMs: getRunTimeout(resource), root, classes, bridge };
+    java: settings.java, timeoutMs: settings.timeoutMs, root, classes, bridge };
 }
 
 export async function withStagedCustomMars<T>(environment: CustomMarsEnvironment, run: (stage: {

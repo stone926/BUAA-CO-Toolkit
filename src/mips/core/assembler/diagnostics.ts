@@ -14,9 +14,17 @@ export interface AssemblerDiagnostic {
   /** Stable machine-readable code; LSP/VS Code adapters render the message. */
   readonly code: string;
   readonly message: string;
+  /** Resolved mnemonic when a statement or expansion names an unknown instruction. */
+  readonly mnemonic?: string;
   readonly span?: SourceSpan;
   /** Innermost-first expansion stack. `span` is the leaf origin. */
   readonly expansionStack?: readonly ExpansionOrigin[];
+}
+
+export function unknownInstructionDiagnostic(
+  mnemonic: string, span?: SourceSpan, expansionStack?: readonly ExpansionOrigin[]
+): AssemblerDiagnostic {
+  return { ...assemblerDiagnostic('asm.instruction.unknown', `未知指令 ${mnemonic}`, span, expansionStack), mnemonic };
 }
 
 export type AssemblerDiagnosticCode =

@@ -30,13 +30,12 @@ import {
 } from './courseTestStdin';
 import { normalizePathKey } from './pathUtils';
 import { requestUserAsmTestsStop, runUserAsmTests } from './courseTestUserAsm';
-import type { UserAsmReferenceMode } from './courseTesting/userAsmBatch';
 
 export function registerCourseTest(context: vscode.ExtensionContext, services: AppServices): void {
   const continuousTraceDependencies = createContinuousTraceDependencies();
   context.subscriptions.push(
-    vscode.commands.registerCommand(Commands.Test.RunAsmTests, (input?: vscode.Uri, cpuResource?: vscode.Uri | readonly vscode.Uri[], referenceMode?: UserAsmReferenceMode) =>
-      runUserAsmTests(services, input, cpuResource && 'fsPath' in cpuResource ? cpuResource : undefined, referenceMode)),
+    vscode.commands.registerCommand(Commands.Test.RunAsmTests, (input?: vscode.Uri, cpuResource?: vscode.Uri | readonly vscode.Uri[]) =>
+      runUserAsmTests(services, input, cpuResource && 'fsPath' in cpuResource ? cpuResource : undefined)),
     vscode.commands.registerCommand(Commands.Test.StartContinuousGeneratedTraceTests, () => startContinuousGeneratedTraceTests(services, continuousTraceDependencies)),
     vscode.commands.registerCommand(Commands.Test.StopContinuousTests, () => stopAutomaticTests()),
     vscode.commands.registerCommand(Commands.Test.OpenAsmCaseIndex, (resource?: vscode.Uri) => openAsmCaseIndex(resource, async (directory, caseId) => {

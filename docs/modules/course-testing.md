@@ -26,7 +26,7 @@ P3–P7 自动化测试：生成 ASM → 内置 TS assembler/ProgramImage → �
 
 **观测证据。** CP0 复位值、启动采样是否被重放和记录字段的实际写指令分别检查。MDU 验证课程允许的完整 HI/LO 结果。P7 黑盒测试覆盖本次输入的公开功能行为，课程要求的内部结构和课堂周期范围仍需独立验证。
 
-**引擎边界。** 随机生成点使用 builtin 与冻结 JS/TS 定义；没有脚本绑定时，用户 ASM 的 auto 在未知指令汇编失败后、执行前选择 custom，显式 Mars 直接使用自定义参考。prepare 与 oracle 必须复用最终 CourseEnginePlan 及相同 JS/TS 或 Jar/class 快照。机器码校验保留课程布局、容量、零 DM 初态与停机要求，custom 编码由实际加载的注册表授权。P7 probe 继续走现有 DUT-only 黑盒检查，不经过 Mars Timer 时钟推断。历史重跑保留原 CPU/ASM 上下文并核实参考依赖版本，不静默换引擎。
+**引擎选择。** 随机生成点使用 builtin 与冻结 JS/TS 定义。用户 ASM 由共享入口在汇编前选择工作区的指令源。汇编和 oracle 复用最终 CourseEnginePlan 及相同的 JS/TS 或 JAR/class 快照。机器码校验覆盖课程布局、容量、零 DM 初态与停机要求，自定义编码由本次注册表授权。P7 probe 采用 DUT-only 黑盒检查。历史重跑核实原 CPU/ASM 上下文与参考依赖版本。
 
 **有界并发、失败即停。** 会话启动时快照并发量；P3–P6 每轮生成对应数量的独立随机点，P7 使用上述固定套件。GPR / 常规 / 特殊测试之间有完成屏障，同一 manifest 的 stdin 变体互斥，空闲槽立即接新点。首个常规点失败或错误立即停止派发并 abort 同批任务，等待所有在途任务（含进程退出、manifest 写入）完成后才清理或释放会话；取消不计 error，已完成结果和失败证据保存。并发量 1 维持串行顺序，轮间零延迟主动 yield 保持扩展宿主响应。报告写入仍串行合并，caseIndex 保持原测试点编号，activeCases 展示多个活动点并兼容旧 activeCase。
 
@@ -39,7 +39,7 @@ P3–P7 自动化测试：生成 ASM → 内置 TS assembler/ProgramImage → �
 ## Pipeline
 
 - `pipeline/courseTracePipeline.ts` — 可注入的课程 Trace pipeline 对象（image policy、builtin oracle、backend-neutral DUT 执行与差分比较）
-- `pipeline/courseImagePolicy.ts` + `pipeline/executionBudget.ts` — 课程 ProgramImage 段布局/容量/停机字策略与执行预算单一入口；自动仿真从架构 step budget 派生私有预算并由 Icarus 转成 watchdog，不受手动 `co.project.simTime` 截断
+- `pipeline/courseImagePolicy.ts` + `pipeline/executionBudget.ts` — 课程 ProgramImage 与 Icarus 仿真预算。用户选定的 P4–P6 用例在参考引擎验证停机后，根据实际执行步数设定仿真窗口。短窗口另有 VVP 进程超时，用于结束仿真时钟无法推进的情况
 - `traceRunner.ts` — 单 case 执行：一次快照 engine plan，依次校验 source closure、assembler image、ProgramImage policy、oracle、Icarus DUT 与 manifest metadata；复用已持有且已落盘的有界 stdout，不重读
 - `automaticTestPolicy.ts` — 自动测试引擎/强度/预算唯一入口
 - `generatorWorkflow.ts` — 自动入口始终用内置 generator 与 internal policy；provenance/指令数/session 所有权随 case 首次 manifest 原子写入；部分生成失败时回收本 session 未执行的 case
@@ -123,7 +123,7 @@ P3–P7 自动化测试：生成 ASM → 内置 TS assembler/ProgramImage → �
 - `caseRerun.ts` / `caseRerunWaveform.ts` — 原 ASM/include/stdin/P7 闭包→独立新 case→现有 automatic pipeline；阶段校验、原证据保留、取消单列。波形仅装饰 DUT，复用私有 TB / 预算，dump 编译失败可降级存储器；波形问题不改 CPU 判定
 
 - `courseTest.ts` — 注册持续测试、用户汇编文件/目录测试、停止和测试历史公共入口；停止命令路由到当前持有会话的控制器
-- `src/courseTestUserAsm.ts` — `co.test.runAsmTests(inputUri?, cpuResource?, referenceMode?)` 的宿主入口：独立选择 CPU 工程与汇编输入，保存源码、显示可取消进度与文件级结果报告，并保留历史和用例排查入口；目录不递归。每次运行可选推荐的 `auto` 或显式 `mars` 参考策略，后者适合修改已有指令语义；第三个参数指定后跳过参考策略选择，不新增设置项
+- `src/courseTestUserAsm.ts` — `co.test.runAsmTests(inputUri?, cpuResource?)` 选择 CPU 工程与汇编输入，自动解析参考引擎，显示可取消的阶段进度、文件级结果与用例入口。目录仅包含直属汇编文件
 - `courseTestHistory.ts` / `courseTestHistoryReport.ts` — 历史页宿主监视/合并刷新与纯 HTML 渲染分离；执行终态优先，无结果明确标注，面板关闭后释放监视与定时器
 - `courseTestContinuous.ts` — 持续生成循环：首个失败即停、有界产物与报告、1 秒窗口合并；持有会话时发布 `co.continuousTestRunning`，覆盖异步启动和停止 drain，最终报告处理后清除工具栏状态，再释放会话
 - `courseTestToolchain.ts` — mode-aware 校验，automatic 固定 builtin override 且不泄漏本机路径

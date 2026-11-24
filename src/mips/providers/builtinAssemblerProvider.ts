@@ -23,7 +23,6 @@ import { CourseProfile, isaInstructions } from '../core/generated/isaCatalog';
 import { courseProfileIds, isCourseProjectProfile } from '../../projectProfile';
 import {
   AssemblerServiceInclude,
-  AssemblerServiceSource,
   assembleProgramForService,
   AssemblerServiceResult,
   courseAssemblerSemanticsRevision
@@ -42,6 +41,7 @@ import { captureSourceGraph, defaultSourceCaptureLimits } from '../replay/source
 import { writeFileAtomicReplace } from '../replay/atomicFile';
 import type { WorkerJob, WorkerOutboundMessage } from '../host/workerProtocol';
 import { loadCapturedSourceUnits } from '../host/sourceInput';
+import { mipsAssemblyJob } from '../host/mipsWorkerRequests';
 import { assembleMarsProgramForService } from '../core/assembler/assemblyService';
 import type { MarsMemoryConfiguration } from '../core/profiles/marsMemoryLayout';
 
@@ -331,29 +331,23 @@ export class BuiltinTsAssemblerProvider implements MipsAssemblerProvider {
     includes: readonly AssemblerServiceInclude[]
   ): Promise<AssemblerServiceResult> {
     if (snapshot.signal?.aborted) throw new AssemblyCancelledError('cancelled');
-    const payload = {
-      profile: snapshot.profile === 'P2' ? 'P7' as const : snapshot.profile,
-      sources: units as readonly AssemblerServiceSource[],
-      includes,
-      layers: snapshot.layers,
-      p7RiInstruction: snapshot.p7RiInstruction
-    };
     if (!this.workerRuntime) {
       if (snapshot.profile === 'P2') {
         return assembleMarsProgramForService({ sources: units, includes, memoryConfiguration: snapshot.memoryConfiguration, delayedBranching: snapshot.delayedBranching });
       }
       return assembleProgramForService({
         profile: snapshot.profile,
-        sources: payload.sources,
+        sources: units,
         includes,
         layers: snapshot.layers as readonly ('required' | 'commonExtensions' | 'marsCompatibility')[],
         p7RiInstruction: snapshot.p7RiInstruction
       });
     }
-    const message = await this.workerRuntime.runJob({
-      kind: snapshot.profile === 'P2' ? 'mars-assemble' : 'assembler-assemble',
-      payload: snapshot.profile === 'P2' ? { sources: units, includes, memoryConfiguration: snapshot.memoryConfiguration, delayedBranching: snapshot.delayedBranching } : payload
-    }, { signal: snapshot.signal });
+    const mode = snapshot.profile === 'P2'
+      ? { kind: 'mars' as const, memoryConfiguration: snapshot.memoryConfiguration, delayedBranching: snapshot.delayedBranching }
+      : { kind: 'course' as const, profile: snapshot.profile };
+    const job = mipsAssemblyJob(mode, { sources: units, includes }, { layers: snapshot.layers, p7RiInstruction: snapshot.p7RiInstruction });
+    const message = await this.workerRuntime.runJob(job, { signal: snapshot.signal });
     if (message.kind !== 'result') {
       throw new Error('builtin assembler worker returned progress as its terminal message');
     }

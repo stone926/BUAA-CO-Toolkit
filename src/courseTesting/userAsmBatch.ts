@@ -3,7 +3,7 @@ import type * as vscode from 'vscode';
 import type { AppServices } from '../types';
 import type { CourseTraceCaseInput } from '../courseTestCases';
 import type { ContinuousTraceIteration, CourseTraceCaseResult } from '../courseTestReport';
-import type { CourseTraceRunOptions } from './traceRunner';
+import type { CourseTracePhase, CourseTraceRunOptions } from './traceRunner';
 import { continuousStatusFromCounts, createContinuousCounts } from './continuous';
 import { runContinuousTraceBatch } from './continuousTraceBatch';
 import { asmCaseIndexDirectory } from '../asmCaseStore';
@@ -12,22 +12,21 @@ import { normalizePathKey } from '../pathUtils';
 import { continuousAutomaticTestPolicy } from './automaticTestPolicy';
 import { WorkspaceCaseRetention } from './workspaceCaseRetention';
 
-export type UserAsmReferenceMode = 'auto' | 'mars';
-
 export interface UserAsmBatchReport {
   schemaVersion: 2;
   cpuResource: string;
   input: string;
-  referenceMode: UserAsmReferenceMode;
+  referenceMode: 'auto';
   totalCases: number;
   running: boolean;
   stopRequested: boolean;
+  phase?: CourseTracePhase;
   iteration: ContinuousTraceIteration;
 }
 
-export function createUserAsmBatchReport(cpuResource: vscode.Uri, input: vscode.Uri, totalCases: number, referenceMode: UserAsmReferenceMode = 'auto'): UserAsmBatchReport {
+export function createUserAsmBatchReport(cpuResource: vscode.Uri, input: vscode.Uri, totalCases: number): UserAsmBatchReport {
   return {
-    schemaVersion: 2, cpuResource: cpuResource.fsPath, input: input.fsPath, referenceMode, totalCases,
+    schemaVersion: 2, cpuResource: cpuResource.fsPath, input: input.fsPath, referenceMode: 'auto', totalCases,
     running: true, stopRequested: false,
     iteration: { index: 1, status: 'running', startedAt: new Date().toISOString(), summary: createContinuousCounts(), results: [] }
   };
@@ -42,6 +41,7 @@ export async function runUserAsmBatch(options: {
   baseRunOptions?: CourseTraceRunOptions;
   run: (services: AppServices, item: CourseTraceCaseInput, options: CourseTraceRunOptions) => Promise<CourseTraceCaseResult>;
   updateMonitor: () => Promise<void>;
+  updateView?: () => void;
 }): Promise<void> {
   const { report, signal } = options;
   let retention: WorkspaceCaseRetention | undefined;
@@ -57,14 +57,23 @@ export async function runUserAsmBatch(options: {
     await runContinuousTraceBatch({
       services: options.services, cases: options.cases, iteration: report.iteration,
       ownedCases: new Map(), sessionId: '', concurrency: 1, stopOnFailure: true, signal,
-      run: (item, _slot, caseSignal) => options.run(options.services, item, {
-        ...options.baseRunOptions,
-        cpuResource: options.cpuResource,
-        source: report.iteration.source,
-        revealOutput: false,
-        artifactOutputMode: 'case',
-        signal: caseSignal
-      }),
+      run: async (item, _slot, caseSignal) => {
+        try {
+          return await options.run(options.services, item, {
+            ...options.baseRunOptions,
+            cpuResource: options.cpuResource,
+            source: report.iteration.source,
+            revealOutput: false,
+            artifactOutputMode: 'case',
+            signal: caseSignal,
+            onPhase: phase => {
+              if (caseSignal.aborted) return;
+              report.phase = phase;
+              options.updateView?.();
+            }
+          });
+        } finally { delete report.phase; }
+      },
       updateMonitor: options.updateMonitor
     });
     report.iteration.status = continuousStatusFromCounts(report.iteration.summary, false, signal.aborted);

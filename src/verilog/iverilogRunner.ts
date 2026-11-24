@@ -115,6 +115,9 @@ export interface IverilogRunOptions {
   watchdogLimitPs?: number;
   /** Automatic pipeline duration, e.g. `4195us`. */
   simTime?: string;
+  /** Wall-time limit for VVP. Does not affect compilation. */
+  simulationTimeoutMs?: number;
+  onSimulationStart?: () => void | Promise<void>;
   /**
    * Extra generated top-level modules (e.g. the waveform dumper) elaborated beside
    * the testbench. Called once the testbench is known; the files are written to the
@@ -537,6 +540,7 @@ async function runIverilogInWorkspace(
       return { ...baseOutput, compileResult };
     }
 
+    if (!options.signal?.aborted) await options.onSimulationStart?.();
     const simResult = await runTool(preflight.runtime.vvpPath, [
       '-N',
       compiled.fsPath,
@@ -544,6 +548,7 @@ async function runIverilogInWorkspace(
       ...(options.p7HaltPc === undefined ? [] : [`+co_halt_pc=${options.p7HaltPc.toString(16)}`])
     ], {
       ...processOptions,
+      timeoutMs: options.simulationTimeoutMs ?? processOptions.timeoutMs,
       maxStdoutBytes: maximumIverilogSimulationOutputBytes,
       maxStderrBytes: maximumIverilogSimulationOutputBytes
     });

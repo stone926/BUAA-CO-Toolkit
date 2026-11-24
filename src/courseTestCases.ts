@@ -1,6 +1,8 @@
 import * as vscode from 'vscode';
 import { AsmCase } from './asmCaseStore';
 import { AsmCaseSource } from './asmCaseStoreCore';
+import type { AssembleResult } from './mips/providers/contracts';
+import { engineRunWasCancelled, engineStageFailureMessage } from './courseTestMessages';
 import {
   CourseTraceBatchSource,
   NeutralCourseTraceCaseResult,
@@ -32,6 +34,16 @@ export function failedCase(
     message,
     machineCode: machineCode?.fsPath,
     oracleOut: oracleOut?.fsPath
+  };
+}
+
+export function failedAssemblyCase(
+  item: CourseTraceCaseInput, asmCase: AsmCase, dump: AssembleResult | undefined, signal?: AbortSignal
+): NeutralCourseTraceCaseResult {
+  return {
+    ...failedCase(item, 'assemble', engineStageFailureMessage('测试中止：汇编器导出机器码失败', dump?.status),
+      undefined, undefined, asmCase, engineRunWasCancelled(dump?.status, signal)),
+    referenceEngine: dump?.enginePlan?.primaryEngineId
   };
 }
 

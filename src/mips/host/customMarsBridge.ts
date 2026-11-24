@@ -1,14 +1,13 @@
 // @index mips-host — 有界 Java bridge 进程、结构化输出校验和交互 stdin 适配
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import type { Uri } from 'vscode';
 import { runProcessCore } from '../../processCore';
 import type { RunResult } from '../../types';
 import type { ProgramSegment } from '../core/api';
 import type { CourseProfile } from '../core/generated/isaCatalog';
 import { readBoundedRegularFile } from '../replay/boundedFile';
 import { maximumReplayTraceBytes } from '../replay/boundedFile';
-import { captureCustomMarsEnvironment, withStagedCustomMars, type CustomMarsEnvironment } from './customMarsArtifacts';
+import { withStagedCustomMars, type CustomMarsEnvironment } from './customMarsArtifacts';
 import type { MarsConsole } from './marsIo';
 
 export interface CustomInstructionEncoding { mnemonic: string; mask: number; value: number; template: string }
@@ -29,16 +28,6 @@ export interface CustomMarsBridgeOptions {
   expectedSegments?: readonly ProgramSegment[];
   stdin?: string | Uint8Array; console?: MarsConsole; signal?: AbortSignal;
   cwd?: string;
-}
-
-export async function inspectCustomMarsInstructions(resource: Uri, signal: AbortSignal): Promise<readonly CustomInstructionEncoding[]> {
-  signal.throwIfAborted();
-  const environment = await captureCustomMarsEnvironment(resource, { ifPresent: true });
-  if (!environment) return [];
-  signal.throwIfAborted();
-  const { result, payload } = await invokeCustomMars(environment, { mode: 'inspect', signal });
-  if (!result.ok || !payload) throw new Error(result.stderr || '魔改 Mars 未返回自定义指令元数据');
-  return payload.customInstructions;
 }
 
 export async function invokeCustomMars(environment: CustomMarsEnvironment, request: CustomMarsBridgeOptions | { mode: 'inspect'; signal?: AbortSignal }): Promise<{
@@ -77,7 +66,8 @@ export async function invokeCustomMars(environment: CustomMarsEnvironment, reque
       const bytes = await readBoundedRegularFile(resultFile, { maximumBytes: 16 * 1024 * 1024, label: 'custom Mars bridge result' });
       const payload = parseCustomMarsBridgeResult(JSON.parse(bytes.toString('utf8')));
       result.ok = payload.ok && payload.stopReason !== 'step-limit';
-      result.stderr = payload.diagnostic ?? (payload.stopReason === 'step-limit' ? '外部 Mars 达到执行步数上限，程序未完成' : result.stderr);
+      result.stderr = marsBridgeDiagnostic(payload.diagnostic)
+        ?? (payload.stopReason === 'step-limit' ? '外部 Mars 达到执行步数上限，程序未完成' : result.stderr);
       result.stopReason = payload.stopReason;
       result.exitCode = payload.exitCode ?? result.exitCode;
       return { result, payload };
@@ -85,6 +75,16 @@ export async function invokeCustomMars(environment: CustomMarsEnvironment, reque
       return { result: { ...result, ok: false, stderr: `魔改 Mars 未返回有效结果：${error instanceof Error ? error.message : String(error)}` } };
     }
   });
+}
+
+function marsBridgeDiagnostic(message: string | undefined): string | undefined {
+  if (message?.includes('does not support custom instruction .class loading')) {
+    return 'co.toolchain.mars 指向的 JAR 不支持自定义 .class，请使用支持课程自定义指令的魔改 Mars';
+  }
+  if (message?.includes('does not support memory layout CompactLargeText')) {
+    return 'co.toolchain.mars 指向的 JAR 不支持课程内存布局 CompactLargeText，请使用支持课程布局与自定义 .class 的魔改 Mars';
+  }
+  return message;
 }
 
 async function inspectionSource(directory: string, signal?: AbortSignal): Promise<CustomMarsBridgeOptions> {

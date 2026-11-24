@@ -5,14 +5,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { URI } from 'vscode-uri';
 import { createTestServices } from '../helpers/appServices';
 
-const state = vi.hoisted(() => ({ root: '', timeout: 30000, delayed: false }));
+const state = vi.hoisted(() => ({ root: '', timeout: 30000, delayed: false, profile: 'P2' }));
 vi.mock('vscode', () => ({
   Uri: URI,
   workspace: { getWorkspaceFolder: () => ({ uri: URI.file(state.root) }) },
   window: { showInformationMessage: vi.fn(), showErrorMessage: vi.fn() }
 }));
 vi.mock('../../config', () => ({
-  getMachineCode: () => 'code.txt', getMemoryConfiguration: () => 'Default',
+  getMachineCode: () => 'code.txt', getMemoryConfiguration: () => 'Default', getProfile: () => state.profile,
+  getJava: () => 'java', getMarsJar: () => '',
   getRunTimeout: () => state.timeout, useDelayedBranching: () => state.delayed, shouldRevealOutput: () => false
 }));
 vi.mock('../../process', () => ({ revealOutputChannel: vi.fn(), runTool: vi.fn() }));
@@ -22,7 +23,7 @@ import { runTool } from '../../process';
 describe('internal MARS command runner', () => {
   beforeEach(async () => {
     state.root = await fs.mkdtemp(path.join(os.tmpdir(), 'co-internal-mars-'));
-    state.timeout = 30000; state.delayed = false; vi.clearAllMocks();
+    state.timeout = 30000; state.delayed = false; state.profile = 'P2'; vi.clearAllMocks();
   });
   afterEach(async () => {
     expect(path.dirname(path.resolve(state.root))).toBe(path.resolve(os.tmpdir()));
@@ -49,8 +50,18 @@ describe('internal MARS command runner', () => {
     const bytes = await fs.readFile(options.dumpOutputFile.fsPath, 'utf8');
     expect(bytes.trim().split(/\r?\n/)).toEqual(['2404002a', '24020001', '0000000c']);
     await fs.writeFile(uri.fsPath, '.text\nbad_instruction\n');
-    expect((await runMarsFile(createTestServices(), uri, 'dumpText', options))?.result.ok).toBe(false);
+    const failed = (await runMarsFile(createTestServices(), uri, 'dumpText', options))?.result;
+    expect(failed?.ok).toBe(false);
+    expect(failed?.stderr).toMatch(/未知指令 bad_instruction.*\.co\/custom-instructions/);
     expect(await fs.readFile(options.dumpOutputFile.fsPath, 'utf8')).toBe(bytes);
+  });
+  it('reports missing Mars configuration when the workspace contains Java instructions', async () => {
+    const directory = path.join(state.root, '.co', 'custom-instructions');
+    await fs.mkdir(directory, { recursive: true });
+    await fs.writeFile(path.join(directory, 'example.class'), 'fixture');
+    const uri = await source('.text\nnop\n');
+    expect((await runMarsFile(createTestServices(), uri, 'run', { nonInteractive: true }))?.result.stderr)
+      .toMatch(/\.class.*未配置 co\.toolchain\.mars/);
   });
   it('consumes stdin and reports invalid numeric input', async () => {
     const uri = await source('.text\nli $v0,5\nsyscall\nmove $a0,$v0\nli $v0,1\nsyscall\n');

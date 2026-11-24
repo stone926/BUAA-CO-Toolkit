@@ -39,6 +39,8 @@ import { builtinExecutionEngineArtifact } from '../replay/builtinEngineArtifact'
 import { canonicalJson, sha256Canonical, type CanonicalJson } from '../replay/canonical';
 import { writeFileAtomicReplace } from '../replay/atomicFile';
 import type { WorkerJob, WorkerOutboundMessage } from '../host/workerProtocol';
+import { courseExecutionImagePayload } from '../host/mipsWorkerRequests';
+import { hex8Address } from '../core/values';
 import type { EngineCapabilities } from '../core/api';
 
 /**
@@ -550,18 +552,13 @@ function builtinWorkerPayload(
     profile: snapshot.profile,
     enabledLayers: request.requirements?.instructionLayers
       ?? ['required', 'commonExtensions', 'marsCompatibility'],
-    segments: snapshot.image.segments.map((segment) => ({
-      name: segment.name,
-      baseAddress: fixedHex(segment.baseAddress),
-      words: segment.words.map(fixedHex)
-    })),
-    entryPc: fixedHex(snapshot.image.entryPc),
+    ...courseExecutionImagePayload(snapshot.image),
     maxSteps: snapshot.maxSteps,
-    ...(snapshot.haltPc === undefined ? {} : { haltPc: fixedHex(snapshot.haltPc) }),
+    ...(snapshot.haltPc === undefined ? {} : { haltPc: hex8Address(snapshot.haltPc) }),
     ...(snapshot.interruptSchedule.length
       ? {
         externalInterrupts: snapshot.interruptSchedule.map((victimPc) => ({
-          victimPc: fixedHex(victimPc),
+          victimPc: hex8Address(victimPc),
           occurrence: 1
         }))
       }
@@ -612,10 +609,6 @@ function isCommitEventLike(value: unknown): value is CommitEvent {
     && Array.isArray(event.cp0Writes)
     && Array.isArray(event.memoryWrites)
     && Array.isArray(event.deviceEvents);
-}
-
-function fixedHex(value: number): string {
-  return `0x${(value >>> 0).toString(16).padStart(8, '0')}`;
 }
 
 /** Snapshot every value before execution; builtin has no await before running, but callers can mutate after return. */

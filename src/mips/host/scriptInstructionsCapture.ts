@@ -3,6 +3,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as vm from 'vm';
 import * as nodeModule from 'module';
+import { customInstructionDirectory, isScriptInstructionFile, readCustomInstructionFiles } from './customInstructionFiles';
 import {
   ScriptInstructionBundle, ScriptInstructionFile, scriptInstructionBundleDigest, scriptInstructionHash,
   scriptInstructionLimits, scriptInstructionRuntimeVersion, scriptInstructionSdkModule, scriptInstructionSdkVersion,
@@ -16,11 +17,9 @@ export function requireScriptRuntime(): void {
   }
 }
 export async function captureScriptInstructionBundle(workspaceRoot: string, previous?: ScriptInstructionBundle): Promise<ScriptInstructionBundle | undefined> {
-  const root = path.join(path.resolve(workspaceRoot), '.co', 'custom-instructions');
-  let names: import('fs').Dirent[];
-  try { names = await fs.readdir(root, { withFileTypes: true }); }
-  catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined; throw error; }
-  const entries = names.filter(entry => entry.isFile() && /\.(?:js|ts)$/.test(entry.name) && !entry.name.endsWith('.d.ts')).map(entry => entry.name).sort();
+  const root = customInstructionDirectory(path.resolve(workspaceRoot));
+  const names = await readCustomInstructionFiles(workspaceRoot);
+  const entries = names.filter(entry => entry.isFile() && isScriptInstructionFile(entry.name)).map(entry => entry.name).sort();
   if (!entries.length) return undefined;
   requireScriptRuntime();
   const realRoot = await fs.realpath(root);
@@ -64,6 +63,6 @@ export function resolveScriptImport(from: string, specifier: string): string {
   if (!specifier.startsWith('./') && !specifier.startsWith('../')) throw new Error(`Custom instruction imports must be relative or '${scriptInstructionSdkModule}': ${specifier}`);
   if (specifier.includes('\\') || specifier.includes(':') || specifier.includes('?') || specifier.includes('#')) throw new Error(`Invalid custom instruction import: ${specifier}`);
   const relative = path.posix.normalize(path.posix.join(path.posix.dirname(from), specifier));
-  if (relative.startsWith('../') || relative === '..' || !/\.(?:js|ts)$/.test(relative) || relative.endsWith('.d.ts')) throw new Error(`Custom instruction imports require an explicit .js/.ts path within their directory: ${specifier}`);
+  if (relative.startsWith('../') || relative === '..' || !isScriptInstructionFile(relative)) throw new Error(`Custom instruction imports require an explicit .js/.ts path within their directory: ${specifier}`);
   return relative;
 }

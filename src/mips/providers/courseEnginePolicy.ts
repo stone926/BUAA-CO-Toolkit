@@ -55,13 +55,11 @@ export function resolveCourseEnginePlan(
   profile: string | undefined,
   _capabilities: CourseEngineCapabilityRequest = {}
 ): CourseEnginePlan {
-  // This is an explicit per-run choice, independent of retired workspace settings.
-  // Auto starts with builtin; assembly capability failure can finalize a custom plan.
-  const effectiveMode = mode;
+  // Auto is resolved by the workspace custom instruction service before assembly.
   const primaryEngineId = mode === 'mars' ? CUSTOM_MARS_ENGINE_ID : BUILTIN_TS_ENGINE_ID;
 
   return Object.freeze({
-    mode: effectiveMode,
+    mode,
     ...(profile === undefined ? {} : { profile }),
     primaryEngineId
   });

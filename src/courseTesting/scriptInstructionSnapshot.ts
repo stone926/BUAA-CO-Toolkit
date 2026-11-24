@@ -3,7 +3,7 @@ import * as path from 'path';
 import type { AsmCaseManifestUnion, AsmCaseManifestV2 } from './manifestCodec';
 import type { ScriptInstructionBundle } from '../mips/host/scriptInstructionBundle';
 import { validateScriptInstructionBundle } from '../mips/host/scriptInstructionBundle';
-import { captureScriptInstructions } from '../mips/host/scriptInstructions';
+import { WorkspaceCustomInstructions } from '../mips/host/customInstructionService';
 import { scriptInstructionArtifact, assertScriptArtifactMatches } from '../mips/replay/scriptInstructionArtifact';
 import { writeFileAtomicReplace } from '../mips/replay/atomicFile';
 import { readBoundedRegularFile } from '../mips/replay/boundedFile';
@@ -15,7 +15,7 @@ const marker = 'customInstructions.captured';
 
 export async function captureCaseScriptInstructions(caseDir: string, manifest: AsmCaseManifestV2,
   workspaceRoot: string, supplied?: ScriptInstructionBundle | null): Promise<AsmCaseManifestV2> {
-  const bundle = supplied === undefined ? await captureScriptInstructions(workspaceRoot) : supplied;
+  const bundle = supplied === undefined ? await new WorkspaceCustomInstructions(workspaceRoot).captureScripts() : supplied;
   const metadata = { ...manifest.metadata, [marker]: 'true' };
   if (!bundle) return { ...manifest, metadata };
   const artifact = scriptInstructionArtifact(bundle);

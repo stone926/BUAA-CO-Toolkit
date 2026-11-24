@@ -1,7 +1,6 @@
 // @index mips-providers — 自定义 Mars 参考契约、失败分类和权威 ProgramImage 映射
 import * as path from 'path';
 import type { EngineDescriptor, ProgramImage, SourceMapEntry, SourceUnit } from '../core/api';
-import type { AssemblerDiagnostic } from '../core/assembler/diagnostics';
 import type { CustomMarsBridgeResult } from '../host/customMarsBridge';
 import { buildProgramImage, sourceUnitFingerprint } from '../core/programImage';
 import type { AssembleRequest, EngineRunStatus } from './contracts';
@@ -16,12 +15,6 @@ export const CUSTOM_MARS_CAPABILITIES = {
   ...BUILTIN_TS_ASSEMBLER_CAPABILITIES,
   console: { deterministicInput: true, deterministicOutput: true, interactive: false }
 };
-
-export function needsCustomMars(result: Pick<EngineRunStatus, 'ok' | 'stopped' | 'timedOut' | 'stopReason'>,
-  diagnostics?: readonly AssemblerDiagnostic[]): boolean {
-  return !result.ok && !result.stopped && !result.timedOut && result.stopReason !== 'cancelled'
-    && diagnostics?.some((diagnostic) => diagnostic.code === 'asm.instruction.unknown') === true;
-}
 
 export function customMarsImage(payload: CustomMarsBridgeResult, sources: readonly SourceUnit[], request: AssembleRequest): ProgramImage {
   const root = request.sourceGraphInput?.sources.find((source) => source.id === request.sourceGraphInput?.rootId) ?? sources[0];

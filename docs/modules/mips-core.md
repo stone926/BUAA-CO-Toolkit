@@ -101,6 +101,7 @@
 ## 自定义脚本 ISA
 
 - `custom/api.ts` — JS/TS 公共 SDK、操作数/效果与 generation/timing 契约
+- `custom/mode.ts` — 工作区 Profile 到自定义指令模式的映射
 - `custom/registry.ts` — 不可变分模式注册表、编码冲突/别名与仅元数据视图
 - `custom/encoding.ts` — 解析自定义编码的固定分段与字段，供注册表和编辑器编码表共用
 - `custom/metadataValidation.ts` — 字段、访问集合、生成配方和冒险阶段校验

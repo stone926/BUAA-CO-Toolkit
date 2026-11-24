@@ -37,7 +37,8 @@ import {
   courseExecutionInstructionBudget,
   courseExecutionInstructionBudgetFromCount,
   courseTraceSimulationTime,
-  p7ProbeExecutionInstructionBudget
+  p7ProbeExecutionInstructionBudget,
+  userAsmSimulationTiming
 } from './pipeline/executionBudget';
 import { CourseTracePipeline, type CourseTracePipelineDependencies } from './pipeline/courseTracePipeline';
 import {
@@ -60,6 +61,7 @@ import {
 import {
   asmCaseSourceFromBatchSource,
   caseResultFields,
+  failedAssemblyCase,
   failedCase
 } from '../courseTestCases';
 import type { CourseTraceCaseInput } from '../courseTestCases';
@@ -83,6 +85,8 @@ import type { EngineArtifactIdentity } from '../mips/providers/contracts';
 
 const batchTraceCompareRetainedEntries = 1;
 
+export type CourseTracePhase = 'prepare' | 'assemble' | 'oracle' | 'compile' | 'simulate' | 'compare';
+
 export interface CourseTraceRunOptions {
   cpuResource?: vscode.Uri;
   sourceRoot?: vscode.Uri;
@@ -94,7 +98,7 @@ export interface CourseTraceRunOptions {
   artifactOutputMode?: 'workspace' | 'case';
   /** Fixed isolated simulator slot owned by the continuous scheduler. */
   automaticRunSlot?: number;
-  /** Explicit per-run reference choice; auto tests resolve unknown instructions before execution. */
+  /** Internal engine policy. Auto resolves the workspace instruction source before assembly. */
   engineMode?: MipsEngineMode;
   /** Phase-4 executor shadow: run legacy + builtin and adjudicate the difference. */
   oracleMode?: 'verify-both';
@@ -104,6 +108,7 @@ export interface CourseTraceRunOptions {
   pipeline?: CourseTracePipeline;
   /** Cancels the oracle and DUT processes as one logical course-test job. */
   signal?: AbortSignal;
+  onPhase?: (phase: CourseTracePhase) => void | Promise<void>;
 }
 
 export async function runCourseTraceCase(
@@ -154,16 +159,24 @@ export async function runCourseTraceCase(
     services.output.appendLine(`标准输入: ${item.stdin.fsPath}`);
   }
 
-  const asmCase = item.asmCase ?? await pipeline.createCase(asm, {
-    source: asmCaseSourceFromBatchSource(options.source ?? { kind: 'selected', asmFiles: [asm.fsPath] }),
-    stdin: item.stdin,
-    resource,
-    engineResource,
-    sourceRoot: options.sourceRoot,
-    metadata: { 'test.cpuResource': resource.fsPath, 'test.engineResource': engineResource.fsPath },
-    enginePlan,
-    p7: await p7MetadataFromManifest(asm)
-  });
+  await options.onPhase?.('prepare');
+  let asmCase: AsmCase;
+  try {
+    asmCase = item.asmCase ?? await pipeline.createCase(asm, {
+      source: asmCaseSourceFromBatchSource(options.source ?? { kind: 'selected', asmFiles: [asm.fsPath] }),
+      stdin: item.stdin,
+      resource,
+      engineResource,
+      sourceRoot: options.sourceRoot,
+      metadata: { 'test.cpuResource': resource.fsPath, 'test.engineResource': engineResource.fsPath },
+      enginePlan,
+      p7: await p7MetadataFromManifest(asm)
+    });
+  } catch (error) {
+    return failedCase(item, 'assemble',
+      `测试点准备失败：${error instanceof Error ? error.message : String(error)}`,
+      undefined, undefined, undefined, options.signal?.aborted);
+  }
   const caseOutputMode = options.artifactOutputMode === 'case';
   if (!automatic) {
     services.output.appendLine(`汇编用例：${asmCase.manifestUri.fsPath}`);
@@ -181,6 +194,7 @@ export async function runCourseTraceCase(
     );
   }
 
+  await options.onPhase?.('assemble');
   let dump: Awaited<ReturnType<CourseTracePipeline['prepareProgram']>>;
   try {
     dump = await pipeline.prepareProgram(services, asmCase, {
@@ -205,15 +219,7 @@ export async function runCourseTraceCase(
     );
   }
   if (!dump?.ok || !dump.outputFile) {
-    return failedCase(
-      item,
-      'assemble',
-      engineStageFailureMessage('测试中止：汇编器导出机器码失败', dump?.status),
-      undefined,
-      undefined,
-      asmCase,
-      engineRunWasCancelled(dump?.status, options.signal)
-    );
+    return failedAssemblyCase(item, asmCase, dump, options.signal);
   }
   enginePlan = dump.enginePlan ?? enginePlan;
   if (!automatic) {
@@ -244,6 +250,7 @@ export async function runCourseTraceCase(
       asmCase
     );
   }
+  const onSimulationStart = options.onPhase && (() => options.onPhase?.('simulate'));
   if (probe) {
     if (enginePlan.mode === 'verify-both') {
       return failedCase(
@@ -258,6 +265,7 @@ export async function runCourseTraceCase(
     if (!automatic) {
       services.output.appendLine(`P7 定向检查场景： ${probe.scenarios.map((scenario) => `${scenario.id}:${p7ProbeKindLabel(scenario.kind)}`).join(', ')}`);
     }
+    await options.onPhase?.('compile');
     const dut = await pipeline.runDut(services, {
       resource,
       showMessages: false,
@@ -268,6 +276,7 @@ export async function runCourseTraceCase(
       p7Probe: probe,
       p7HaltPc: haltPc,
       simTime: courseTraceSimulationTime(p7ProbeExecutionInstructionBudget),
+      ...(onSimulationStart ? { onSimulationStart } : {}),
       nonInteractive: true,
       automaticRunSlot: options.automaticRunSlot,
       signal: options.signal
@@ -276,6 +285,7 @@ export async function runCourseTraceCase(
       || (!dut.simResult.ok && (!isP7ObservationLimit(dut.simResult.stopReason) || options.signal?.aborted))) {
       return failedDutCaseResult(item, asmCase, dut, undefined, options.signal);
     }
+    await options.onPhase?.('compare');
     // The runner has already persisted this exact bounded stdout as simOut. Reuse the
     // retained process text instead of reading and decoding a trace of up to 16 MiB again.
     const limited = !dut.simResult.ok;
@@ -303,6 +313,7 @@ export async function runCourseTraceCase(
     };
   }
 
+  await options.onPhase?.('oracle');
   const machineCodeText = await readTextFile(asmCase.machineCode);
   let stdinText: string | undefined;
   try {
@@ -478,6 +489,10 @@ export async function runCourseTraceCase(
     }
   }
 
+  const simulationTiming = options.source?.kind === 'selected' && profile !== 'P7' && oracle.stop?.kind === 'halt-loop'
+    ? userAsmSimulationTiming(maxSteps, oracle.instructions)
+    : { simTime: courseTraceSimulationTime(maxSteps) };
+  await options.onPhase?.('compile');
   const dut = await pipeline.runDut(services, {
     resource,
     customInstructionEncodings: dump.customInstructionEncodings,
@@ -488,7 +503,8 @@ export async function runCourseTraceCase(
     simOutputUri: caseOutputMode ? asmCaseArtifactUri(asmCase, 'verilog', simOutputFileNameForCase(item)) : undefined,
     interruptSchedule,
     ...(profile === 'P7' ? { p7HaltPc: haltPc } : {}),
-    simTime: courseTraceSimulationTime(maxSteps),
+    ...simulationTiming,
+    ...(onSimulationStart ? { onSimulationStart } : {}),
     nonInteractive: true,
     automaticRunSlot: options.automaticRunSlot,
     signal: options.signal
@@ -497,6 +513,7 @@ export async function runCourseTraceCase(
     return failedDutCaseResult(item, asmCase, dut, oracle.outputFile, options.signal);
   }
 
+  await options.onPhase?.('compare');
   const simText = dut.simResult.stdout;
   const diff = pipeline.compareTraces(oracle.trace.events, iterCpuTraceEvents(simText), {
     compareCycles: false,

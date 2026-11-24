@@ -74,8 +74,8 @@ describe('public course-test commands', () => {
     const { commands, services } = register();
     const asm = vscode.Uri.file('D:/user sources/test.asm');
     const cpu = vscode.Uri.file('E:/CPU/rtl/mips.v');
-    await commands.get(Commands.Test.RunAsmTests)!(asm, cpu, 'mars');
-    expect(runUserAsmTests).toHaveBeenCalledWith(services, asm, cpu, 'mars');
+    await commands.get(Commands.Test.RunAsmTests)!(asm, cpu);
+    expect(runUserAsmTests).toHaveBeenCalledWith(services, asm, cpu);
     vi.mocked(requestUserAsmTestsStop).mockReturnValueOnce(true);
     await commands.get(Commands.Test.StopContinuousTests)!();
     expect(requestContinuousTestsStop).not.toHaveBeenCalled();
@@ -86,6 +86,6 @@ describe('public course-test commands', () => {
     const { commands, services } = register();
     const asm = vscode.Uri.file('D:/user sources/test.asm');
     await commands.get(Commands.Test.RunAsmTests)!(asm, [asm]);
-    expect(runUserAsmTests).toHaveBeenCalledWith(services, asm, undefined, undefined);
+    expect(runUserAsmTests).toHaveBeenCalledWith(services, asm, undefined);
   });
 });

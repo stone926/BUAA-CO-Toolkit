@@ -15,7 +15,7 @@ const mocks = vi.hoisted(() => ({
   error: vi.fn(), warning: vi.fn(),
   write: vi.fn(async (_uri: unknown, _text: string) => undefined),
   profile: vi.fn(async (_uri: unknown) => 'P5'),
-  pick: vi.fn(async (): Promise<{ reference?: 'auto' | 'mars'; directory?: boolean } | undefined> => ({ reference: 'auto' })),
+  pick: vi.fn(async (): Promise<{ directory: boolean } | undefined> => undefined),
   open: vi.fn(async (): Promise<URI[] | undefined> => undefined),
   rendered: vi.fn(() => '<html></html>'),
   cancelled: undefined as (() => void) | undefined
@@ -65,7 +65,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.active = cpu;
   mocks.save.mockResolvedValue(true);
-  mocks.pick.mockResolvedValue({ reference: 'auto' });
+  mocks.pick.mockResolvedValue(undefined);
   mocks.open.mockResolvedValue(undefined);
   mocks.discover.mockImplementation(async input => [input]);
   mocks.run.mockImplementation(async (_services, item) => ({ asm: item.asm.fsPath, status: 'passed', stage: 'compare', message: '通过' }));
@@ -91,33 +91,27 @@ describe('user ASM command routing', () => {
     expect(mocks.run.mock.calls[0][1].asm.fsPath).toBe(asm.fsPath);
   });
 
-  it('selects custom Mars for overriding known instructions independently of the target CPU', async () => {
-    mocks.pick.mockResolvedValueOnce({ reference: 'mars' });
+  it('automatically resolves the reference for an explicitly supplied ASM and CPU', async () => {
     await runUserAsmTests(services, asm, cpu);
-    expect(mocks.run.mock.calls[0][2]).toMatchObject({ engineMode: 'mars', cpuResource: cpu });
+    expect(mocks.pick).not.toHaveBeenCalled();
+    expect(mocks.run.mock.calls[0][2]).toMatchObject({ engineMode: 'auto', cpuResource: cpu });
     const report = JSON.parse(mocks.write.mock.calls.at(-1)![1]) as { referenceMode: string; cpuResource: string };
-    expect(report.referenceMode).toBe('mars');
+    expect(report.referenceMode).toBe('auto');
     expect(report.cpuResource).toBe(cpu.fsPath);
   });
 
-  it.each(['auto', 'mars'] as const)('accepts explicit %s reference mode without showing the reference picker', async reference => {
-    await runUserAsmTests(services, asm, cpu, reference);
-    expect(mocks.pick).not.toHaveBeenCalled();
-    expect(mocks.run.mock.calls[0][2].engineMode).toBe(reference);
-  });
-
-  it('offers source selection followed by reference selection when invoked without a path', async () => {
-    mocks.pick.mockResolvedValueOnce({ directory: false }).mockResolvedValueOnce({ reference: 'auto' });
+  it('asks only for an ASM input when invoked without a path', async () => {
+    mocks.pick.mockResolvedValueOnce({ directory: false });
     mocks.open.mockResolvedValueOnce([asm]);
     await runUserAsmTests(services);
-    expect(mocks.pick).toHaveBeenCalledTimes(2);
+    expect(mocks.pick).toHaveBeenCalledOnce();
     expect(mocks.run.mock.calls[0][1].asm.fsPath).toBe(asm.fsPath);
     expect(mocks.run.mock.calls[0][2]).toMatchObject({ cpuResource: cpu, engineMode: 'auto' });
   });
 
-  it('cancels reference selection without starting a test or retaining the shared session', async () => {
+  it('cancels input selection without starting a test or retaining the shared session', async () => {
     mocks.pick.mockResolvedValueOnce(undefined);
-    await runUserAsmTests(services, asm, cpu);
+    await runUserAsmTests(services, undefined, cpu);
     expect(mocks.run).not.toHaveBeenCalled();
     expect(requestUserAsmTestsStop()).toBe(false);
     const lease = tryAcquireCourseTestSession();

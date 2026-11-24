@@ -276,6 +276,26 @@ describe('course trace runner orchestration', () => {
     expect(vi.mocked(executeWithPreflight).mock.calls[0][3]).toBe(capturedPlan);
   });
 
+  it('uses the reference steps for a short user ASM and reports the actual DUT phases', async () => {
+    const asm = URI.file('E:/work/src/test.asm');
+    const execute = vi.mocked(executeWithPreflight).getMockImplementation()!;
+    vi.mocked(executeWithPreflight).mockImplementationOnce(async (...args) => {
+      const invocation = await execute(...args);
+      invocation.result!.instructions = 23;
+      return invocation;
+    });
+    const simulate = vi.mocked(runVerilogSimulation).getMockImplementation()!;
+    vi.mocked(runVerilogSimulation).mockImplementationOnce(async (services, options) => {
+      await options?.onSimulationStart?.();
+      return simulate(services, options);
+    });
+    const onPhase = vi.fn();
+    const result = await runCourseTraceCase(services(), { asm }, { source: { kind: 'selected', asmFiles: [asm.fsPath] }, onPhase });
+    expect(result.status).toBe('passed');
+    expect(runVerilogSimulation).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ simTime: '10us', simulationTimeoutMs: 15_000 }));
+    expect(onPhase.mock.calls.flat()).toEqual(['prepare', 'assemble', 'oracle', 'compile', 'simulate', 'compare']);
+  });
+
   it.each([true, false])('keeps Timer observable comparison available and avoids a timing-model CPU verdict (matched=%s)', async (matched) => {
     const execute = vi.mocked(executeWithPreflight).getMockImplementation()!;
     vi.mocked(executeWithPreflight).mockImplementationOnce(async (...args) => {

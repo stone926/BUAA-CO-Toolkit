@@ -4,13 +4,22 @@ import type { ProgramImage } from '../core/api';
 import type { AssemblerServiceResult } from '../core/assembler/assemblyService';
 import type { MarsMemoryConfiguration } from '../core/profiles/marsMemoryLayout';
 import type { MarsIoRequest } from '../core/mars/api';
+import type { DebugMode } from '../core/debug/api';
+import type { CommitEvent } from '../core/events/commitEvent';
+import { formatArchitecturalWrites, projectCommitEvents } from '../core/events/traceProjection';
+import type { CourseProfile } from '../core/generated/isaCatalog';
+import { maximumExecuteSteps, type ExecuteServiceResult } from '../core/machine/executeService';
+import { resolveCourseProfile } from '../core/profiles/courseProfiles';
+import { maximumReplayTraceBytes } from '../replay/boundedFile';
 import { captureAssemblyInput } from './sourceInput';
 import { MarsConsole, MarsHostIo } from './marsIo';
 import type { WorkerJob, WorkerOutboundMessage } from './workerProtocol';
 import type { RunResult } from '../../types';
 import type { AssemblerDiagnostic } from '../core/assembler/diagnostics';
 import type { ScriptInstructionBundle } from './scriptInstructionBundle';
-import { captureScriptInstructions, createScriptRuntime } from './scriptInstructions';
+import { courseModeForConsoleAssembly, customInstructionAssemblyHint, WorkspaceCustomInstructions } from './customInstructionService';
+import { runCustomMarsConsole } from './customMarsConsole';
+import { courseExecutionImagePayload, mipsAssemblyJob } from './mipsWorkerRequests';
 
 export interface MarsRuntimeHost {
   readonly instructionMetadata?: readonly import('../core/custom/api').CustomInstructionMetadata[];
@@ -31,11 +40,13 @@ export interface MarsOperationOptions {
   console?: MarsConsole;
   runtime?: MarsRuntimeHost;
   scriptInstructions?: ScriptInstructionBundle | null;
+  workspaceInstructions?: WorkspaceCustomInstructions;
+  courseProfile?: CourseProfile;
 }
 
-/** This mode is ordinary MARS console execution, never the P7 CPU exception oracle. */
+/** Console dispatch. Retry assembly in the project course mode only for a declared course-only mnemonic. */
 export async function runInternalMars(options: MarsOperationOptions, execute: boolean): Promise<{
-  result: RunResult; image?: ProgramImage; assemblyDiagnostics?: readonly AssemblerDiagnostic[]; scriptInstructions?: ScriptInstructionBundle;
+  result: RunResult; image?: ProgramImage; assemblyDiagnostics?: readonly AssemblerDiagnostic[]; engine?: 'custom-mars' | 'builtin-ts';
 }> {
   const controller = new AbortController();
   const forwardAbort = () => controller.abort();
@@ -45,11 +56,18 @@ export async function runInternalMars(options: MarsOperationOptions, execute: bo
   const timer = setTimeout(() => { timedOut = true; controller.abort(); }, options.timeoutMs);
   const output: string[] = [];
   let runtime = options.runtime;
-  let scripts: ScriptInstructionBundle | undefined;
+  let engine: 'custom-mars' | 'builtin-ts' = 'builtin-ts';
+  let outputBytes = 0;
+  const write = async (text: string): Promise<void> => {
+    outputBytes += Buffer.byteLength(text, 'utf8');
+    if (outputBytes > maximumReplayTraceBytes) throw new Error('MIPS 控制台输出超过 16 MiB 上限');
+    output.push(text);
+    await options.console?.write(text);
+  };
   const io = new MarsHostIo({
     cwd: path.dirname(options.sourcePath), stdin: options.stdin, signal: controller.signal,
     console: {
-      write: async (text) => { output.push(text); await options.console?.write(text); },
+      write,
       readLine: options.console?.readLine
     }
   });
@@ -63,13 +81,13 @@ export async function runInternalMars(options: MarsOperationOptions, execute: bo
     if (item.kind !== 'mars-io' || !item.request) throw new Error('Invalid MARS I/O request');
     return await io.respond(item.request);
   };
-  const job = async (request: WorkerJob): Promise<unknown> => {
+  const job = async (request: WorkerJob, onProgress: (batch: unknown[]) => unknown | Promise<unknown> = progress): Promise<unknown> => {
     if (controller.signal.aborted) throw new Error('cancelled');
     if (!runtime) {
       const { executeProductionWorkerJob } = await import('./workerJobs');
-      return executeProductionWorkerJob(request.kind, request.payload, { signal: controller.signal, emitProgress: progress });
+      return executeProductionWorkerJob(request.kind, request.payload, { signal: controller.signal, emitProgress: onProgress });
     }
-    const result = await runtime.runJob(request, { signal: controller.signal, onProgress: progress });
+    const result = await runtime.runJob(request, { signal: controller.signal, onProgress });
     if (result.kind !== 'result' || !result.ok) {
       throw new Error(result.kind === 'result' ? result.error : 'Invalid MARS Worker result');
     }
@@ -77,32 +95,67 @@ export async function runInternalMars(options: MarsOperationOptions, execute: bo
   };
   try {
     if (controller.signal.aborted) throw new Error('cancelled');
-    scripts = options.scriptInstructions === undefined
-      ? await captureScriptInstructions(options.allowedRoot, { signal: controller.signal })
-      : options.scriptInstructions ?? undefined;
-    if (scripts) runtime = createScriptRuntime(scripts, options.runtime);
-    const input = await captureAssemblyInput(options.sourcePath, options.allowedRoot);
-    const assembly = await job({ kind: 'mars-assemble', payload: {
-      ...input, memoryConfiguration: options.memoryConfiguration, delayedBranching: options.delayedBranching
-    } }) as AssemblerServiceResult;
-    if (!assembly.ok || !assembly.image) {
-      return { assemblyDiagnostics: assembly.diagnostics, scriptInstructions: scripts,
-        result: { ...base, stderr: assembly.diagnostics.map((item) => `[${item.code}] ${item.message}`).join('\n') } };
+    const signal = controller.signal;
+    const workspace = options.workspaceInstructions ?? new WorkspaceCustomInstructions(options.allowedRoot);
+    const selected = await workspace.select({ snapshot: options.scriptInstructions, runtime, signal });
+    if (selected.kind === 'mars') {
+      engine = 'custom-mars';
+      const instructions = await selected.bind(signal);
+      const external = await runCustomMarsConsole(instructions, options.sourcePath, workspace.root, execute, { ...options, signal });
+      return { ...external, engine, result: timedOut ? {
+        ...external.result, ok: false, stopped: true, timedOut: true, stopReason: 'timeout', stderr: `外部 Mars 运行超时（${options.timeoutMs} ms）`
+      } : external.result };
     }
-    if (!execute) return { result: { ...base, ok: true, exitCode: 0 }, image: assembly.image, scriptInstructions: scripts };
+    if (selected.kind === 'script') runtime = selected.runtime;
+    const input = await captureAssemblyInput(options.sourcePath, options.allowedRoot);
+    let mode: DebugMode = { kind: 'mars', memoryConfiguration: options.memoryConfiguration, delayedBranching: options.delayedBranching };
+    let assembly = await job(mipsAssemblyJob(mode, input)) as AssemblerServiceResult;
+    const metadata = !assembly.ok && selected.kind === 'script'
+      && assembly.diagnostics.some(item => item.code === 'asm.instruction.unknown') ? await selected.inspect(signal) : [];
+    const profile = courseModeForConsoleAssembly(assembly.diagnostics, metadata, options.courseProfile);
+    if (profile) {
+      mode = { kind: 'course', profile };
+      assembly = await job(mipsAssemblyJob(mode, input)) as AssemblerServiceResult;
+    }
+    if (!assembly.ok || !assembly.image) {
+      const hint = customInstructionAssemblyHint(assembly.diagnostics, profile ?? 'mars', selected.kind, metadata);
+      const details = assembly.diagnostics.map(item => `[${item.code}] ${item.message}`);
+      if (hint) details.push(hint);
+      return { assemblyDiagnostics: assembly.diagnostics, result: { ...base, stderr: details.join('\n') } };
+    }
+    const image = assembly.image;
+    if (!execute) return { result: { ...base, ok: true, exitCode: 0 }, image };
+    if (mode.kind === 'course') {
+      const profile = resolveCourseProfile(mode.profile);
+      const execution = await job({ kind: 'machine-execute', payload: {
+        ...courseExecutionImagePayload(image), profile: mode.profile,
+        enabledLayers: ['required', 'commonExtensions', 'marsCompatibility'],
+        maxSteps: Math.min(options.maxSteps ?? 65_536, maximumExecuteSteps)
+      } }, async batch => {
+        const trace = formatArchitecturalWrites(projectCommitEvents(batch as CommitEvent[], profile));
+        if (trace) await write(trace + '\n');
+      }) as ExecuteServiceResult;
+      const ok = execution.status === 'halted' && execution.haltReason === 'course-halt-loop';
+      const diagnostic = execution.diagnostic;
+      return { image, result: {
+        ...base, commandLine: `internal-mips ${mode.profile} run`, ok, stdout: output.join(''), exitCode: ok ? 0 : null,
+        stderr: diagnostic ? `[${diagnostic.code}] ${diagnostic.pc ?? ''} ${diagnostic.message}` : ok ? '' : '课程程序未到达停机自环',
+        stopReason: ok ? 'halt-loop' : execution.status
+      } };
+    }
     const execution = await job({ kind: 'mars-execute', payload: {
       image: assembly.image, memoryConfiguration: options.memoryConfiguration,
       delayedBranching: options.delayedBranching, maxSteps: options.maxSteps ?? 10_000_000
     } }) as { status: string; exitCode?: number; diagnostic?: string };
     await io.finishOutput();
     const ok = execution.status === 'exited';
-    return { image: assembly.image, scriptInstructions: scripts, result: {
+    return { image, result: {
       ...base, ok, stdout: output.join(''), exitCode: execution.exitCode ?? (ok ? 0 : null),
       stderr: execution.diagnostic ?? '', stopReason: execution.status
     } };
   } catch (error) {
     await io.finishOutput().catch(() => undefined);
-    return { result: { ...base, stdout: output.join(''), timedOut,
+    return { engine, result: { ...base, stdout: output.join(''), timedOut,
       stopped: controller.signal.aborted, stopReason: timedOut ? 'timeout' : controller.signal.aborted ? 'cancelled' : 'engine-error',
       stderr: timedOut ? `内部 MARS 运行超时（${options.timeoutMs} ms）` : error instanceof Error ? error.message : String(error)
     } };

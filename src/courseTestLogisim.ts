@@ -72,6 +72,7 @@ import {
   asmCaseSourceFromBatchSource,
   caseResultFields,
   CourseTraceCaseInput,
+  failedAssemblyCase,
   failedCase
 } from './courseTestCases';
 import { executeWithPreflight, preflightFailureMessage } from './mips/providers/providerResolver';
@@ -134,6 +135,7 @@ export interface P3LogisimTraceRunOptions {
   shadowOutputRoot?: vscode.Uri;
   pipeline?: CourseTracePipeline;
   signal?: AbortSignal;
+  onPhase?: (phase: import('./courseTesting/traceRunner').CourseTracePhase) => void | Promise<void>;
 }
 
 export async function runP3LogisimTraceCase(
@@ -182,6 +184,7 @@ export async function runP3LogisimTraceCase(
     };
   }
 
+  await options.onPhase?.('prepare');
   const asmCase = item.asmCase ?? await pipeline.createCase(asm, {
     source: asmCaseSourceFromBatchSource(options.source ?? { kind: 'selected', asmFiles: [asm.fsPath] }),
     // The ASM owns the course profile and engine snapshot. A circuit selected
@@ -200,6 +203,7 @@ export async function runP3LogisimTraceCase(
   }
   await writeAsmCaseArtifact(asmCase, 'logisim', 'logisim-trace-diagnostic.txt', setup.traceDiagnostic, 'traceDiagnostic');
 
+  await options.onPhase?.('assemble');
   const dump = await pipeline.prepareProgram(services, asmCase, {
     showMessages: false,
     revealOutput: options.revealOutput,
@@ -212,15 +216,7 @@ export async function runP3LogisimTraceCase(
     signal: options.signal
   });
   if (!dump?.ok || !dump.outputFile) {
-    return failedCase(
-      item,
-      'assemble',
-      engineStageFailureMessage('测试中止：汇编器导出机器码失败', dump?.status),
-      undefined,
-      undefined,
-      asmCase,
-      engineRunWasCancelled(dump?.status, options.signal)
-    );
+    return failedAssemblyCase(item, asmCase, dump, options.signal);
   }
   enginePlan = dump.enginePlan ?? enginePlan;
   if (!automatic) {
@@ -309,6 +305,7 @@ export async function runP3LogisimTraceCase(
   const oracleOutputUri = caseOutputMode
     ? asmCaseArtifactUri(asmCase, 'oracle', oracleOutputFileNameForCase(item))
     : vscode.Uri.file(path.join(courseTraceOutputDirectory(asm).fsPath, oracleOutputFileNameForCase(item)));
+  await options.onPhase?.('oracle');
   const oracleInvocation = await pipeline.runOracle(services, {
     image: dump.image,
     executionBinding: dump.executionBinding,
@@ -437,6 +434,7 @@ export async function runP3LogisimTraceCase(
     }
   }
 
+  await options.onPhase?.('simulate');
   const logisimRun = await pipeline.runLogisimDut(
     services,
     preparedSetup,
@@ -517,6 +515,7 @@ export async function runP3LogisimTraceCase(
     await pipeline.copyArtifact(asmCase, 'logisim', simTrace, path.basename(simTrace.fsPath), 'traceOut');
   }
 
+  await options.onPhase?.('compare');
   const diff = pipeline.compareTraces(oracle.trace.events, parsedLogisim.events, {
     compareCycles: false,
     retainedEntryLimit: batchTraceCompareRetainedEntries

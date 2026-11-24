@@ -16,6 +16,10 @@ import {
 } from '../mips/replay/boundedFile';
 import { assertContainedDirectoryPath } from '../pathContainment';
 import type { HazardProfile } from '../hazardAnalysis/reportTypes';
+import { bindScriptInstructionBundle } from '../mips/host/customInstructionService';
+import type { CustomInstructionEncoding } from '../mips/host/customMarsBridge';
+import { CUSTOM_MARS_ENGINE_ID } from '../mips/providers/courseEnginePolicy';
+import { loadCaseScriptInstructions } from '../courseTesting/scriptInstructionSnapshot';
 
 export interface HazardCaseInput {
   readonly image: ProgramImage;
@@ -25,7 +29,7 @@ export interface HazardCaseInput {
 
 /** Only the selected .co/cases/<id> is inspected; no workspace scan or historical trace reads. */
 export async function loadHazardCaseInput(
-  sourcePath: string, workspaceRoot: string, profile: HazardProfile
+  sourcePath: string, workspaceRoot: string, profile: HazardProfile, signal?: AbortSignal
 ): Promise<HazardCaseInput | undefined> {
   const casesRoot = path.resolve(workspaceRoot, CO_CASES_DIR);
   const relative = path.relative(casesRoot, path.resolve(sourcePath));
@@ -63,6 +67,14 @@ export async function loadHazardCaseInput(
   if (image.fingerprint !== manifest.program.imageFingerprint || image.inputGraph.length !== hashes.size
     || image.inputGraph.some((unit) => hashes.get(unit.id) !== unit.contentHash)) {
     throw new Error('用例程序映像与源码闭包不一致，已拒绝套用旧中断调度。');
+  }
+  if (manifest.program.assembler.id === CUSTOM_MARS_ENGINE_ID) {
+    throw new Error('该用例由魔改 Mars 汇编，流水线冲突分析缺少原自定义指令的时序模型。');
+  }
+  const script = await loadCaseScriptInstructions(caseDir, manifest);
+  if (script) {
+    const instructions = await bindScriptInstructionBundle(script).inspect(signal);
+    assertHazardInstructionSupport(image, instructions.filter(item => item.modes.includes(profile)));
   }
   const selected = parts.slice(1).join('/');
   const sourceSelected = samePath(selected, manifest.asmSnapshot.path) || samePath(selected, rootUnit.materializedPath);
@@ -103,6 +115,14 @@ export async function loadHazardCaseInput(
     if (issue) throw new Error(`用例中断调度无法应用于当前映像：${issue}`);
   }
   return { image, caseId: manifest.caseId, externalInterrupts: schedule.map((victimPc) => ({ victimPc, occurrence: 1 })) };
+}
+
+export function assertHazardInstructionSupport(image: ProgramImage, encodings: readonly CustomInstructionEncoding[] = []): void {
+  if (!encodings.length) return;
+  const text = image.segments.filter(segment => /^(?:k?text)(?:@|$)/.test(segment.name));
+  const instruction = encodings.find(({ mask, value }) => text.some(segment =>
+    segment.words.some(word => ((word & mask) >>> 0) === value)));
+  if (instruction) throw new Error(`流水线冲突分析缺少自定义指令 ${instruction.mnemonic} 的时序模型。`);
 }
 
 async function readSnapshot(caseDir: string, reference: AsmCaseSnapshot, maximumBytes: number, label: string): Promise<Buffer> {

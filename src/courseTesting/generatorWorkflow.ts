@@ -35,7 +35,7 @@ import {
 import { resolveCourseEnginePlan } from '../mips/providers/courseEnginePolicy';
 import { MipsRuntimeManager } from '../mips/host/runtimeManager';
 import type { ScriptInstructionBundle } from '../mips/host/scriptInstructionBundle';
-import { captureScriptInstructions } from '../mips/host/scriptInstructions';
+import { bindScriptInstructionBundle, WorkspaceCustomInstructions } from '../mips/host/customInstructionService';
 
 export interface BuiltinGeneratorRunSetup {
   /** Captured once for the entire session; the same bytes bind generation, oracle and replay. */
@@ -63,7 +63,7 @@ async function generatorScriptSnapshot(setup: BuiltinGeneratorRunSetup, signal?:
   let captured = scriptSnapshots.get(setup);
   if (!captured) {
     captured = (async () => {
-      try { setup.scriptInstructions = await captureScriptInstructions(setup.folder.uri.fsPath, { signal }); }
+      try { setup.scriptInstructions = await new WorkspaceCustomInstructions(setup.folder.uri.fsPath).captureScripts(signal); }
       catch (error) { throw new Error(`自定义指令加载失败：${error instanceof Error ? error.message.slice(0, 2000) : String(error).slice(0, 2000)}`); }
       return setup.scriptInstructions;
     })();
@@ -126,7 +126,9 @@ export function generatorResource(setup: BuiltinGeneratorRunSetup): vscode.Uri {
 async function generateWithScripts(services: AppServices, bundle: ScriptInstructionBundle, options: BuiltinAsmGeneratorOptions, signal?: AbortSignal, registerCoverage = false): Promise<BuiltinAsmGeneratorResult> {
   const runtime = services.mipsRuntime ?? new MipsRuntimeManager();
   try {
-    const result = await runtime.runScriptJob(bundle, { kind: 'script-generate', payload: { ...options, registerCoverage, generatedAt: options.generatedAt?.toISOString() } }, { signal });
+    const result = await bindScriptInstructionBundle(bundle, runtime).runtime.runJob(
+      { kind: 'script-generate', payload: { ...options, registerCoverage, generatedAt: options.generatedAt?.toISOString() } }, { signal }
+    );
     if (result.kind !== 'result' || !result.ok) {
       const detail = result.kind === 'result' ? result.error ?? 'Worker 未返回结果' : 'Worker 未返回结果';
       throw new Error(detail.startsWith('自定义指令') ? detail : `自定义指令生成失败：${detail.slice(0, 2000)}`);

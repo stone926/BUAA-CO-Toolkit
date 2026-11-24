@@ -1,17 +1,22 @@
 // @index mips-providers — Script-aware builtin adapters bind one immutable ISA to assembly and execution
-import * as path from 'path';
-import * as vscode from 'vscode';
 import { getProfile } from '../../config';
 import { BuiltinTsAssemblerProvider, type BuiltinAssemblerWorkerRuntime } from './builtinAssemblerProvider';
 import { BuiltinTsExecutionProvider, type BuiltinWorkerRuntime } from './builtinExecutionProvider';
 import type { AssembleRequest, AssembleResult, ExecuteRequest, ExecuteResult, MipsAssemblerProvider, MipsExecutionProvider, ProviderPreflight, ProviderRunContext } from './contracts';
 import { failedPreflight } from './contracts';
 import type { ScriptInstructionBundle } from '../host/scriptInstructionBundle';
-import { validateScriptInstructionBundle } from '../host/scriptInstructionBundle';
-import { captureScriptInstructions, createScriptRuntime, inspectScriptInstructions } from '../host/scriptInstructions';
+import type { ScriptInstructionInspection } from '../host/scriptInstructions';
+import { bindScriptInstructionBundle, customInstructionAssemblyHint } from '../host/customInstructionService';
+import { customInstructionsForResource } from '../host/customInstructionResource';
+import { customInstructionModeForProfile } from '../core/custom/mode';
 import { assertScriptArtifactMatches, withScriptInstructionArtifact } from '../replay/scriptInstructionArtifact';
 
-interface AssemblyBinding { provider: BuiltinTsAssemblerProvider; bundle?: ScriptInstructionBundle; requestedDigest?: string | null }
+interface AssemblyBinding {
+  provider: BuiltinTsAssemblerProvider;
+  bundle?: ScriptInstructionBundle;
+  instructions?: readonly ScriptInstructionInspection[];
+  requestedDigest?: string | null;
+}
 
 export class ScriptAwareAssemblerProvider implements MipsAssemblerProvider {
   private readonly standard: BuiltinTsAssemblerProvider;
@@ -23,15 +28,16 @@ export class ScriptAwareAssemblerProvider implements MipsAssemblerProvider {
   async preflight(request: AssembleRequest, context?: ProviderRunContext): Promise<ProviderPreflight> {
     try {
       const resource = request.resourceUri ?? request.sourceUri;
-      const root = vscode.workspace.getWorkspaceFolder?.(resource)?.uri.fsPath ?? path.dirname(resource.fsPath);
-      const bundle = request.scriptInstructions === undefined
-        ? await captureScriptInstructions(root, { signal: context?.signal })
-        : request.scriptInstructions === null ? undefined : validateScriptInstructionBundle(request.scriptInstructions);
+      const selected = request.workspaceInstructions ?? await customInstructionsForResource(resource).select({
+        policy: 'builtin', snapshot: request.scriptInstructions, runtime: this.runtime, signal: context?.signal
+      });
+      const script = selected.kind === 'script' ? selected : undefined;
+      const bundle = script?.bundle;
       assertScriptArtifactMatches(request.expectedEngineArtifact, bundle);
-      const provider = bundle ? new BuiltinTsAssemblerProvider(createScriptRuntime(bundle, this.runtime)) : this.standard;
-      if (bundle) await inspectScriptInstructions(bundle, this.runtime, undefined, { signal: context?.signal });
+      const provider = script ? new BuiltinTsAssemblerProvider(script.runtime) : this.standard;
+      const instructions = await script?.inspect(context?.signal);
       const result = await provider.preflight(request);
-      if (result.ok) this.bindings.set(request, { provider, bundle, requestedDigest: request.scriptInstructions === null ? null : request.scriptInstructions?.digest });
+      if (result.ok) this.bindings.set(request, { provider, bundle, instructions, requestedDigest: request.scriptInstructions === null ? null : request.scriptInstructions?.digest });
       return result;
     } catch (error) {
       this.bindings.delete(request);
@@ -48,14 +54,15 @@ export class ScriptAwareAssemblerProvider implements MipsAssemblerProvider {
     this.bindings.delete(request);
     if (binding.requestedDigest !== (request.scriptInstructions === null ? null : request.scriptInstructions?.digest)) return this.failed('自定义指令请求在预检后发生变化');
     const result = await binding.provider.assemble(request, context);
-    if (!binding.bundle) return result;
-    if (!result.ok || !result.image) return { ...result, scriptInstructions: binding.bundle };
-    const mode = (request.requirements?.profile ?? getProfile(request.resourceUri ?? request.sourceUri));
-    const inspected = await inspectScriptInstructions(binding.bundle, this.runtime, undefined, { signal: context?.signal });
+    const mode = customInstructionModeForProfile(request.requirements?.profile ?? getProfile(request.resourceUri ?? request.sourceUri));
+    if (!result.ok) {
+      const hint = customInstructionAssemblyHint(result.assemblyDiagnostics, mode, binding.bundle ? 'script' : 'builtin', binding.instructions);
+      return hint ? { ...result, status: { ...result.status, stderr: `${hint}\n${result.status.stderr}` } } : result;
+    }
+    if (!binding.bundle || !result.image) return result;
     return {
       ...result,
-      scriptInstructions: binding.bundle,
-      customInstructionEncodings: inspected.filter(item => (item.modes as readonly string[]).includes(mode === 'P2' ? 'mars' : mode)),
+      customInstructionEncodings: binding.instructions?.filter(item => item.modes.includes(mode)),
       engineArtifact: withScriptInstructionArtifact(result.engineArtifact, binding.bundle),
       executionBinding: { kind: 'script-instructions', providerId: 'builtin-ts', imageFingerprint: result.image.fingerprint, bundle: binding.bundle }
     };
@@ -77,9 +84,9 @@ export class ScriptAwareExecutionProvider implements MipsExecutionProvider {
       let bundle: ScriptInstructionBundle | undefined;
       if (binding?.kind === 'script-instructions') {
         if (binding.providerId !== 'builtin-ts' || binding.imageFingerprint !== request.image.fingerprint) throw new Error('自定义指令与当前程序映像未绑定');
-        bundle = validateScriptInstructionBundle(binding.bundle);
+        bundle = binding.bundle;
       }
-      const provider = bundle ? new BuiltinTsExecutionProvider(createScriptRuntime(bundle, this.runtime)) : this.standard;
+      const provider = bundle ? new BuiltinTsExecutionProvider(bindScriptInstructionBundle(bundle, this.runtime).runtime) : this.standard;
       const result = await provider.preflight(request);
       if (result.ok) this.bindings.set(request, { provider, bundle });
       return result;

@@ -39,7 +39,13 @@ vi.mock('../../config', () => ({
 vi.mock('../../process', () => ({
   revealOutputChannel: vi.fn()
 }));
-vi.mock('../../mips/host/scriptInstructions', () => ({ captureScriptInstructions: vi.fn(async () => undefined) }));
+vi.mock('../../mips/host/scriptInstructions', () => ({
+  captureScriptInstructions: vi.fn(async () => undefined),
+  createScriptRuntime: (bundle: ScriptInstructionBundle, runtime: MipsRuntimeManager) => ({
+    runJob: (job: Parameters<MipsRuntimeManager['runJob']>[0], options?: Parameters<MipsRuntimeManager['runJob']>[1]) =>
+      runtime.runScriptJob(bundle, job, options)
+  })
+}));
 
 vi.mock('../../asmCaseStore', () => ({
   createAsmCaseFromText: vi.fn()

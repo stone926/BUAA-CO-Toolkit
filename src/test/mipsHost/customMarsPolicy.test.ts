@@ -1,41 +1,36 @@
-import { describe, expect, it, vi } from 'vitest';
-import { needsCustomMars } from '../../mips/providers/customMarsCommon';
+import { describe, expect, it } from 'vitest';
+import { courseModeForConsoleAssembly, customInstructionAssemblyHint } from '../../mips/host/customInstructionService';
+import type { CustomInstructionMetadata } from '../../mips/core/custom/api';
 import { parseCustomMarsBridgeResult, type CustomMarsBridgeResult } from '../../mips/host/customMarsBridge';
 
-vi.mock('vscode', async () => {
-  const { createVscodeMockState, createVscodeModuleMock } = await import('../helpers/vscodeMock');
-  return createVscodeModuleMock(createVscodeMockState(), vi.fn);
-});
+const bel: CustomInstructionMetadata = {
+  apiVersion: 1, mnemonic: 'bel', aliases: ['bel_alias'], modes: ['P6', 'P7'],
+  encoding: '011111 rs:5 rt:5 immediate:16', operands: []
+};
+const unknown = { code: 'asm.instruction.unknown', message: '未知指令 bel', mnemonic: 'bel' };
 
-const failed = { ok: false, timedOut: false };
-const unknown = [{ code: 'asm.instruction.unknown', message: 'Unknown custom instruction' }];
-
-describe('custom Mars fallback gating', () => {
-  it('switches only when assembly reports a structured unknown-instruction diagnostic', () => {
-    expect(needsCustomMars(failed, unknown)).toBe(true);
-    expect(needsCustomMars(failed, [...unknown, { code: 'asm.symbol.undefined', message: 'Undefined label' }])).toBe(true);
+describe('workspace custom instruction diagnostics', () => {
+  it('uses the declared course mode only for a referenced course-only definition', () => {
+    expect(courseModeForConsoleAssembly([unknown], [bel], 'P6')).toBe('P6');
+    expect(courseModeForConsoleAssembly([{ ...unknown, mnemonic: 'bel_alias' }], [bel], 'P7')).toBe('P7');
+    expect(courseModeForConsoleAssembly([unknown], [bel], 'P5')).toBeUndefined();
+    expect(courseModeForConsoleAssembly([unknown], [bel])).toBeUndefined();
+    expect(courseModeForConsoleAssembly([unknown], [{ ...bel, modes: ['mars', 'P6'] }], 'P6')).toBeUndefined();
+    expect(courseModeForConsoleAssembly([{ ...unknown, mnemonic: 'typo' }], [bel], 'P6')).toBeUndefined();
   });
 
   it.each([
     'asm.operand.invalid-register', 'asm.operand.wrong-count', 'asm.symbol.undefined',
     'asm.instruction.profile-unsupported', 'asm.include.not-found', 'asm.internal-error'
   ])('does not switch for ordinary %s errors or text resembling an unknown-instruction diagnostic', code => {
-    expect(needsCustomMars(failed, [{ code, message: '[asm.instruction.unknown] custom instruction' }])).toBe(false);
+    expect(courseModeForConsoleAssembly([{ ...unknown, code }], [bel], 'P6')).toBeUndefined();
+    expect(customInstructionAssemblyHint([{ ...unknown, code }], 'P6', 'builtin')).toBeUndefined();
   });
 
-  it('does not switch without diagnostics or after successful assembly', () => {
-    expect(needsCustomMars(failed)).toBe(false);
-    expect(needsCustomMars(failed, [])).toBe(false);
-    expect(needsCustomMars({ ok: true, timedOut: false }, unknown)).toBe(false);
-  });
-
-  it.each([
-    { ...failed, stopped: true },
-    { ...failed, timedOut: true, stopReason: 'timeout' },
-    { ...failed, stopReason: 'cancelled' },
-    { ...failed, stopped: true, stopReason: 'aborted' }
-  ])('never starts fallback after cancellation or timeout: %j', status => {
-    expect(needsCustomMars(status, unknown)).toBe(false);
+  it('explains missing definitions and profile mismatches from the shared metadata', () => {
+    expect(customInstructionAssemblyHint([unknown, unknown], 'P6', 'builtin')).toMatch(/未知指令 bel.*\.co\/custom-instructions/);
+    expect(customInstructionAssemblyHint([unknown], 'P5', 'script', [bel])).toMatch(/bel.*P6\/P7.*P5/);
+    expect(customInstructionAssemblyHint([unknown], 'P6', 'script', [])).toMatch(/未知指令 bel.*JS\/TS/);
   });
 });
 

@@ -12,6 +12,7 @@ import {
 import type { CommitEvent } from '../core/events/commitEvent';
 import type { AssemblerDiagnostic } from '../core/assembler/diagnostics';
 import type { CustomInstructionEncoding } from '../host/customMarsBridge';
+import type { CustomInstructionSelection } from '../host/customInstructionService';
 import type { ScriptInstructionBundle } from '../host/scriptInstructionBundle';
 import type { CourseEnginePlan } from './courseEnginePolicy';
 import type { CoverageBin } from '../core/events/coverage';
@@ -111,6 +112,8 @@ export interface AssembleRequest {
   sourceUri: vscode.Uri;
   /** Immutable custom ISA closure; null prevents workspace rediscovery on replay. */
   scriptInstructions?: ScriptInstructionBundle | null;
+  /** Resolver-owned binding for the selected workspace instruction source. */
+  workspaceInstructions?: CustomInstructionSelection;
   /** Original project configuration context; sourceUri can be an immutable case snapshot. */
   resourceUri?: vscode.Uri;
   /** Commands validate/project the image before atomically publishing the final artifact. */

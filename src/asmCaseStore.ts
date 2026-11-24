@@ -99,6 +99,7 @@ import { parseStructuredExecutionEvidence } from './mips/replay/structuredExecut
 import { sourceUnitsUseP7RiInstruction } from './courseTesting/p7RiInstruction';
 import { recordContinuousAsmCaseOutcome } from './courseTesting/continuousCaseRetention';
 import { captureCaseScriptInstructions, loadCaseScriptInstructions } from './courseTesting/scriptInstructionSnapshot';
+import { customInstructionsForResource } from './mips/host/customInstructionResource';
 import { assertScriptArtifactMatches, scriptInstructionArtifact } from './mips/replay/scriptInstructionArtifact';
 
 export {
@@ -228,7 +229,7 @@ export async function createAsmCaseFromAsm(
     manifest = mergeAsmCaseMetadata(manifest, options.metadata);
   }
   const instructionResource = options.engineResource ?? asm;
-  const instructionRoot = vscode.workspace.getWorkspaceFolder?.(instructionResource)?.uri.fsPath ?? path.dirname(instructionResource.fsPath);
+  const instructionRoot = customInstructionsForResource(instructionResource).root;
   manifest = await captureCaseScriptInstructions(paths.caseDir, manifest, instructionRoot,
     options.enginePlan?.primaryEngineId === 'custom-mars' ? null : options.enginePlan?.scriptInstructions);
   const manifestUri = vscode.Uri.file(paths.manifest);
@@ -386,7 +387,8 @@ export async function prepareAsmCaseMachineCode(
       exitCode: null,
       stdout: '',
       stderr: preflightFailureMessage(invocation.preflight),
-      timedOut: false
+      timedOut: false,
+      ...(options.signal?.aborted ? { stopped: true, stopReason: 'cancelled' } : {})
     },
     descriptor: invocation.preflight.descriptor
   };

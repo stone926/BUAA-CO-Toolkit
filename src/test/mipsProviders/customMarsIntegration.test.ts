@@ -25,7 +25,6 @@ import { createAsmCaseFromAsm, prepareAsmCaseMachineCode, recordAsmCaseOracleRes
 import { executeWithPreflight } from '../../mips/providers/providerResolver';
 import { resolveCourseEnginePlan } from '../../mips/providers/courseEnginePolicy';
 import { courseProgramImagePolicyIssues } from '../../courseTesting/pipeline/courseImagePolicy';
-import { runCustomMarsConsole } from '../../mips/host/customMarsConsole';
 import { runMarsFile } from '../../mips';
 import type { CourseProfile } from '../../mips/core/generated/isaCatalog';
 import { TextDocument } from 'vscode-languageserver-textdocument';
@@ -143,10 +142,10 @@ describe.runIf(Boolean(jar && fixtures))('real custom Mars provider, case eviden
     await fs.writeFile(source.fsPath, '.text\naddei $3,$0,2\nli $v0,5\nsyscall\nmove $a0,$v0\nli $v0,1\nsyscall\nli $v0,10\nsyscall\n');
     let reads = 0;
     const chunks: string[] = [];
-    const output = await runCustomMarsConsole(source, true, { console: {
+    const output = (await runMarsFile(createTestServices(), source, 'run', { nonInteractive: true, console: {
       write: (text) => { chunks.push(text); },
       readLine: async () => ++reads === 1 ? '73\n' : await new Promise<string | undefined>(() => {})
-    } });
+    } }))!;
     expect(output.result.ok, output.result.stderr).toBe(true);
     expect(output.result.stdout).toBe('73');
     expect(chunks.join('')).toBe('73');
@@ -155,11 +154,11 @@ describe.runIf(Boolean(jar && fixtures))('real custom Mars provider, case eviden
     await fs.copyFile(path.join(fixtures!, programs[2][1]), path.join(state.root, '.co', 'custom-instructions', 'addei.class'));
     const source = URI.file(path.join(state.root, '文件.asm'));
     await fs.writeFile(source.fsPath, '.text\naddei $3,$0,2\nloop: beq $0,$0,loop\nnop\n');
-    const limited = await runCustomMarsConsole(source, true, { maxSteps: 10 });
+    const limited = (await runMarsFile(createTestServices(), source, 'run', { nonInteractive: true, maxSteps: 10 }))!;
     expect(limited.result).toMatchObject({ ok: false, stopReason: 'step-limit' });
     await fs.writeFile(path.join(state.root, 'input.txt'), 'Q');
     await fs.writeFile(source.fsPath, '.data\nfile: .asciiz "input.txt"\nbuf: .space 4\n.text\naddei $3,$0,2\nla $a0,file\nli $a1,0\nli $a2,0\nli $v0,13\nsyscall\nmove $a0,$v0\nla $a1,buf\nli $a2,1\nli $v0,14\nsyscall\nlbu $a0,buf\nli $v0,11\nsyscall\nli $v0,10\nsyscall\n');
-    const read = await runCustomMarsConsole(source, true, {});
+    const read = (await runMarsFile(createTestServices(), source, 'run', { nonInteractive: true }))!;
     expect(read.result.ok, read.result.stderr).toBe(true);
     expect(read.result.stdout).toBe('Q');
   });
